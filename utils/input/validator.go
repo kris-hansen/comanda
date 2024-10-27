@@ -13,6 +13,8 @@ var (
 		".md",
 		".yml",
 		".yaml",
+		".html", // Added for URL content
+		".json", // Added for URL content
 	}
 
 	ImageExtensions = []string{

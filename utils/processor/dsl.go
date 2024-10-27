@@ -2,6 +2,9 @@ package processor
 
 import (
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -219,6 +222,55 @@ func (p *Processor) isSpecialInput(input string) bool {
 	return false
 }
 
+// isURL checks if the input string is a valid URL
+func (p *Processor) isURL(input string) bool {
+	u, err := url.Parse(input)
+	if err != nil {
+		return false
+	}
+	return u.Scheme != "" && u.Host != ""
+}
+
+// fetchURL retrieves content from a URL and saves it to a temporary file
+func (p *Processor) fetchURL(urlStr string) (string, error) {
+	p.debugf("Fetching content from URL: %s", urlStr)
+
+	resp, err := http.Get(urlStr)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch URL %s: %w", urlStr, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to fetch URL %s: status code %d", urlStr, resp.StatusCode)
+	}
+
+	// Create a temporary file with an appropriate extension based on Content-Type
+	ext := ".txt"
+	contentType := resp.Header.Get("Content-Type")
+	if strings.Contains(contentType, "html") {
+		ext = ".html"
+	} else if strings.Contains(contentType, "json") {
+		ext = ".json"
+	}
+
+	tmpFile, err := os.CreateTemp("", "comanda-url-*"+ext)
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp file for URL content: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+
+	_, err = io.Copy(tmpFile, resp.Body)
+	tmpFile.Close()
+	if err != nil {
+		os.Remove(tmpPath)
+		return "", fmt.Errorf("failed to write URL content to file: %w", err)
+	}
+
+	p.debugf("URL content saved to temporary file: %s", tmpPath)
+	return tmpPath, nil
+}
+
 // processInputs handles the input section of the DSL
 func (p *Processor) processInputs(inputs []string) error {
 	p.debugf("Processing %d input(s)", len(inputs))
@@ -246,6 +298,16 @@ func (p *Processor) processInputs(inputs []string) error {
 				return fmt.Errorf("error processing special input %s: %w", inputPath, err)
 			}
 			continue
+		}
+
+		// Check if input is a URL
+		if p.isURL(inputPath) {
+			tmpPath, err := p.fetchURL(inputPath)
+			if err != nil {
+				return err
+			}
+			defer os.Remove(tmpPath)
+			inputPath = tmpPath
 		}
 
 		// Handle regular file inputs

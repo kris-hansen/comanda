@@ -8,6 +8,7 @@ COMandA is a command-line tool that enables the composition of Large Language Mo
 - 🤖 Support for multiple LLM providers (OpenAI, Anthropic, Ollama)
 - 📄 File-based operations and transformations
 - 🖼️ Support for image analysis with vision models (screenshots and common image formats)
+- 🌐 Direct URL input support for web content analysis
 - 🛠️ Extensible DSL for defining complex workflows
 - ⚡ Efficient processing of LLM chains
 
@@ -121,6 +122,7 @@ COMandA supports various file types for input:
 
 - Text files: `.txt`, `.md`, `.yml`, `.yaml`
 - Image files: `.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`
+- Web content: Direct URLs to web pages, JSON APIs, or other web resources
 - Special inputs: `screenshot` (captures current screen)
 
 When using vision-capable models (like gpt-4o), you can analyze both images and screenshots alongside text content.
@@ -131,6 +133,13 @@ Images are automatically optimized for processing:
 - These optimizations help prevent rate limit errors and ensure efficient processing
 
 The screenshot feature allows you to capture the current screen state for analysis. When you specify `screenshot` as the input in your DSL file, COMandA will automatically capture the entire screen and pass it to the specified model for analysis. This is particularly useful for UI analysis, bug reports, or any scenario where you need to analyze the current screen state.
+
+For URL inputs, COMandA automatically:
+- Detects and validates URLs in input fields
+- Fetches content with appropriate error handling
+- Handles different content types (HTML, JSON, plain text)
+- Stores content in temporary files with appropriate extensions
+- Cleans up temporary files after processing
 
 ### Creating DSL Files
 
@@ -265,6 +274,26 @@ step:
 This example demonstrates using a local model through Ollama. Make sure you have Ollama installed and the specified model pulled before running:
 ```bash
 comanda process examples/ollama-example.yaml
+```
+
+#### 5. URL Input Example (url-example.yaml)
+```yaml
+steps:
+  analyze_webpage:
+    input: https://example.com
+    model: gpt-4
+    action: Analyze the webpage content and provide a summary
+    output: STDOUT
+
+  analyze_api:
+    input: https://api.example.com/data.json
+    model: gpt-4
+    action: Extract key insights from the API response
+    output: analysis.txt
+```
+This example shows how to analyze web content directly from URLs. The processor automatically handles different content types and stores them appropriately. To run:
+```bash
+comanda process examples/url-example.yaml
 ```
 
 ## Project Structure

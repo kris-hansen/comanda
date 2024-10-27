@@ -1,6 +1,8 @@
 package processor
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
@@ -265,6 +267,138 @@ func TestDebugf(t *testing.T) {
 			// Note: This test only verifies that debugf doesn't panic
 			// In a real scenario, you might want to capture stdout and verify the output
 			processor.debugf("test message %s", "arg")
+		})
+	}
+}
+
+func TestIsURL(t *testing.T) {
+	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), false)
+
+	tests := []struct {
+		name     string
+		input    string
+		expected bool
+	}{
+		{
+			name:     "valid http URL",
+			input:    "http://example.com",
+			expected: true,
+		},
+		{
+			name:     "valid https URL",
+			input:    "https://example.com/path?query=value",
+			expected: true,
+		},
+		{
+			name:     "invalid URL - no scheme",
+			input:    "example.com",
+			expected: false,
+		},
+		{
+			name:     "invalid URL - empty string",
+			input:    "",
+			expected: false,
+		},
+		{
+			name:     "invalid URL - file path",
+			input:    "/path/to/file.txt",
+			expected: false,
+		},
+		{
+			name:     "invalid URL - relative path",
+			input:    "path/to/file.txt",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := processor.isURL(tt.input)
+			if result != tt.expected {
+				t.Errorf("isURL() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFetchURL(t *testing.T) {
+	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), false)
+
+	// Create test server
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/text":
+			w.Header().Set("Content-Type", "text/plain")
+			w.Write([]byte("Hello, World!"))
+		case "/html":
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte("<html><body>Hello, World!</body></html>"))
+		case "/json":
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"message": "Hello, World!"}`))
+		case "/error":
+			http.Error(w, "Not Found", http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+
+	tests := []struct {
+		name        string
+		url         string
+		expectError bool
+		contentType string
+	}{
+		{
+			name:        "fetch text content",
+			url:         ts.URL + "/text",
+			expectError: false,
+			contentType: "text/plain",
+		},
+		{
+			name:        "fetch HTML content",
+			url:         ts.URL + "/html",
+			expectError: false,
+			contentType: "text/html",
+		},
+		{
+			name:        "fetch JSON content",
+			url:         ts.URL + "/json",
+			expectError: false,
+			contentType: "application/json",
+		},
+		{
+			name:        "fetch error response",
+			url:         ts.URL + "/error",
+			expectError: true,
+		},
+		{
+			name:        "invalid URL",
+			url:         "http://invalid.url.that.does.not.exist",
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpPath, err := processor.fetchURL(tt.url)
+			if tt.expectError {
+				if err == nil {
+					t.Error("fetchURL() expected error but got none")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("fetchURL() unexpected error: %v", err)
+				}
+				if tmpPath == "" {
+					t.Error("fetchURL() returned empty path")
+				}
+				// Clean up temporary file
+				if tmpPath != "" {
+					if err := processor.processFile(tmpPath); err != nil {
+						t.Errorf("Failed to process fetched file: %v", err)
+					}
+				}
+			}
 		})
 	}
 }
