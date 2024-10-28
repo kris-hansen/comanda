@@ -4,7 +4,7 @@ step_one:
   model:
     - gpt-4o-mini
   action:
-    - look through these company names and identify the top five which seem most likely to be startups
+    - look through these company names and identify the top five which seem most likely in the HVAC business
   output:
     - STDOUT
 
