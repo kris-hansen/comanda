@@ -11,6 +11,7 @@ COMandA is a command-line tool that enables the composition of Large Language Mo
 - 🌐 Direct URL input support for web content analysis
 - 🛠️ Extensible DSL for defining complex workflows
 - ⚡ Efficient processing of LLM chains
+- 🔒 HTTP server mode with bearer token authentication
 
 ## Installation
 
@@ -114,6 +115,122 @@ providers:
       - name: llama2
         type: local
         mode: text
+```
+
+### Server Configuration
+
+COMandA can run as an HTTP server, allowing you to process chains of models and actions defined in YAML files via HTTP requests. To configure the server:
+
+```bash
+comanda configure --server
+```
+
+This will prompt you to:
+1. Set the server port (default: 8080)
+2. Set the data directory path (default: data)
+3. Generate a bearer token for authentication
+4. Enable/disable authentication
+
+The server configuration is stored in your `.env` file alongside provider and model settings:
+
+```yaml
+server:
+  port: 8080
+  data_dir: "examples"  # Directory containing YAML files to process
+  bearer_token: "your-generated-token"
+  enabled: true  # Whether authentication is required
+```
+
+To start the server:
+
+```bash
+comanda serve
+```
+
+The server provides the following endpoints:
+
+### 1. Process Endpoint
+
+`GET /process` processes a YAML file from the configured data directory:
+
+```bash
+# Without authentication
+curl "http://localhost:8080/process?filename=openai-example.yaml"
+
+# With authentication (when enabled)
+curl -H "Authorization: Bearer your-token" "http://localhost:8080/process?filename=openai-example.yaml"
+```
+
+Response format:
+```json
+{
+  "success": true,
+  "message": "Successfully processed openai-example.yaml",
+  "output": "Response from gpt-4o-mini:\n..."
+}
+```
+
+Error response:
+```json
+{
+  "success": false,
+  "error": "Error message here",
+  "output": "Any output generated before the error"
+}
+```
+
+### 2. List Endpoint
+
+`GET /list` returns a list of YAML files in the configured data directory:
+
+```bash
+curl -H "Authorization: Bearer your-token" "http://localhost:8080/list"
+```
+
+Response format:
+```json
+{
+  "success": true,
+  "files": [
+    "openai-example.yaml",
+    "image-example.yaml",
+    "screenshot-example.yaml"
+  ]
+}
+```
+
+### 3. Health Check Endpoint
+
+`GET /health` returns the server's current status:
+
+```bash
+curl "http://localhost:8080/health"
+```
+
+Response format:
+```json
+{
+  "status": "ok",
+  "timestamp": "2024-11-02T20:39:13Z"
+}
+```
+
+The server logs all requests to the console, including:
+- Timestamp
+- Request method and path
+- Query parameters
+- Authorization header (token masked)
+- Response status code
+- Request duration
+
+Example server log:
+```
+[2024-11-02 20:39:13] GET /process
+Query Parameters: filename=openai-example.yaml
+Authorization: Bearer ********
+Status: 200
+Duration: 4.302611084s
+--------------------------------------------------------------------------------
 ```
 
 ## Usage

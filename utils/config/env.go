@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"os"
 
@@ -29,9 +31,18 @@ type Provider struct {
 	Models []Model `yaml:"models"`
 }
 
+// ServerConfig represents the server configuration
+type ServerConfig struct {
+	Port        int    `yaml:"port"`
+	BearerToken string `yaml:"bearer_token,omitempty"`
+	Enabled     bool   `yaml:"enabled"`
+	DataDir     string `yaml:"data_dir"`
+}
+
 // EnvConfig represents the complete environment configuration
 type EnvConfig struct {
 	Providers map[string]*Provider `yaml:"providers"` // Changed to store pointers to Provider
+	Server    *ServerConfig        `yaml:"server,omitempty"`
 }
 
 // Verbose indicates whether verbose logging is enabled
@@ -101,6 +112,38 @@ func SaveEnvConfig(path string, config *EnvConfig) error {
 
 	debugLog("Successfully saved environment configuration")
 	return nil
+}
+
+// GenerateBearerToken generates a secure random bearer token
+func GenerateBearerToken() (string, error) {
+	bytes := make([]byte, 32)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return base64.URLEncoding.EncodeToString(bytes), nil
+}
+
+// GetServerConfig retrieves the server configuration
+func (c *EnvConfig) GetServerConfig() *ServerConfig {
+	if c.Server == nil {
+		c.Server = &ServerConfig{
+			Port:    8080,
+			Enabled: false,
+			DataDir: "data",
+		}
+	}
+	return c.Server
+}
+
+// UpdateServerConfig updates the server configuration
+func (c *EnvConfig) UpdateServerConfig(config ServerConfig) {
+	if c.Server == nil {
+		c.Server = &ServerConfig{}
+	}
+	c.Server.Port = config.Port
+	c.Server.BearerToken = config.BearerToken
+	c.Server.Enabled = config.Enabled
+	c.Server.DataDir = config.DataDir
 }
 
 // GetProviderConfig retrieves configuration for a specific provider
