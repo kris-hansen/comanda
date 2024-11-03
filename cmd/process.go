@@ -14,7 +14,7 @@ import (
 
 var processCmd = &cobra.Command{
 	Use:   "process [files...]",
-	Short: "Process the DSL configuration",
+	Short: "Process YAML DSL configuration files",
 	Long:  `Process one or more DSL configuration files and execute the specified actions.`,
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
