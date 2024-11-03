@@ -225,12 +225,9 @@ The server logs all requests to the console, including:
 
 Example server log:
 ```
-[2024-11-02 20:39:13] GET /process
-Query Parameters: filename=openai-example.yaml
-Authorization: Bearer ********
-Status: 200
-Duration: 4.302611084s
---------------------------------------------------------------------------------
+2024/11/02 21:06:33 Request: method=GET path=/health query= auth=Bearer ******** status=200 duration=875µs
+2024/11/02 21:06:37 Request: method=GET path=/list query= auth=Bearer ******** status=200 duration=812.208µs
+2024/11/02 21:06:45 Request: method=GET path=/process query=filename=examples/openai-example.yaml auth=Bearer ******** status=200 duration=3.360269792s
 ```
 
 ## Usage

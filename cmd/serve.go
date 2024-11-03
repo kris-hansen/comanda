@@ -49,28 +49,34 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.ResponseWriter.WriteHeader(code)
 }
 
+// logger is a custom logger for HTTP requests
+var logger = log.New(os.Stdout, "", log.LstdFlags)
+
 func logRequest(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-
-		// Create wrapped response writer to capture status code
 		wrapped := &responseWriter{w, http.StatusOK}
 
-		// Log request details
-		fmt.Printf("\n[%s] %s %s\n", start.Format("2006-01-02 15:04:05"), r.Method, r.URL.Path)
-		fmt.Printf("Query Parameters: %s\n", r.URL.RawQuery)
+		// Build auth info string, masking the token
+		var authInfo string
 		if auth := r.Header.Get("Authorization"); auth != "" {
-			fmt.Printf("Authorization: %s\n", strings.Replace(auth, auth[7:], "********", 1))
+			authInfo = strings.Replace(auth, auth[7:], "********", 1)
 		}
 
 		// Call the handler
 		handler(wrapped, r)
 
-		// Log response details
+		// Calculate duration
 		duration := time.Since(start)
-		fmt.Printf("Status: %d\n", wrapped.statusCode)
-		fmt.Printf("Duration: %v\n", duration)
-		fmt.Println(strings.Repeat("-", 80))
+
+		// Log the request details in a structured format
+		logger.Printf("Request: method=%s path=%s query=%s auth=%s status=%d duration=%v",
+			r.Method,
+			r.URL.Path,
+			r.URL.RawQuery,
+			authInfo,
+			wrapped.statusCode,
+			duration)
 	}
 }
 
@@ -133,8 +139,10 @@ var serveCmd = &cobra.Command{
 			log.Fatalf("Error creating data directory: %v", err)
 		}
 
+		mux := http.NewServeMux()
+
 		// Health check endpoint
-		http.HandleFunc("/health", logRequest(func(w http.ResponseWriter, r *http.Request) {
+		mux.HandleFunc("/health", logRequest(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(HealthResponse{
 				Status:    "ok",
@@ -143,7 +151,7 @@ var serveCmd = &cobra.Command{
 		}))
 
 		// List files endpoint
-		http.HandleFunc("/list", logRequest(func(w http.ResponseWriter, r *http.Request) {
+		mux.HandleFunc("/list", logRequest(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 
 			if !checkAuth(serverConfig, w, r) {
@@ -177,12 +185,20 @@ var serveCmd = &cobra.Command{
 		}))
 
 		// Process endpoint
-		http.HandleFunc("/process", logRequest(func(w http.ResponseWriter, r *http.Request) {
+		mux.HandleFunc("/process", logRequest(func(w http.ResponseWriter, r *http.Request) {
 			if !checkAuth(serverConfig, w, r) {
 				return
 			}
 			handleProcess(w, r, serverConfig)
 		}))
+
+		server := &http.Server{
+			Addr:         fmt.Sprintf(":%d", serverConfig.Port),
+			Handler:      mux,
+			ReadTimeout:  30 * time.Second,
+			WriteTimeout: 120 * time.Second,
+			IdleTimeout:  120 * time.Second,
+		}
 
 		fmt.Printf("Starting server on port %d...\n", serverConfig.Port)
 		fmt.Printf("Data directory: %s\n", serverConfig.DataDir)
@@ -194,7 +210,7 @@ var serveCmd = &cobra.Command{
 			fmt.Printf("Example usage: curl 'http://localhost:%d/process?filename=examples/openai-example.yaml'\n", serverConfig.Port)
 		}
 
-		if err := http.ListenAndServe(fmt.Sprintf(":%d", serverConfig.Port), nil); err != nil {
+		if err := server.ListenAndServe(); err != nil {
 			log.Fatalf("Server failed to start: %v", err)
 		}
 	},
