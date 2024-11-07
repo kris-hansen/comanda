@@ -25,13 +25,12 @@ var processCmd = &cobra.Command{
 		if verbose {
 			fmt.Printf("[DEBUG] Loading environment configuration from %s\n", envPath)
 		}
-		envConfig, err := config.LoadEnvConfig(envPath)
+
+		envConfig, err := config.LoadEnvConfigWithPassword(envPath)
 		if err != nil {
-			if os.IsNotExist(err) {
-				log.Fatalf("Environment file not found at %s. Set COMANDA_ENV environment variable to specify a different path.", envPath)
-			}
 			log.Fatalf("Error loading environment configuration: %v", err)
 		}
+
 		if verbose {
 			fmt.Println("[DEBUG] Environment configuration loaded successfully")
 		}

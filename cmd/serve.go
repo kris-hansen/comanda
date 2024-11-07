@@ -123,7 +123,7 @@ var serveCmd = &cobra.Command{
 	Long:  `Start an HTTP server that processes YAML DSL configuration files via HTTP requests.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Load environment configuration
-		envConfig, err := config.LoadEnvConfig(config.GetEnvPath())
+		envConfig, err := config.LoadEnvConfigWithPassword(config.GetEnvPath())
 		if err != nil {
 			log.Fatalf("Error loading environment configuration: %v", err)
 		}
@@ -189,7 +189,7 @@ var serveCmd = &cobra.Command{
 			if !checkAuth(serverConfig, w, r) {
 				return
 			}
-			handleProcess(w, r, serverConfig)
+			handleProcess(w, r, serverConfig, envConfig)
 		}))
 
 		server := &http.Server{
@@ -216,7 +216,7 @@ var serveCmd = &cobra.Command{
 	},
 }
 
-func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *config.ServerConfig) {
+func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *config.ServerConfig, envConfig *config.EnvConfig) {
 	w.Header().Set("Content-Type", "application/json")
 
 	// Only allow GET requests
@@ -243,28 +243,6 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *config.
 	// If filename doesn't start with data directory, prepend it
 	if !strings.HasPrefix(filename, serverConfig.DataDir) {
 		filename = filepath.Join(serverConfig.DataDir, filename)
-	}
-
-	// Get environment file path
-	envPath := config.GetEnvPath()
-
-	// Load environment configuration
-	envConfig, err := config.LoadEnvConfig(envPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(ProcessResponse{
-				Success: false,
-				Error:   fmt.Sprintf("Environment file not found at %s", envPath),
-			})
-			return
-		}
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(ProcessResponse{
-			Success: false,
-			Error:   fmt.Sprintf("Error loading environment configuration: %v", err),
-		})
-		return
 	}
 
 	// Read YAML file

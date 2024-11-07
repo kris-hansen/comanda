@@ -13,23 +13,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type Provider struct {
-	APIKey string  `yaml:"api_key"`
-	Models []Model `yaml:"models"`
-}
-
-type Model struct {
-	Name string `yaml:"name"`
-	Type string `yaml:"type"`
-}
-
-type Config struct {
-	Providers map[string]Provider `yaml:"providers"`
-}
-
 var (
-	listFlag   bool
-	serverFlag bool
+	listFlag    bool
+	serverFlag  bool
+	encryptFlag bool
 )
 
 func checkOllamaInstalled() bool {
@@ -111,22 +98,41 @@ var configureCmd = &cobra.Command{
 			return
 		}
 
-		reader := bufio.NewReader(os.Stdin)
-
-		// Get config path from environment or default
 		configPath := config.GetEnvPath()
 
-		// Load existing configuration
-		envConfig, err := config.LoadEnvConfig(configPath)
-		if err != nil {
-			if os.IsNotExist(err) {
-				envConfig = &config.EnvConfig{
-					Providers: make(map[string]*config.Provider),
-				}
-			} else {
-				fmt.Printf("Error loading configuration: %v\n", err)
+		if encryptFlag {
+			password, err := config.PromptPassword("Enter encryption password: ")
+			if err != nil {
+				fmt.Printf("Error reading password: %v\n", err)
 				return
 			}
+
+			confirmPassword, err := config.PromptPassword("Confirm encryption password: ")
+			if err != nil {
+				fmt.Printf("Error reading password: %v\n", err)
+				return
+			}
+
+			if password != confirmPassword {
+				fmt.Println("Passwords do not match")
+				return
+			}
+
+			if err := config.EncryptConfig(configPath, password); err != nil {
+				fmt.Printf("Error encrypting configuration: %v\n", err)
+				return
+			}
+			fmt.Println("Configuration encrypted successfully!")
+			return
+		}
+
+		reader := bufio.NewReader(os.Stdin)
+
+		// Load existing configuration
+		envConfig, err := config.LoadEnvConfigWithPassword(configPath)
+		if err != nil {
+			fmt.Printf("Error loading configuration: %v\n", err)
+			return
 		}
 
 		if serverFlag {
@@ -231,9 +237,9 @@ var configureCmd = &cobra.Command{
 
 func listConfiguration() {
 	configPath := config.GetEnvPath()
-	envConfig, err := config.LoadEnvConfig(configPath)
+	envConfig, err := config.LoadEnvConfigWithPassword(configPath)
 	if err != nil {
-		fmt.Printf("No configuration found at %s\n", configPath)
+		fmt.Printf("Error loading configuration: %v\n", err)
 		return
 	}
 
@@ -273,5 +279,6 @@ func listConfiguration() {
 func init() {
 	configureCmd.Flags().BoolVar(&listFlag, "list", false, "List all configured providers and models")
 	configureCmd.Flags().BoolVar(&serverFlag, "server", false, "Configure server settings")
+	configureCmd.Flags().BoolVar(&encryptFlag, "encrypt", false, "Encrypt the configuration file")
 	rootCmd.AddCommand(configureCmd)
 }
