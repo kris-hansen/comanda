@@ -12,6 +12,7 @@ COMandA is a command-line tool that enables the composition of Large Language Mo
 - 🛠️ Extensible DSL for defining complex workflows
 - ⚡ Efficient processing of LLM chains
 - 🔒 HTTP server mode with bearer token authentication
+- 🔐 Secure configuration encryption for protecting API keys and secrets
 
 ## Installation
 
@@ -41,6 +42,45 @@ comanda process your-dsl-file.yaml
 # Or specify it inline
 COMANDA_ENV=/path/to/your/env/file comanda process your-dsl-file.yaml
 ```
+
+### Configuration Encryption
+
+COMandA supports encrypting your configuration file to protect sensitive information like API keys. The encryption uses AES-256-GCM with password-derived keys, providing strong security against unauthorized access.
+
+To encrypt your configuration:
+```bash
+comanda configure --encrypt
+```
+
+You'll be prompted to enter and confirm an encryption password. Once encrypted, all commands that need to access the configuration (process, serve, configure) will prompt for the password.
+
+Example workflow:
+```bash
+# First, configure your providers and API keys
+comanda configure
+
+# Then encrypt the configuration
+comanda configure --encrypt
+Enter encryption password: ********
+Confirm encryption password: ********
+Configuration encrypted successfully!
+
+# When running commands, you'll be prompted for the password
+comanda process your-dsl-file.yaml
+Enter decryption password: ********
+```
+
+The encryption system provides:
+- AES-256-GCM encryption (industry standard)
+- Password-based key derivation
+- Protection against tampering
+- Brute-force resistance
+
+You can still view your configuration using:
+```bash
+comanda configure --list
+```
+This will prompt for the password if the configuration is encrypted.
 
 ### Provider Configuration
 

@@ -1,11 +1,18 @@
 package config
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"os"
+	"strings"
+	"syscall"
 
+	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 )
 
@@ -65,6 +72,116 @@ func GetEnvPath() string {
 	return ".env"
 }
 
+// PromptPassword prompts the user for a password securely
+func PromptPassword(prompt string) (string, error) {
+	fmt.Print(prompt)
+	password, err := term.ReadPassword(int(syscall.Stdin))
+	fmt.Println() // Add newline after password input
+	if err != nil {
+		return "", fmt.Errorf("error reading password: %w", err)
+	}
+	return string(password), nil
+}
+
+// deriveKey derives an AES-256 key from a password using SHA-256
+func deriveKey(password string) []byte {
+	hash := sha256.Sum256([]byte(password))
+	return hash[:]
+}
+
+// IsEncrypted checks if the file content is encrypted
+func IsEncrypted(data []byte) bool {
+	return strings.HasPrefix(string(data), "ENCRYPTED:")
+}
+
+// EncryptConfig encrypts the configuration file
+func EncryptConfig(path string, password string) error {
+	debugLog("Attempting to encrypt configuration at: %s", path)
+
+	// Read the original file
+	plaintext, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("error reading file: %w", err)
+	}
+
+	// Generate a random nonce
+	nonce := make([]byte, 12)
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return fmt.Errorf("error generating nonce: %w", err)
+	}
+
+	// Create cipher
+	key := deriveKey(password)
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return fmt.Errorf("error creating cipher: %w", err)
+	}
+
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return fmt.Errorf("error creating GCM: %w", err)
+	}
+
+	// Encrypt the data
+	ciphertext := aesgcm.Seal(nil, nonce, plaintext, nil)
+
+	// Combine nonce and ciphertext
+	encrypted := append(nonce, ciphertext...)
+
+	// Encode as base64 and add prefix
+	encodedData := "ENCRYPTED:" + base64.StdEncoding.EncodeToString(encrypted)
+
+	// Write the encrypted data back to the file
+	if err := os.WriteFile(path, []byte(encodedData), 0644); err != nil {
+		return fmt.Errorf("error writing encrypted file: %w", err)
+	}
+
+	debugLog("Successfully encrypted configuration")
+	return nil
+}
+
+// DecryptConfig decrypts the configuration data
+func DecryptConfig(data []byte, password string) ([]byte, error) {
+	debugLog("Attempting to decrypt configuration data")
+
+	// Remove the "ENCRYPTED:" prefix
+	encodedData := strings.TrimPrefix(string(data), "ENCRYPTED:")
+
+	// Decode from base64
+	encrypted, err := base64.StdEncoding.DecodeString(encodedData)
+	if err != nil {
+		return nil, fmt.Errorf("error decoding base64: %w", err)
+	}
+
+	// Extract nonce and ciphertext
+	if len(encrypted) < 12 {
+		return nil, fmt.Errorf("invalid encrypted data")
+	}
+	nonce := encrypted[:12]
+	ciphertext := encrypted[12:]
+
+	// Create cipher
+	key := deriveKey(password)
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("error creating cipher: %w", err)
+	}
+
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("error creating GCM: %w", err)
+	}
+
+	// Decrypt the data
+	plaintext, err := aesgcm.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error decrypting data (wrong password?): %w", err)
+	}
+
+	debugLog("Successfully decrypted configuration")
+	return plaintext, nil
+}
+
 // LoadEnvConfig loads the environment configuration from .env file
 func LoadEnvConfig(path string) (*EnvConfig, error) {
 	debugLog("Attempting to load environment configuration from: %s", path)
@@ -73,6 +190,10 @@ func LoadEnvConfig(path string) (*EnvConfig, error) {
 	if err != nil {
 		debugLog("Error reading environment file: %v", err)
 		return nil, fmt.Errorf("error reading env file: %w", err)
+	}
+
+	if IsEncrypted(data) {
+		return nil, fmt.Errorf("encrypted configuration detected: password required")
 	}
 
 	var config EnvConfig
@@ -93,6 +214,64 @@ func LoadEnvConfig(path string) (*EnvConfig, error) {
 
 	debugLog("Successfully loaded environment configuration")
 	return &config, nil
+}
+
+// LoadEncryptedEnvConfig loads an encrypted environment configuration
+func LoadEncryptedEnvConfig(path string, password string) (*EnvConfig, error) {
+	debugLog("Attempting to load encrypted environment configuration from: %s", path)
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("error reading env file: %w", err)
+	}
+
+	if !IsEncrypted(data) {
+		return nil, fmt.Errorf("configuration is not encrypted")
+	}
+
+	decrypted, err := DecryptConfig(data, password)
+	if err != nil {
+		return nil, err
+	}
+
+	var config EnvConfig
+	if err := yaml.Unmarshal(decrypted, &config); err != nil {
+		return nil, fmt.Errorf("error parsing decrypted config: %w", err)
+	}
+
+	// Convert any non-pointer providers to pointers
+	if config.Providers != nil {
+		for name, provider := range config.Providers {
+			if provider != nil {
+				config.Providers[name] = provider
+			}
+		}
+	}
+
+	return &config, nil
+}
+
+// LoadEnvConfigWithPassword attempts to load the config, prompting for password if encrypted
+func LoadEnvConfigWithPassword(path string) (*EnvConfig, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &EnvConfig{
+				Providers: make(map[string]*Provider),
+			}, nil
+		}
+		return nil, fmt.Errorf("error reading env file: %w", err)
+	}
+
+	if IsEncrypted(data) {
+		password, err := PromptPassword("Enter decryption password: ")
+		if err != nil {
+			return nil, err
+		}
+		return LoadEncryptedEnvConfig(path, password)
+	}
+
+	return LoadEnvConfig(path)
 }
 
 // SaveEnvConfig saves the environment configuration to .env file
