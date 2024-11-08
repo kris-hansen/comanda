@@ -17,6 +17,7 @@ var (
 	listFlag    bool
 	serverFlag  bool
 	encryptFlag bool
+	removeFlag  string
 )
 
 func checkOllamaInstalled() bool {
@@ -37,6 +38,13 @@ func isValidOllamaModel(modelName string) bool {
 	// Convert output to string and check if model exists
 	outputStr := string(output)
 	return strings.Contains(outputStr, modelName)
+}
+
+func validatePassword(password string) error {
+	if len(password) < 6 {
+		return fmt.Errorf("password must be at least 6 characters long")
+	}
+	return nil
 }
 
 func configureServer(reader *bufio.Reader, envConfig *config.EnvConfig) error {
@@ -88,6 +96,29 @@ func configureServer(reader *bufio.Reader, envConfig *config.EnvConfig) error {
 	return nil
 }
 
+func removeModel(envConfig *config.EnvConfig, modelName string) error {
+	removed := false
+	for providerName, provider := range envConfig.Providers {
+		for i, model := range provider.Models {
+			if model.Name == modelName {
+				// Remove the model from the slice
+				provider.Models = append(provider.Models[:i], provider.Models[i+1:]...)
+				removed = true
+				fmt.Printf("Removed model '%s' from provider '%s'\n", modelName, providerName)
+				break
+			}
+		}
+		if removed {
+			break
+		}
+	}
+
+	if !removed {
+		return fmt.Errorf("model '%s' not found in any provider", modelName)
+	}
+	return nil
+}
+
 var configureCmd = &cobra.Command{
 	Use:   "configure",
 	Short: "Configure model settings",
@@ -101,9 +132,14 @@ var configureCmd = &cobra.Command{
 		configPath := config.GetEnvPath()
 
 		if encryptFlag {
-			password, err := config.PromptPassword("Enter encryption password: ")
+			password, err := config.PromptPassword("Enter encryption password (minimum 6 characters): ")
 			if err != nil {
 				fmt.Printf("Error reading password: %v\n", err)
+				return
+			}
+
+			if err := validatePassword(password); err != nil {
+				fmt.Printf("Error: %v\n", err)
 				return
 			}
 
@@ -126,7 +162,21 @@ var configureCmd = &cobra.Command{
 			return
 		}
 
-		reader := bufio.NewReader(os.Stdin)
+		// Check if file exists and is encrypted before loading
+		var wasEncrypted bool
+		var decryptionPassword string
+		if _, err := os.Stat(configPath); err == nil {
+			data, err := os.ReadFile(configPath)
+			if err == nil && config.IsEncrypted(data) {
+				wasEncrypted = true
+				password, err := config.PromptPassword("Enter decryption password: ")
+				if err != nil {
+					fmt.Printf("Error reading password: %v\n", err)
+					return
+				}
+				decryptionPassword = password
+			}
+		}
 
 		// Load existing configuration
 		envConfig, err := config.LoadEnvConfigWithPassword(configPath)
@@ -135,12 +185,19 @@ var configureCmd = &cobra.Command{
 			return
 		}
 
-		if serverFlag {
+		if removeFlag != "" {
+			if err := removeModel(envConfig, removeFlag); err != nil {
+				fmt.Printf("Error: %v\n", err)
+				return
+			}
+		} else if serverFlag {
+			reader := bufio.NewReader(os.Stdin)
 			if err := configureServer(reader, envConfig); err != nil {
 				fmt.Printf("Error configuring server: %v\n", err)
 				return
 			}
 		} else {
+			reader := bufio.NewReader(os.Stdin)
 			// Prompt for provider
 			var provider string
 			for {
@@ -231,6 +288,14 @@ var configureCmd = &cobra.Command{
 			return
 		}
 
+		// Re-encrypt if it was encrypted before
+		if wasEncrypted {
+			if err := config.EncryptConfig(configPath, decryptionPassword); err != nil {
+				fmt.Printf("Error re-encrypting configuration: %v\n", err)
+				return
+			}
+		}
+
 		fmt.Printf("Configuration saved successfully to %s!\n", configPath)
 	},
 }
@@ -280,5 +345,6 @@ func init() {
 	configureCmd.Flags().BoolVar(&listFlag, "list", false, "List all configured providers and models")
 	configureCmd.Flags().BoolVar(&serverFlag, "server", false, "Configure server settings")
 	configureCmd.Flags().BoolVar(&encryptFlag, "encrypt", false, "Encrypt the configuration file")
+	configureCmd.Flags().StringVar(&removeFlag, "remove", "", "Remove a model by name")
 	rootCmd.AddCommand(configureCmd)
 }
