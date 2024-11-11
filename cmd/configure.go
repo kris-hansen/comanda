@@ -14,10 +14,11 @@ import (
 )
 
 var (
-	listFlag    bool
-	serverFlag  bool
-	encryptFlag bool
-	removeFlag  string
+	listFlag      bool
+	serverFlag    bool
+	encryptFlag   bool
+	removeFlag    string
+	updateKeyFlag string
 )
 
 func checkOllamaInstalled() bool {
@@ -185,7 +186,18 @@ var configureCmd = &cobra.Command{
 			return
 		}
 
-		if removeFlag != "" {
+		if updateKeyFlag != "" {
+			reader := bufio.NewReader(os.Stdin)
+			fmt.Print("Enter new API key: ")
+			apiKey, _ := reader.ReadString('\n')
+			apiKey = strings.TrimSpace(apiKey)
+
+			if err := envConfig.UpdateAPIKey(updateKeyFlag, apiKey); err != nil {
+				fmt.Printf("Error updating API key: %v\n", err)
+				return
+			}
+			fmt.Printf("Successfully updated API key for provider '%s'\n", updateKeyFlag)
+		} else if removeFlag != "" {
 			if err := removeModel(envConfig, removeFlag); err != nil {
 				fmt.Printf("Error: %v\n", err)
 				return
@@ -360,5 +372,6 @@ func init() {
 	configureCmd.Flags().BoolVar(&serverFlag, "server", false, "Configure server settings")
 	configureCmd.Flags().BoolVar(&encryptFlag, "encrypt", false, "Encrypt the configuration file")
 	configureCmd.Flags().StringVar(&removeFlag, "remove", "", "Remove a model by name")
+	configureCmd.Flags().StringVar(&updateKeyFlag, "update-key", "", "Update API key for specified provider")
 	rootCmd.AddCommand(configureCmd)
 }
