@@ -201,13 +201,13 @@ var configureCmd = &cobra.Command{
 			// Prompt for provider
 			var provider string
 			for {
-				fmt.Print("Enter provider (openai/anthropic/ollama/google): ")
+				fmt.Print("Enter provider (openai/anthropic/ollama/google/xai): ")
 				provider, _ = reader.ReadString('\n')
 				provider = strings.TrimSpace(provider)
-				if provider == "openai" || provider == "anthropic" || provider == "ollama" || provider == "google" {
+				if provider == "openai" || provider == "anthropic" || provider == "ollama" || provider == "google" || provider == "xai" {
 					break
 				}
-				fmt.Println("Invalid provider. Please enter 'openai', 'anthropic', 'ollama', or 'google'")
+				fmt.Println("Invalid provider. Please enter 'openai', 'anthropic', 'ollama', 'google', or 'xai'")
 			}
 
 			// Special handling for ollama provider
@@ -244,6 +244,8 @@ var configureCmd = &cobra.Command{
 					fmt.Print("Enter model name (must be pulled in ollama): ")
 				} else if provider == "google" {
 					fmt.Print("Enter model name (e.g., gemini-pro): ")
+				} else if provider == "xai" {
+					fmt.Print("Enter model name (e.g., grok-beta): ")
 				} else {
 					fmt.Print("Enter model name: ")
 				}
@@ -258,6 +260,11 @@ var configureCmd = &cobra.Command{
 				} else if provider == "google" {
 					if !strings.HasPrefix(modelName, "gemini-") {
 						fmt.Println("Invalid model name. Google models should start with 'gemini-'")
+						continue
+					}
+				} else if provider == "xai" {
+					if !strings.HasPrefix(modelName, "grok-") {
+						fmt.Println("Invalid model name. X.AI models should start with 'grok-'")
 						continue
 					}
 				}

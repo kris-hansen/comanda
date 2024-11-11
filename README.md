@@ -2,12 +2,12 @@
 
 COMandA is a command-line tool that enables the composition of Large Language Model (LLM) operations using a YAML-based Domain Specific Language (DSL). It simplifies the process of creating and managing chains of LLM activities that operate on files and information.
 
-COMandA allows you to use the best provider and model for each step and compose information pipelines that combine the stregths of different LLMs. It supports multiple LLM providers (OpenAI, Anthropic, Google, Ollama) and provides extensible DSL capabilities for defining complex information workflows.
+COMandA allows you to use the best provider and model for each step and compose information pipelines that combine the stregths of different LLMs. It supports multiple LLM providers (OpenAI, Anthropic, Google, X.AI, Ollama) and provides extensible DSL capabilities for defining complex information workflows.
 
 ## Features
 
 - 🔗 Chain multiple LLM operations together using simple YAML configuration
-- 🤖 Support for multiple LLM providers (OpenAI, Anthropic, Google, Ollama)
+- 🤖 Support for multiple LLM providers (OpenAI, Anthropic, Google, X.AI, Ollama)
 - 📄 File-based operations and transformations
 - 🖼️ Support for image analysis with vision models (screenshots and common image formats)
 - 🌐 Direct URL input support for web content analysis
@@ -94,8 +94,8 @@ comanda configure
 
 This will prompt you to:
 
-1. Select a provider (OpenAI/Anthropic/Google/Ollama)
-2. Enter API key (for OpenAI/Anthropic/Google)
+1. Select a provider (OpenAI/Anthropic/Google/X.AI/Ollama)
+2. Enter API key (for OpenAI/Anthropic/Google/X.AI)
 3. Specify model name
 4. Select model mode:
    - text: For text-only operations
@@ -125,6 +125,9 @@ ollama:
 openai:
   - gpt-4o-mini (external)
   - gpt-4o (external)
+
+xai:
+  - grok-beta (external)
 ```
 
 To remove a model from the configuration:
@@ -158,6 +161,12 @@ providers:
     models:
       - name: llama2
         type: local
+        mode: text
+  xai:
+    api_key: sk-...
+    models:
+      - name: grok-beta
+        type: external
         mode: text
 ```
 
@@ -502,6 +511,36 @@ This example shows how to analyze web content directly from URLs. The processor 
 comanda process examples/url-example.yaml
 ```
 
+#### 6. X.AI Example (xai-example.yaml)
+
+```yaml
+step_one:
+  input:
+    - examples/example_filename.txt
+  model:
+    - grok-beta
+  action:
+    - analyze these company names and identify which ones have the strongest brand potential
+  output:
+    - STDOUT
+
+step_two:
+  input:
+    - STDIN
+  model:
+    - grok-beta
+  action:
+    - for each of these companies, suggest a modern social media marketing strategy
+  output:
+    - STDOUT
+```
+
+This example demonstrates using X.AI's grok-beta model. Make sure you have configured your X.AI API key before running:
+
+```bash
+comanda process examples/xai-example.yaml
+```
+
 ## Project Structure
 
 ```bash
@@ -551,6 +590,22 @@ Please ensure your PR:
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Citation
+
+If you use COMandA in your research or academic work, please cite it as follows:
+
+### BibTeX
+```bibtex
+@software{comanda2024,
+  author       = {Hansen, Kris},
+  title        = {COMandA: Chain of Models and Actions},
+  year         = {2024},
+  publisher    = {GitHub},
+  url          = {https://github.com/kris-hansen/comanda},
+  description  = {A command-line tool for composing Large Language Model operations using a YAML-based DSL}
+}
+```
 
 ## Acknowledgments
 
