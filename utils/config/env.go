@@ -23,6 +23,7 @@ const (
 	TextMode   ModelMode = "text"
 	VisionMode ModelMode = "vision"
 	MultiMode  ModelMode = "multi"
+	FileMode   ModelMode = "file" // Added for file handling support
 )
 
 // Model represents a single model configuration
@@ -55,20 +56,30 @@ type EnvConfig struct {
 // Verbose indicates whether verbose logging is enabled
 var Verbose bool
 
-// debugLog prints debug information if verbose mode is enabled
-func debugLog(format string, args ...interface{}) {
-	if Verbose {
+// Debug indicates whether debug logging is enabled
+var Debug bool
+
+// DebugLog prints debug information if debug mode is enabled
+func DebugLog(format string, args ...interface{}) {
+	if Debug {
 		fmt.Printf("[DEBUG] "+format+"\n", args...)
+	}
+}
+
+// VerboseLog prints verbose information if verbose mode is enabled
+func VerboseLog(format string, args ...interface{}) {
+	if Verbose {
+		fmt.Printf("[VERBOSE] "+format+"\n", args...)
 	}
 }
 
 // GetEnvPath returns the environment file path from COMANDA_ENV or the default
 func GetEnvPath() string {
 	if envPath := os.Getenv("COMANDA_ENV"); envPath != "" {
-		debugLog("Using environment file from COMANDA_ENV: %s", envPath)
+		DebugLog("Using environment file from COMANDA_ENV: %s", envPath)
 		return envPath
 	}
-	debugLog("Using default environment file: .env")
+	DebugLog("Using default environment file: .env")
 	return ".env"
 }
 
@@ -96,7 +107,7 @@ func IsEncrypted(data []byte) bool {
 
 // EncryptConfig encrypts the configuration file
 func EncryptConfig(path string, password string) error {
-	debugLog("Attempting to encrypt configuration at: %s", path)
+	DebugLog("Attempting to encrypt configuration at: %s", path)
 
 	// Read the original file
 	plaintext, err := os.ReadFile(path)
@@ -136,13 +147,13 @@ func EncryptConfig(path string, password string) error {
 		return fmt.Errorf("error writing encrypted file: %w", err)
 	}
 
-	debugLog("Successfully encrypted configuration")
+	DebugLog("Successfully encrypted configuration")
 	return nil
 }
 
 // DecryptConfig decrypts the configuration data
 func DecryptConfig(data []byte, password string) ([]byte, error) {
-	debugLog("Attempting to decrypt configuration data")
+	DebugLog("Attempting to decrypt configuration data")
 
 	// Remove the "ENCRYPTED:" prefix
 	encodedData := strings.TrimPrefix(string(data), "ENCRYPTED:")
@@ -178,17 +189,17 @@ func DecryptConfig(data []byte, password string) ([]byte, error) {
 		return nil, fmt.Errorf("error decrypting data (wrong password?): %w", err)
 	}
 
-	debugLog("Successfully decrypted configuration")
+	DebugLog("Successfully decrypted configuration")
 	return plaintext, nil
 }
 
 // LoadEnvConfig loads the environment configuration from .env file
 func LoadEnvConfig(path string) (*EnvConfig, error) {
-	debugLog("Attempting to load environment configuration from: %s", path)
+	DebugLog("Attempting to load environment configuration from: %s", path)
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		debugLog("Error reading environment file: %v", err)
+		DebugLog("Error reading environment file: %v", err)
 		return nil, fmt.Errorf("error reading env file: %w", err)
 	}
 
@@ -198,7 +209,7 @@ func LoadEnvConfig(path string) (*EnvConfig, error) {
 
 	var config EnvConfig
 	if err := yaml.Unmarshal(data, &config); err != nil {
-		debugLog("Error parsing environment file: %v", err)
+		DebugLog("Error parsing environment file: %v", err)
 		return nil, fmt.Errorf("error parsing env file: %w", err)
 	}
 
@@ -212,13 +223,13 @@ func LoadEnvConfig(path string) (*EnvConfig, error) {
 		}
 	}
 
-	debugLog("Successfully loaded environment configuration")
+	DebugLog("Successfully loaded environment configuration")
 	return &config, nil
 }
 
 // LoadEncryptedEnvConfig loads an encrypted environment configuration
 func LoadEncryptedEnvConfig(path string, password string) (*EnvConfig, error) {
-	debugLog("Attempting to load encrypted environment configuration from: %s", path)
+	DebugLog("Attempting to load encrypted environment configuration from: %s", path)
 
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -276,20 +287,20 @@ func LoadEnvConfigWithPassword(path string) (*EnvConfig, error) {
 
 // SaveEnvConfig saves the environment configuration to .env file
 func SaveEnvConfig(path string, config *EnvConfig) error {
-	debugLog("Attempting to save environment configuration to: %s", path)
+	DebugLog("Attempting to save environment configuration to: %s", path)
 
 	data, err := yaml.Marshal(config)
 	if err != nil {
-		debugLog("Error marshaling environment config: %v", err)
+		DebugLog("Error marshaling environment config: %v", err)
 		return fmt.Errorf("error marshaling env config: %w", err)
 	}
 
 	if err := os.WriteFile(path, data, 0644); err != nil {
-		debugLog("Error writing environment file: %v", err)
+		DebugLog("Error writing environment file: %v", err)
 		return fmt.Errorf("error writing env file: %w", err)
 	}
 
-	debugLog("Successfully saved environment configuration")
+	DebugLog("Successfully saved environment configuration")
 	return nil
 }
 
@@ -349,7 +360,7 @@ func (c *EnvConfig) AddProvider(name string, provider Provider) {
 
 // ValidateModelMode checks if a mode is valid
 func ValidateModelMode(mode ModelMode) bool {
-	validModes := []ModelMode{TextMode, VisionMode, MultiMode}
+	validModes := []ModelMode{TextMode, VisionMode, MultiMode, FileMode}
 	for _, validMode := range validModes {
 		if mode == validMode {
 			return true
@@ -360,7 +371,7 @@ func ValidateModelMode(mode ModelMode) bool {
 
 // GetSupportedModes returns all supported model modes
 func GetSupportedModes() []ModelMode {
-	return []ModelMode{TextMode, VisionMode, MultiMode}
+	return []ModelMode{TextMode, VisionMode, MultiMode, FileMode}
 }
 
 // AddModelToProvider adds a model to a specific provider

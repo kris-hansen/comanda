@@ -39,7 +39,7 @@ type Processor struct {
 
 // NewProcessor creates a new DSL processor
 func NewProcessor(config *DSLConfig, envConfig *config.EnvConfig, verbose bool) *Processor {
-	return &Processor{
+	p := &Processor{
 		config:    config,
 		envConfig: envConfig,
 		handler:   input.NewHandler(),
@@ -47,6 +47,8 @@ func NewProcessor(config *DSLConfig, envConfig *config.EnvConfig, verbose bool) 
 		providers: make(map[string]models.Provider),
 		verbose:   verbose,
 	}
+	p.debugf("Creating new validator with default extensions")
+	return p
 }
 
 // debugf prints debug information if verbose mode is enabled
@@ -179,7 +181,7 @@ func (p *Processor) Process() error {
 		}
 
 		// Validate model for this step
-		if err := p.validateModel(modelNames); err != nil {
+		if err := p.validateModel(modelNames, inputs); err != nil {
 			return fmt.Errorf("model validation error in step %s: %w", stepName, err)
 		}
 
@@ -372,8 +374,8 @@ func containsGlobChar(path string) bool {
 	return strings.ContainsAny(path, "*?[]")
 }
 
-// validateModel checks if the specified model is supported
-func (p *Processor) validateModel(modelNames []string) error {
+// validateModel checks if the specified model is supported and has the required capabilities
+func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 	if len(modelNames) == 0 {
 		return fmt.Errorf("no model specified")
 	}
@@ -389,6 +391,37 @@ func (p *Processor) validateModel(modelNames []string) error {
 		// Check if the provider actually supports this model
 		if !provider.SupportsModel(modelName) {
 			return fmt.Errorf("unsupported model: %s", modelName)
+		}
+
+		// Get provider name
+		providerName := provider.Name()
+
+		// Get model configuration from environment
+		modelConfig, err := p.envConfig.GetModelConfig(providerName, modelName)
+		if err != nil {
+			return fmt.Errorf("failed to get model configuration: %w", err)
+		}
+
+		// Check if model has required capabilities based on input types
+		for _, input := range inputs {
+			if input == "NA" || input == "STDIN" {
+				continue
+			}
+
+			// Check for file mode support if input is a document file
+			if p.validator.IsDocumentFile(input) && !modelConfig.HasMode(config.FileMode) {
+				return fmt.Errorf("model %s does not support file processing", modelName)
+			}
+
+			// Check for vision mode support if input is an image file
+			if p.validator.IsImageFile(input) && !modelConfig.HasMode(config.VisionMode) {
+				return fmt.Errorf("model %s does not support image processing", modelName)
+			}
+
+			// For text files, ensure model supports text mode
+			if !p.validator.IsDocumentFile(input) && !p.validator.IsImageFile(input) && !modelConfig.HasMode(config.TextMode) {
+				return fmt.Errorf("model %s does not support text processing", modelName)
+			}
 		}
 
 		provider.SetVerbose(p.verbose)
@@ -450,6 +483,37 @@ func (p *Processor) configureProviders() error {
 	return nil
 }
 
+// getMimeType returns the MIME type for a file based on its extension
+func (p *Processor) getMimeType(path string) string {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".pdf":
+		return "application/pdf"
+	case ".doc":
+		return "application/msword"
+	case ".docx":
+		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+	case ".txt":
+		return "text/plain"
+	case ".md":
+		return "text/markdown"
+	case ".json":
+		return "application/json"
+	case ".html":
+		return "text/html"
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".gif":
+		return "image/gif"
+	case ".bmp":
+		return "image/bmp"
+	default:
+		return "application/octet-stream"
+	}
+}
+
 // processActions handles the action section of the DSL
 func (p *Processor) processActions(modelNames []string, actions []string) (string, error) {
 	if len(modelNames) == 0 {
@@ -474,22 +538,35 @@ func (p *Processor) processActions(modelNames []string, actions []string) (strin
 	p.debugf("Using model %s with provider %s", modelName, configuredProvider.Name())
 	p.debugf("Processing %d action(s)", len(actions))
 
-	// Get all input contents
-	inputContents := string(p.handler.GetAllContents())
 	var finalResponse string
+	inputs := p.handler.GetInputs()
 
 	for i, action := range actions {
 		p.debugf("Processing action %d/%d: %s", i+1, len(actions), action)
 
-		// Use consistent format for all text inputs
-		fullPrompt := fmt.Sprintf("Input:\n%s\nAction: %s", inputContents, action)
-		p.debugf("Prepared prompt with input and action")
-
-		response, err := configuredProvider.SendPrompt(modelName, fullPrompt)
-		if err != nil {
-			return "", fmt.Errorf("failed to process action with model %s: %w", modelName, err)
+		// Handle each input file
+		for _, input := range inputs {
+			if p.validator.IsDocumentFile(input.Path) {
+				// For document files (PDF, DOC, etc.), use SendPromptWithFile
+				fileInput := models.FileInput{
+					Path:     input.Path,
+					MimeType: p.getMimeType(input.Path),
+				}
+				response, err := configuredProvider.SendPromptWithFile(modelName, action, fileInput)
+				if err != nil {
+					return "", fmt.Errorf("failed to process file %s with model %s: %w", input.Path, modelName, err)
+				}
+				finalResponse = response
+			} else {
+				// For text-based files, use the regular SendPrompt
+				fullPrompt := fmt.Sprintf("Input:\n%s\nAction: %s", string(input.Contents), action)
+				response, err := configuredProvider.SendPrompt(modelName, fullPrompt)
+				if err != nil {
+					return "", fmt.Errorf("failed to process action with model %s: %w", modelName, err)
+				}
+				finalResponse = response
+			}
 		}
-		finalResponse = response
 	}
 
 	return finalResponse, nil

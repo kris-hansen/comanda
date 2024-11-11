@@ -7,11 +7,18 @@ type ModelConfig struct {
 	TopP        float64
 }
 
+// FileInput represents a file to be processed by the model
+type FileInput struct {
+	Path     string
+	MimeType string
+}
+
 // Provider represents a model provider (e.g., Anthropic, OpenAI)
 type Provider interface {
 	Name() string
 	SupportsModel(modelName string) bool
 	SendPrompt(modelName string, prompt string) (string, error)
+	SendPromptWithFile(modelName string, prompt string, file FileInput) (string, error)
 	Configure(apiKey string) error
 	SetVerbose(verbose bool)
 }

@@ -61,8 +61,8 @@ func (m *MockProvider) SupportsModel(modelName string) bool {
 			"o1-mini",
 		},
 		"anthropic": {
-			"claude-2",
-			"claude-instant",
+			"claude-3-5-sonnet-latest",
+			"claude-3-5-haiku-latest",
 		},
 	}
 
@@ -93,6 +93,16 @@ func (m *MockProvider) SendPrompt(model, prompt string) (string, error) {
 		return "", fmt.Errorf("unsupported model: %s", model)
 	}
 	return "mock response", nil
+}
+
+func (m *MockProvider) SendPromptWithFile(model, prompt string, file models.FileInput) (string, error) {
+	if !m.configured {
+		return "", fmt.Errorf("provider not configured")
+	}
+	if !m.SupportsModel(model) {
+		return "", fmt.Errorf("unsupported model: %s", model)
+	}
+	return fmt.Sprintf("mock response for file: %s", file.Path), nil
 }
 
 func (m *MockProvider) SetVerbose(verbose bool) {

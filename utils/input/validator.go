@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	"github.com/kris-hansen/comanda/utils/config"
 )
 
 // Common file extensions
@@ -24,6 +26,12 @@ var (
 		".gif",
 		".bmp",
 	}
+
+	DocumentExtensions = []string{
+		".pdf",
+		".doc",
+		".docx",
+	}
 )
 
 // Validator validates input paths
@@ -33,14 +41,18 @@ type Validator struct {
 
 // NewValidator creates a new input validator with default text extensions
 func NewValidator(additionalExtensions []string) *Validator {
-	// Start with text and image extensions
+	// Start with text, image, and document extensions
 	allExtensions := append([]string{}, TextExtensions...)
 	allExtensions = append(allExtensions, ImageExtensions...)
+	allExtensions = append(allExtensions, DocumentExtensions...)
 
 	// Add any additional extensions
 	if len(additionalExtensions) > 0 {
 		allExtensions = append(allExtensions, additionalExtensions...)
 	}
+
+	// Debug print all allowed extensions
+	config.DebugLog("[Validator] Allowed extensions: %v", allExtensions)
 
 	return &Validator{
 		allowedExtensions: allExtensions,
@@ -73,8 +85,11 @@ func (v *Validator) ValidateFileExtension(path string) error {
 		return fmt.Errorf("file must have an extension")
 	}
 
+	config.DebugLog("[Validator] Checking extension %s against allowed extensions: %v", ext, v.allowedExtensions)
+
 	for _, allowedExt := range v.allowedExtensions {
 		if ext == allowedExt {
+			config.DebugLog("[Validator] Found matching extension: %s", ext)
 			return nil
 		}
 	}
@@ -87,6 +102,19 @@ func (v *Validator) IsImageFile(path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
 	for _, imgExt := range ImageExtensions {
 		if ext == imgExt {
+			return true
+		}
+	}
+	return false
+}
+
+// IsDocumentFile checks if the file has a document extension
+func (v *Validator) IsDocumentFile(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	config.DebugLog("[Validator] Checking if %s is a document extension", ext)
+	for _, docExt := range DocumentExtensions {
+		if ext == docExt {
+			config.DebugLog("[Validator] Found matching document extension: %s", ext)
 			return true
 		}
 	}

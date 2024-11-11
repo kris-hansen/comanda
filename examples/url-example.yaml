@@ -1,11 +1,5 @@
 analyze_webpage:
     input: https://example.com
-    model: gpt-4
+    model: gpt-4o-mini
     action: Analyze the webpage content and provide a summary
     output: STDOUT
-
-analyze_api:
-    input: https://api.example.com/data.json
-    model: gpt-4
-    action: Extract key insights from the API response
-    output: analysis.txt

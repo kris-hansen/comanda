@@ -10,6 +10,7 @@ import (
 )
 
 var verbose bool
+var debug bool
 
 var rootCmd = &cobra.Command{
 	Use:   "comanda",
@@ -18,6 +19,7 @@ var rootCmd = &cobra.Command{
 for model interactions and executes the specified actions.`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		config.Verbose = verbose
+		config.Debug = debug
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		cmd.Help()
@@ -26,6 +28,7 @@ for model interactions and executes the specified actions.`,
 
 func init() {
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
+	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "enable debug logging")
 }
 
 func Execute() {

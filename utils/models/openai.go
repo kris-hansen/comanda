@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	openai "github.com/sashabaranov/go-openai"
@@ -123,6 +124,110 @@ func (o *OpenAIProvider) SendPrompt(modelName string, prompt string) (string, er
 	o.debugf("API call completed, response length: %d characters", len(response))
 
 	return response, nil
+}
+
+// SendPromptWithFile sends a prompt along with a file to the specified model and returns the response
+func (o *OpenAIProvider) SendPromptWithFile(modelName string, prompt string, file FileInput) (string, error) {
+	o.debugf("Preparing to send prompt with file to model: %s", modelName)
+	o.debugf("File path: %s", file.Path)
+
+	if o.apiKey == "" {
+		return "", fmt.Errorf("OpenAI provider not configured: missing API key")
+	}
+
+	if !o.SupportsModel(modelName) {
+		return "", fmt.Errorf("invalid OpenAI model: %s", modelName)
+	}
+
+	// Read the file content
+	fileData, err := os.ReadFile(file.Path)
+	if err != nil {
+		return "", fmt.Errorf("failed to read file: %v", err)
+	}
+
+	client := openai.NewClient(o.apiKey)
+
+	// For GPT-4 Vision, handle image files
+	if strings.HasPrefix(modelName, "gpt-4") && strings.HasPrefix(file.MimeType, "image/") {
+		return o.handleFileAsVision(client, prompt, fileData, file.MimeType, modelName)
+	}
+
+	// For other files, include the content as part of the prompt
+	fileContent := string(fileData)
+	combinedPrompt := fmt.Sprintf("File content:\n%s\n\nUser prompt: %s", fileContent, prompt)
+
+	resp, err := client.CreateChatCompletion(
+		context.Background(),
+		openai.ChatCompletionRequest{
+			Model: modelName,
+			Messages: []openai.ChatCompletionMessage{
+				{
+					Role:    openai.ChatMessageRoleUser,
+					Content: combinedPrompt,
+				},
+			},
+			Temperature: float32(o.config.Temperature),
+			MaxTokens:   o.config.MaxTokens,
+			TopP:        float32(o.config.TopP),
+		},
+	)
+
+	if err != nil {
+		return "", fmt.Errorf("OpenAI API error: %v", err)
+	}
+
+	if len(resp.Choices) == 0 {
+		return "", fmt.Errorf("no response choices returned from OpenAI")
+	}
+
+	response := resp.Choices[0].Message.Content
+	o.debugf("API call completed, response length: %d characters", len(response))
+
+	return response, nil
+}
+
+// handleFileAsVision processes a file as a vision model request
+func (o *OpenAIProvider) handleFileAsVision(client *openai.Client, prompt string, fileData []byte, mimeType string, modelName string) (string, error) {
+	// Convert file data to base64 string with proper data URI prefix
+	base64Data := fmt.Sprintf("data:%s;base64,%s", mimeType, string(fileData))
+
+	// Create the message content with text and image parts
+	content := []openai.ChatMessagePart{
+		{
+			Type: openai.ChatMessagePartTypeText,
+			Text: prompt,
+		},
+		{
+			Type: openai.ChatMessagePartTypeImageURL,
+			ImageURL: &openai.ChatMessageImageURL{
+				URL: base64Data,
+			},
+		},
+	}
+
+	resp, err := client.CreateChatCompletion(
+		context.Background(),
+		openai.ChatCompletionRequest{
+			Model: modelName,
+			Messages: []openai.ChatCompletionMessage{
+				{
+					Role:         openai.ChatMessageRoleUser,
+					MultiContent: content,
+				},
+			},
+			MaxTokens: o.config.MaxTokens,
+		},
+	)
+
+	if err != nil {
+		return "", fmt.Errorf("OpenAI Vision API error: %v", err)
+	}
+
+	if len(resp.Choices) == 0 {
+		return "", fmt.Errorf("no response choices returned from OpenAI Vision")
+	}
+
+	return resp.Choices[0].Message.Content, nil
 }
 
 // handleVisionPrompt processes a vision model request with image data

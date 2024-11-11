@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/google/generative-ai-go/genai"
@@ -108,6 +109,66 @@ func (g *GoogleProvider) SendPrompt(modelName string, prompt string) (string, er
 
 	// Generate content
 	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
+	if err != nil {
+		return "", fmt.Errorf("Google AI API error: %v", err)
+	}
+
+	if len(resp.Candidates) == 0 {
+		return "", fmt.Errorf("no response candidates returned from Google AI")
+	}
+
+	// Extract the response text from the first candidate
+	var response string
+	for _, part := range resp.Candidates[0].Content.Parts {
+		if text, ok := part.(genai.Text); ok {
+			response += string(text)
+		}
+	}
+
+	g.debugf("API call completed, response length: %d characters", len(response))
+
+	return response, nil
+}
+
+// SendPromptWithFile sends a prompt along with a file to the specified model and returns the response
+func (g *GoogleProvider) SendPromptWithFile(modelName string, prompt string, file FileInput) (string, error) {
+	g.debugf("Preparing to send prompt with file to model: %s", modelName)
+	g.debugf("File path: %s", file.Path)
+
+	if g.apiKey == "" {
+		return "", fmt.Errorf("Google provider not configured: missing API key")
+	}
+
+	if !g.SupportsModel(modelName) {
+		return "", fmt.Errorf("invalid Google model: %s", modelName)
+	}
+
+	ctx := context.Background()
+	client, err := genai.NewClient(ctx, option.WithAPIKey(g.apiKey))
+	if err != nil {
+		return "", fmt.Errorf("failed to create Google AI client: %v", err)
+	}
+	defer client.Close()
+
+	// Read the file content
+	fileData, err := os.ReadFile(file.Path)
+	if err != nil {
+		return "", fmt.Errorf("failed to read file: %v", err)
+	}
+
+	// Initialize the model
+	model := client.GenerativeModel(modelName)
+	model.SetTemperature(float32(g.config.Temperature))
+	model.SetTopP(float32(g.config.TopP))
+	model.SetMaxOutputTokens(int32(g.config.MaxTokens))
+
+	// Generate content with file
+	resp, err := model.GenerateContent(ctx,
+		genai.Text(prompt),
+		genai.Blob{
+			MIMEType: file.MimeType,
+			Data:     fileData,
+		})
 	if err != nil {
 		return "", fmt.Errorf("Google AI API error: %v", err)
 	}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 )
 
@@ -88,6 +89,65 @@ func (o *OllamaProvider) SendPrompt(modelName string, prompt string) (string, er
 	reqBody := OllamaRequest{
 		Model:  modelName,
 		Prompt: prompt,
+		Stream: false,
+	}
+
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("error marshaling request: %v", err)
+	}
+
+	resp, err := http.Post("http://localhost:11434/api/generate", "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", fmt.Errorf("error calling Ollama API: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("Ollama API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	// Read and accumulate all responses
+	var fullResponse strings.Builder
+	decoder := json.NewDecoder(resp.Body)
+	for {
+		var ollamaResp OllamaResponse
+		if err := decoder.Decode(&ollamaResp); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return "", fmt.Errorf("error decoding response: %v", err)
+		}
+		fullResponse.WriteString(ollamaResp.Response)
+		if ollamaResp.Done {
+			break
+		}
+	}
+
+	result := fullResponse.String()
+	o.debugf("API call completed, response length: %d characters", len(result))
+	return result, nil
+}
+
+// SendPromptWithFile sends a prompt along with a file to the specified model and returns the response
+func (o *OllamaProvider) SendPromptWithFile(modelName string, prompt string, file FileInput) (string, error) {
+	o.debugf("Preparing to send prompt with file to model: %s", modelName)
+	o.debugf("File path: %s", file.Path)
+
+	// Read the file content
+	fileData, err := os.ReadFile(file.Path)
+	if err != nil {
+		return "", fmt.Errorf("failed to read file: %v", err)
+	}
+
+	// Combine file content with the prompt
+	fileContent := string(fileData)
+	combinedPrompt := fmt.Sprintf("File content:\n%s\n\nUser prompt: %s", fileContent, prompt)
+
+	reqBody := OllamaRequest{
+		Model:  modelName,
+		Prompt: combinedPrompt,
 		Stream: false,
 	}
 

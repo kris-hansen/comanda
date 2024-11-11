@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -123,6 +124,76 @@ func (x *XAIProvider) SendPrompt(modelName string, prompt string) (string, error
 				{
 					Role:    openai.ChatMessageRoleUser,
 					Content: prompt,
+				},
+			},
+			Temperature: float32(x.config.Temperature),
+			MaxTokens:   x.config.MaxTokens,
+			TopP:        float32(x.config.TopP),
+		},
+	)
+
+	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return "", fmt.Errorf("request timed out after %v", defaultTimeout)
+		}
+		return "", fmt.Errorf("X.AI API error: %v", err)
+	}
+
+	if len(resp.Choices) == 0 {
+		return "", fmt.Errorf("no response choices returned from X.AI")
+	}
+
+	response := resp.Choices[0].Message.Content
+	x.debugf("API call completed, response length: %d characters", len(response))
+
+	return response, nil
+}
+
+// SendPromptWithFile sends a prompt along with a file to the specified model and returns the response
+func (x *XAIProvider) SendPromptWithFile(modelName string, prompt string, file FileInput) (string, error) {
+	x.debugf("Preparing to send prompt with file to model: %s", modelName)
+	x.debugf("File path: %s", file.Path)
+
+	if x.apiKey == "" {
+		return "", fmt.Errorf("X.AI provider not configured: missing API key")
+	}
+
+	if !x.SupportsModel(modelName) {
+		return "", fmt.Errorf("invalid X.AI model: %s", modelName)
+	}
+
+	// Read the file content
+	fileData, err := os.ReadFile(file.Path)
+	if err != nil {
+		return "", fmt.Errorf("failed to read file: %v", err)
+	}
+
+	// Combine file content with the prompt
+	fileContent := string(fileData)
+	combinedPrompt := fmt.Sprintf("File content:\n%s\n\nUser prompt: %s", fileContent, prompt)
+
+	// Check estimated token count for combined prompt
+	estimatedTokens := x.estimateTokenCount(combinedPrompt)
+	if estimatedTokens > maxPromptTokens {
+		return "", fmt.Errorf("combined prompt likely exceeds maximum token limit of %d (estimated tokens: %d)", maxPromptTokens, estimatedTokens)
+	}
+
+	config := openai.DefaultConfig(x.apiKey)
+	config.BaseURL = "https://api.x.ai/v1"
+	client := openai.NewClientWithConfig(config)
+
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+
+	resp, err := client.CreateChatCompletion(
+		ctx,
+		openai.ChatCompletionRequest{
+			Model: modelName,
+			Messages: []openai.ChatCompletionMessage{
+				{
+					Role:    openai.ChatMessageRoleUser,
+					Content: combinedPrompt,
 				},
 			},
 			Temperature: float32(x.config.Temperature),

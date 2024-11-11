@@ -19,8 +19,8 @@ func createTestEnvConfig() *config.EnvConfig {
 			"anthropic": {
 				APIKey: "test-anthropic-key",
 				Models: []config.Model{
-					{Name: "claude-2", Type: "chat"},
-					{Name: "claude-instant", Type: "chat"},
+					{Name: "claude-3-5-sonnet-latest", Type: "chat"},
+					{Name: "claude-3-5-haiku-latest", Type: "chat"},
 				},
 			},
 		},
