@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	openai "github.com/sashabaranov/go-openai"
 )
@@ -14,6 +15,14 @@ type XAIProvider struct {
 	config  ModelConfig
 	verbose bool
 }
+
+// Default configuration values
+const (
+	defaultTimeout  = 30 * time.Second
+	maxPromptTokens = 4000
+	// Rough approximation of tokens to characters ratio (1 token ≈ 4 characters)
+	tokensToCharsRatio = 4
+)
 
 // NewXAIProvider creates a new X.AI provider instance
 func NewXAIProvider() *XAIProvider {
@@ -70,6 +79,11 @@ func (x *XAIProvider) Configure(apiKey string) error {
 	return nil
 }
 
+// estimateTokenCount provides a rough estimate of token count from character count
+func (x *XAIProvider) estimateTokenCount(text string) int {
+	return len(text) / tokensToCharsRatio
+}
+
 // SendPrompt sends a prompt to the specified model and returns the response
 func (x *XAIProvider) SendPrompt(modelName string, prompt string) (string, error) {
 	x.debugf("Preparing to send prompt to model: %s", modelName)
@@ -83,6 +97,12 @@ func (x *XAIProvider) SendPrompt(modelName string, prompt string) (string, error
 		return "", fmt.Errorf("invalid X.AI model: %s", modelName)
 	}
 
+	// Check estimated token count
+	estimatedTokens := x.estimateTokenCount(prompt)
+	if estimatedTokens > maxPromptTokens {
+		return "", fmt.Errorf("prompt likely exceeds maximum token limit of %d (estimated tokens: %d)", maxPromptTokens, estimatedTokens)
+	}
+
 	x.debugf("Model validation passed, preparing API call")
 	x.debugf("Using configuration: Temperature=%.2f, MaxTokens=%d, TopP=%.2f",
 		x.config.Temperature, x.config.MaxTokens, x.config.TopP)
@@ -91,8 +111,12 @@ func (x *XAIProvider) SendPrompt(modelName string, prompt string) (string, error
 	config.BaseURL = "https://api.x.ai/v1"
 	client := openai.NewClientWithConfig(config)
 
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+
 	resp, err := client.CreateChatCompletion(
-		context.Background(),
+		ctx,
 		openai.ChatCompletionRequest{
 			Model: modelName,
 			Messages: []openai.ChatCompletionMessage{
@@ -108,6 +132,9 @@ func (x *XAIProvider) SendPrompt(modelName string, prompt string) (string, error
 	)
 
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return "", fmt.Errorf("request timed out after %v", defaultTimeout)
+		}
 		return "", fmt.Errorf("X.AI API error: %v", err)
 	}
 
