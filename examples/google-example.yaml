@@ -2,8 +2,18 @@ step_one:
   input:
     - examples/example_filename.txt
   model:
-    - gemini-pro
+    - gemini-1.5-pro
   action:
     - look through these company names and identify the top five which seem most likely in the HVAC business
+  output:
+    - STDOUT
+
+step_two:
+  input:
+    - STDIN
+  model:
+    - gemini-1.5-flash
+  action:
+    - for each of these company names provide a snappy tagline that would make them stand out
   output:
     - STDOUT

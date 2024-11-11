@@ -44,19 +44,24 @@ func (g *GoogleProvider) SupportsModel(modelName string) bool {
 	g.debugf("Checking if model is supported: %s", modelName)
 	modelName = strings.ToLower(modelName)
 
-	// Support Gemini models
-	validPrefixes := []string{
-		"gemini-",
+	// Support all Google AI models
+	supportedModels := []string{
+		"gemini-1.5-flash",
+		"gemini-1.5-flash-8b",
+		"gemini-1.5-pro",
+		"gemini-1.0-pro",
+		"text-embedding-004",
+		"aqa",
 	}
 
-	for _, prefix := range validPrefixes {
-		if strings.HasPrefix(modelName, prefix) {
-			g.debugf("Model %s is supported (matches prefix %s)", modelName, prefix)
+	for _, model := range supportedModels {
+		if modelName == model {
+			g.debugf("Model %s is supported (exact match)", modelName)
 			return true
 		}
 	}
 
-	g.debugf("Model %s is not supported (no matching prefix)", modelName)
+	g.debugf("Model %s is not supported", modelName)
 	return false
 }
 
