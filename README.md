@@ -136,6 +136,20 @@ To remove a model from the configuration:
 comanda configure --remove <model-name>
 ```
 
+To update an API key for a provider (e.g., after key rotation):
+
+```bash
+comanda configure --update-key=<provider-name>
+```
+
+This will prompt you for the new API key and update it in the configuration. For example:
+
+```bash
+comanda configure --update-key=openai
+Enter new API key: sk-...
+Successfully updated API key for provider 'openai'
+```
+
 When configuring a model that already exists, you'll be prompted to update its mode. This allows you to change a model's capabilities without removing and re-adding it.
 
 Example configuration output:
