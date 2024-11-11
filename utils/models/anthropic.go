@@ -32,7 +32,7 @@ func (a *AnthropicProvider) debugf(format string, args ...interface{}) {
 
 // Name returns the provider name
 func (a *AnthropicProvider) Name() string {
-	return "Anthropic"
+	return "anthropic"
 }
 
 // SupportsModel checks if the given model name is supported by Anthropic

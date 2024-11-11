@@ -15,8 +15,8 @@ func init() {
 	// Override with test version
 	models.DetectProvider = func(modelName string) models.Provider {
 		providers := []models.Provider{
-			NewMockProvider("OpenAI"),
-			NewMockProvider("Anthropic"),
+			NewMockProvider("openai"),
+			NewMockProvider("anthropic"),
 		}
 
 		for _, provider := range providers {
@@ -53,14 +53,14 @@ func (m *MockProvider) Name() string {
 
 func (m *MockProvider) SupportsModel(modelName string) bool {
 	validModels := map[string][]string{
-		"OpenAI": {
+		"openai": {
 			"gpt-4",
 			"gpt-4o",
 			"gpt-4o-mini",
 			"o1-preview",
 			"o1-mini",
 		},
-		"Anthropic": {
+		"anthropic": {
 			"claude-2",
 			"claude-instant",
 		},

@@ -34,7 +34,7 @@ func NewOllamaProvider() *OllamaProvider {
 
 // Name returns the provider name
 func (o *OllamaProvider) Name() string {
-	return "Ollama"
+	return "ollama"
 }
 
 // debugf prints debug information if verbose mode is enabled
@@ -47,8 +47,30 @@ func (o *OllamaProvider) debugf(format string, args ...interface{}) {
 // SupportsModel checks if the given model name is supported by Ollama
 func (o *OllamaProvider) SupportsModel(modelName string) bool {
 	o.debugf("Checking if model is supported: %s", modelName)
-	// Ollama supports any model that has been pulled locally
-	// We'll return true here and let the actual API call validate the model
+
+	// Ollama typically supports models like:
+	// - llama2
+	// - codellama
+	// - mistral
+	// - neural-chat
+	// But should not support models with known prefixes from other providers
+	modelName = strings.ToLower(modelName)
+
+	// Don't support models from other providers
+	knownOtherPrefixes := []string{
+		"gpt-",    // OpenAI
+		"claude-", // Anthropic
+		"gemini-", // Google
+	}
+
+	for _, prefix := range knownOtherPrefixes {
+		if strings.HasPrefix(modelName, prefix) {
+			o.debugf("Model %s belongs to another provider (prefix: %s)", modelName, prefix)
+			return false
+		}
+	}
+
+	o.debugf("Model %s may be supported by Ollama", modelName)
 	return true
 }
 
