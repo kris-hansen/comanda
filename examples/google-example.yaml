@@ -1,0 +1,9 @@
+step_one:
+  input:
+    - examples/example_filename.txt
+  model:
+    - gemini-pro
+  action:
+    - look through these company names and identify the top five which seem most likely in the HVAC business
+  output:
+    - STDOUT

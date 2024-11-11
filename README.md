@@ -2,10 +2,12 @@
 
 COMandA is a command-line tool that enables the composition of Large Language Model (LLM) operations using a YAML-based Domain Specific Language (DSL). It simplifies the process of creating and managing chains of LLM activities that operate on files and information.
 
+COMandA allows you to use the best provider and model for each step and compose information pipelines that combine the stregths of different LLMs. It supports multiple LLM providers (OpenAI, Anthropic, Google, Ollama) and provides extensible DSL capabilities for defining complex information workflows.
+
 ## Features
 
 - 🔗 Chain multiple LLM operations together using simple YAML configuration
-- 🤖 Support for multiple LLM providers (OpenAI, Anthropic, Ollama)
+- 🤖 Support for multiple LLM providers (OpenAI, Anthropic, Google, Ollama)
 - 📄 File-based operations and transformations
 - 🖼️ Support for image analysis with vision models (screenshots and common image formats)
 - 🌐 Direct URL input support for web content analysis
@@ -92,8 +94,8 @@ comanda configure
 
 This will prompt you to:
 
-1. Select a provider (OpenAI/Anthropic/Ollama)
-2. Enter API key (for OpenAI/Anthropic)
+1. Select a provider (OpenAI/Anthropic/Google/Ollama)
+2. Enter API key (for OpenAI/Anthropic/Google)
 3. Specify model name
 4. Select model mode:
    - text: For text-only operations
@@ -104,23 +106,25 @@ You can view your current configuration using:
 
 ```bash
 comanda configure --list                       
-Configuration from .env:
+Server Configuration:
+Port: 8080
+Data Directory: data
+Authentication Enabled: true
 
 Configured Providers:
 
+anthropic:
+  - claude-3-5-latest (external)
+
+google:
+  - gemini-pro (external)
+
 ollama:
-  - codellama (local)
   - llama3.2 (local)
-  - phi3.5 (local)
 
 openai:
   - gpt-4o-mini (external)
-    Mode: multi
-
-anthropic:
-  - claude-3-opus (external)
-  - claude-3-sonnet (external)
-  - claude-3-5-haiku (external)
+  - gpt-4o (external)
 ```
 
 To remove a model from the configuration:

@@ -407,7 +407,7 @@ func (p *Processor) configureProviders() error {
 		p.debugf("Configuring provider %s", providerName)
 
 		// Handle Ollama provider separately since it doesn't need an API key
-		if providerName == "Ollama" {
+		if providerName == "ollama" {
 			if err := provider.Configure(""); err != nil {
 				return fmt.Errorf("failed to configure provider %s: %w", providerName, err)
 			}
@@ -419,10 +419,12 @@ func (p *Processor) configureProviders() error {
 		var err error
 
 		switch providerName {
-		case "Anthropic":
+		case "anthropic":
 			providerConfig, err = p.envConfig.GetProviderConfig("anthropic")
-		case "OpenAI":
+		case "openai":
 			providerConfig, err = p.envConfig.GetProviderConfig("openai")
+		case "google":
+			providerConfig, err = p.envConfig.GetProviderConfig("google")
 		default:
 			return fmt.Errorf("unknown provider: %s", providerName)
 		}

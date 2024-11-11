@@ -28,7 +28,7 @@ func NewOpenAIProvider() *OpenAIProvider {
 
 // Name returns the provider name
 func (o *OpenAIProvider) Name() string {
-	return "OpenAI"
+	return "openai"
 }
 
 // debugf prints debug information if verbose mode is enabled

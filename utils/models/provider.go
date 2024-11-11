@@ -24,10 +24,12 @@ var DetectProvider DetectProviderFunc = defaultDetectProvider
 
 // defaultDetectProvider is the default implementation of DetectProvider
 func defaultDetectProvider(modelName string) Provider {
+	// Order providers from most specific to most general
 	providers := []Provider{
-		NewAnthropicProvider(),
-		NewOpenAIProvider(),
-		NewOllamaProvider(),
+		NewGoogleProvider(),    // Handles gemini- models
+		NewAnthropicProvider(), // Handles claude- models
+		NewOpenAIProvider(),    // Handles gpt- models
+		NewOllamaProvider(),    // Handles remaining models
 	}
 
 	for _, provider := range providers {
