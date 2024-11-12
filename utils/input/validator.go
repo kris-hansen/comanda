@@ -17,6 +17,7 @@ var (
 		".yaml",
 		".html", // Added for URL content
 		".json", // Added for URL content
+		".csv",  // Added for CSV support
 	}
 
 	ImageExtensions = []string{

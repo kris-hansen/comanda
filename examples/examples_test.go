@@ -139,6 +139,23 @@ func validateInputPath(t *testing.T, filename, stepName, input string) {
 		return
 	}
 
+	// Handle filenames tag format
+	if strings.HasPrefix(input, "filenames:") {
+		files := strings.TrimPrefix(input, "filenames:")
+		// Split by comma and validate each file
+		for _, file := range strings.Split(files, ",") {
+			file = strings.TrimSpace(file)
+			if file != "" {
+				validateSingleInputPath(t, filename, stepName, file)
+			}
+		}
+		return
+	}
+
+	validateSingleInputPath(t, filename, stepName, input)
+}
+
+func validateSingleInputPath(t *testing.T, filename, stepName, input string) {
 	// For local files in examples directory, strip the prefix
 	localPath := input
 	if strings.HasPrefix(input, "examples/") {
@@ -155,6 +172,7 @@ func isSpecialInput(input string) bool {
 	specialInputs := []string{
 		"STDIN",
 		"screenshot",
+		"NA",
 	}
 
 	// Check if input is a special type
