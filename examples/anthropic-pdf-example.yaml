@@ -1,0 +1,13 @@
+# Example of using Claude 3.5 Sonnet with PDF support (beta)
+# Note: PDF support requires the model claude-3-5-sonnet-20241022 or newer
+# The Anthropic provider will automatically add the required beta header: anthropic-beta: pdfs-2024-09-25
+
+step_one:
+  input:
+    - examples/sample.pdf
+  model:
+    - claude-3-5-sonnet-20241022
+  action:
+    - provide a summary of the contents of this pdf file
+  output:
+    - STDOUT

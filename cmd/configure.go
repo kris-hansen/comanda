@@ -283,6 +283,42 @@ var configureCmd = &cobra.Command{
 				break
 			}
 
+			// Prompt for model modes
+			fmt.Println("\nAvailable modes:")
+			fmt.Println("1. text - Text processing mode")
+			fmt.Println("2. vision - Image and vision processing mode")
+			fmt.Println("3. multi - Multi-modal processing")
+			fmt.Println("4. file - File processing mode")
+			fmt.Print("\nEnter mode numbers (comma-separated, e.g., 1,2): ")
+			modesInput, _ := reader.ReadString('\n')
+			modesInput = strings.TrimSpace(modesInput)
+
+			var modes []config.ModelMode
+			if modesInput != "" {
+				modeNumbers := strings.Split(modesInput, ",")
+				for _, num := range modeNumbers {
+					num = strings.TrimSpace(num)
+					switch num {
+					case "1":
+						modes = append(modes, config.TextMode)
+					case "2":
+						modes = append(modes, config.VisionMode)
+					case "3":
+						modes = append(modes, config.MultiMode)
+					case "4":
+						modes = append(modes, config.FileMode)
+					default:
+						fmt.Printf("Warning: Invalid mode number '%s' ignored\n", num)
+					}
+				}
+			}
+
+			if len(modes) == 0 {
+				// Default to text mode if no modes selected
+				modes = append(modes, config.TextMode)
+				fmt.Println("No valid modes selected. Defaulting to text mode.")
+			}
+
 			// Add new model to provider
 			modelType := "external"
 			if provider == "ollama" {
@@ -290,8 +326,9 @@ var configureCmd = &cobra.Command{
 			}
 
 			newModel := config.Model{
-				Name: modelName,
-				Type: modelType,
+				Name:  modelName,
+				Type:  modelType,
+				Modes: modes,
 			}
 
 			if err := envConfig.AddModelToProvider(provider, newModel); err != nil {
@@ -363,6 +400,15 @@ func listConfiguration() {
 		}
 		for _, model := range provider.Models {
 			fmt.Printf("  - %s (%s)\n", model.Name, model.Type)
+			if len(model.Modes) > 0 {
+				modeStr := make([]string, len(model.Modes))
+				for i, mode := range model.Modes {
+					modeStr[i] = string(mode)
+				}
+				fmt.Printf("    Modes: %s\n", strings.Join(modeStr, ", "))
+			} else {
+				fmt.Printf("    Modes: none\n")
+			}
 		}
 	}
 }

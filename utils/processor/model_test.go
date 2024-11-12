@@ -10,43 +10,50 @@ func TestValidateModel(t *testing.T) {
 	tests := []struct {
 		name      string
 		models    []string
+		inputs    []string
 		expectErr bool
 	}{
 		{
 			name:      "valid OpenAI text model",
 			models:    []string{"o1-preview"},
+			inputs:    []string{},
 			expectErr: false,
 		},
 		{
 			name:      "valid OpenAI vision model",
 			models:    []string{"gpt-4o"},
+			inputs:    []string{},
 			expectErr: false,
 		},
 		{
 			name:      "valid Anthropic model",
-			models:    []string{"claude-2"},
+			models:    []string{"claude-3-5-sonnet-latest"},
+			inputs:    []string{},
 			expectErr: false,
 		},
 		{
 			name:      "multiple valid models",
-			models:    []string{"o1-preview", "claude-2", "gpt-4o"},
+			models:    []string{"o1-preview", "claude-3-5-sonnet-latest", "gpt-4o"},
+			inputs:    []string{},
 			expectErr: false,
 		},
 		{
 			name:      "invalid model",
 			models:    []string{"invalid-model"},
+			inputs:    []string{},
 			expectErr: true,
 		},
 		{
 			name:      "empty model list",
 			models:    []string{},
+			inputs:    []string{},
 			expectErr: true, // Changed to true since models are required
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := processor.validateModel(tt.models)
+			err := processor.validateModel(tt.models, tt.inputs)
 			if (err != nil) != tt.expectErr {
 				t.Errorf("validateModel() error = %v, expectErr %v", err, tt.expectErr)
 			}
@@ -83,12 +90,12 @@ func TestConfigureProviders(t *testing.T) {
 		},
 		{
 			name:      "configure Anthropic provider",
-			models:    []string{"claude-2"},
+			models:    []string{"claude-3-5-sonnet-latest"},
 			expectErr: false,
 		},
 		{
 			name:      "configure multiple providers",
-			models:    []string{"o1-preview", "claude-2", "gpt-4o"},
+			models:    []string{"o1-preview", "claude-3-5-sonnet-latest", "gpt-4o"},
 			expectErr: false,
 		},
 	}
@@ -97,8 +104,8 @@ func TestConfigureProviders(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), false)
 
-			// First validate the models
-			err := processor.validateModel(tt.models)
+			// First validate the models with empty inputs list
+			err := processor.validateModel(tt.models, []string{})
 			if err != nil {
 				t.Fatalf("Failed to validate models: %v", err)
 			}

@@ -155,33 +155,33 @@ When configuring a model that already exists, you'll be prompted to update its m
 Example configuration output:
 
 ``` yaml
-providers:
-  openai:
-    api_key: sk-...
-    models:
-      - name: gpt-4
-        type: external
-        mode: text
-      - name: gpt-4o
-        type: external
-        mode: vision
-  anthropic:
-    api_key: sk-...
-    models:
-      - name: claude-2
-        type: external
-        mode: text
-  ollama:
-    models:
-      - name: llama2
-        type: local
-        mode: text
-  xai:
-    api_key: sk-...
-    models:
-      - name: grok-beta
-        type: external
-        mode: text
+ollama:
+  - llama3.2 (local)
+    Modes: text
+
+openai:
+  - gpt-4o-mini (external)
+    Modes: text
+  - gpt-4o (external)
+    Modes: text, vision
+
+xai:
+  - grok-beta (external)
+    Modes: text
+
+anthropic:
+  - claude-3-5-sonnet-latest (external)
+    Modes: text, file
+  - claude-3-5-haiku-latest (external)
+    Modes: text, file
+  - claude-3-5-sonnet-20241022 (external)
+    Modes: text, file
+
+google:
+  - gemini-pro (external)
+    Modes: text
+  - gemini-1.5-pro (external)
+    Modes: text, file, vision
 ```
 
 ### Server Configuration
