@@ -175,6 +175,7 @@ func (p *Processor) Process() error {
 	// First validate all steps before processing
 	for stepName, stepConfig := range *p.config {
 		if err := p.validateStepConfig(stepName, stepConfig); err != nil {
+			fmt.Printf("Error: %v\n", err)
 			return err
 		}
 	}
@@ -194,19 +195,25 @@ func (p *Processor) Process() error {
 		// Handle STDIN specially
 		if len(inputs) == 1 && inputs[0] == "STDIN" {
 			if p.lastOutput == "" {
-				return fmt.Errorf("STDIN specified but no previous output available")
+				err := fmt.Errorf("STDIN specified but no previous output available")
+				fmt.Printf("Error in step '%s': %v\n", stepName, err)
+				return err
 			}
 			// Create a temporary file with .txt extension for the STDIN content
 			tmpFile, err := os.CreateTemp("", "comanda-stdin-*.txt")
 			if err != nil {
-				return fmt.Errorf("failed to create temp file for STDIN: %w", err)
+				err = fmt.Errorf("failed to create temp file for STDIN: %w", err)
+				fmt.Printf("Error in step '%s': %v\n", stepName, err)
+				return err
 			}
 			tmpPath := tmpFile.Name()
 			defer os.Remove(tmpPath)
 
 			if _, err := tmpFile.WriteString(p.lastOutput); err != nil {
 				tmpFile.Close()
-				return fmt.Errorf("failed to write to temp file: %w", err)
+				err = fmt.Errorf("failed to write to temp file: %w", err)
+				fmt.Printf("Error in step '%s': %v\n", stepName, err)
+				return err
 			}
 			tmpFile.Close()
 
@@ -218,24 +225,32 @@ func (p *Processor) Process() error {
 		if len(inputs) != 1 || inputs[0] != "NA" {
 			p.debugf("Processing inputs for step %s...", stepName)
 			if err := p.processInputs(inputs); err != nil {
-				return fmt.Errorf("input processing error in step %s: %w", stepName, err)
+				err = fmt.Errorf("input processing error in step %s: %w", stepName, err)
+				fmt.Printf("Error: %v\n", err)
+				return err
 			}
 		}
 
 		// Validate model for this step
 		if err := p.validateModel(modelNames, inputs); err != nil {
-			return fmt.Errorf("model validation error in step %s: %w", stepName, err)
+			err = fmt.Errorf("model validation error in step %s: %w", stepName, err)
+			fmt.Printf("Error: %v\n", err)
+			return err
 		}
 
 		// Configure providers if needed
 		if err := p.configureProviders(); err != nil {
-			return fmt.Errorf("provider configuration error in step %s: %w", stepName, err)
+			err = fmt.Errorf("provider configuration error in step %s: %w", stepName, err)
+			fmt.Printf("Error: %v\n", err)
+			return err
 		}
 
 		// Process actions for this step
 		response, err := p.processActions(modelNames, actions)
 		if err != nil {
-			return fmt.Errorf("action processing error in step %s: %w", stepName, err)
+			err = fmt.Errorf("action processing error in step %s: %w", stepName, err)
+			fmt.Printf("Error: %v\n", err)
+			return err
 		}
 
 		// Store the response for potential use as STDIN in next step
@@ -244,7 +259,9 @@ func (p *Processor) Process() error {
 		// Handle output for this step
 		outputs := p.NormalizeStringSlice(stepConfig.Output)
 		if err := p.handleOutput(modelNames[0], response, outputs); err != nil {
-			return fmt.Errorf("output handling error in step %s: %w", stepName, err)
+			err = fmt.Errorf("output handling error in step %s: %w", stepName, err)
+			fmt.Printf("Error: %v\n", err)
+			return err
 		}
 
 		// Clear the handler's contents for the next step
