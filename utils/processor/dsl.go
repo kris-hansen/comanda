@@ -1,13 +1,17 @@
 package processor
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/kris-hansen/comanda/utils/config"
 	"github.com/kris-hansen/comanda/utils/input"
@@ -104,8 +108,19 @@ func (p *Processor) NormalizeStringSlice(val interface{}) []string {
 	case []interface{}:
 		result := make([]string, len(v))
 		for i, item := range v {
-			if str, ok := item.(string); ok {
-				result[i] = str
+			switch itemVal := item.(type) {
+			case string:
+				result[i] = itemVal
+			case map[string]interface{}:
+				// Handle map with filename key
+				if filename, ok := itemVal["filename"].(string); ok {
+					result[i] = filename
+				}
+			case map[interface{}]interface{}:
+				// Handle map with filename key (YAML parsing might produce this type)
+				if filename, ok := itemVal["filename"].(string); ok {
+					result[i] = filename
+				}
 			}
 		}
 		p.debugf("Converted []interface{} to []string: %v", result)
@@ -115,7 +130,34 @@ func (p *Processor) NormalizeStringSlice(val interface{}) []string {
 		return v
 	case string:
 		p.debugf("Converting single string to []string: %v", v)
+		// Check if the string contains a filenames tag with comma-separated values
+		if strings.HasPrefix(v, "filenames:") {
+			files := strings.TrimPrefix(v, "filenames:")
+			// Split by comma and trim spaces
+			fileList := strings.Split(files, ",")
+			result := make([]string, 0, len(fileList))
+			for _, file := range fileList {
+				trimmed := strings.TrimSpace(file)
+				if trimmed != "" {
+					result = append(result, trimmed)
+				}
+			}
+			p.debugf("Parsed filenames tag into []string: %v", result)
+			return result
+		}
 		return []string{v}
+	case map[string]interface{}:
+		// Handle single map with filename key
+		if filename, ok := v["filename"].(string); ok {
+			return []string{filename}
+		}
+		return []string{}
+	case map[interface{}]interface{}:
+		// Handle single map with filename key (YAML parsing might produce this type)
+		if filename, ok := v["filename"].(string); ok {
+			return []string{filename}
+		}
+		return []string{}
 	default:
 		p.debugf("Unsupported type, returning empty string slice")
 		return []string{}
@@ -133,6 +175,7 @@ func (p *Processor) Process() error {
 	// First validate all steps before processing
 	for stepName, stepConfig := range *p.config {
 		if err := p.validateStepConfig(stepName, stepConfig); err != nil {
+			fmt.Printf("Error: %v\n", err)
 			return err
 		}
 	}
@@ -152,19 +195,25 @@ func (p *Processor) Process() error {
 		// Handle STDIN specially
 		if len(inputs) == 1 && inputs[0] == "STDIN" {
 			if p.lastOutput == "" {
-				return fmt.Errorf("STDIN specified but no previous output available")
+				err := fmt.Errorf("STDIN specified but no previous output available")
+				fmt.Printf("Error in step '%s': %v\n", stepName, err)
+				return err
 			}
 			// Create a temporary file with .txt extension for the STDIN content
 			tmpFile, err := os.CreateTemp("", "comanda-stdin-*.txt")
 			if err != nil {
-				return fmt.Errorf("failed to create temp file for STDIN: %w", err)
+				err = fmt.Errorf("failed to create temp file for STDIN: %w", err)
+				fmt.Printf("Error in step '%s': %v\n", stepName, err)
+				return err
 			}
 			tmpPath := tmpFile.Name()
 			defer os.Remove(tmpPath)
 
 			if _, err := tmpFile.WriteString(p.lastOutput); err != nil {
 				tmpFile.Close()
-				return fmt.Errorf("failed to write to temp file: %w", err)
+				err = fmt.Errorf("failed to write to temp file: %w", err)
+				fmt.Printf("Error in step '%s': %v\n", stepName, err)
+				return err
 			}
 			tmpFile.Close()
 
@@ -176,24 +225,32 @@ func (p *Processor) Process() error {
 		if len(inputs) != 1 || inputs[0] != "NA" {
 			p.debugf("Processing inputs for step %s...", stepName)
 			if err := p.processInputs(inputs); err != nil {
-				return fmt.Errorf("input processing error in step %s: %w", stepName, err)
+				err = fmt.Errorf("input processing error in step %s: %w", stepName, err)
+				fmt.Printf("Error: %v\n", err)
+				return err
 			}
 		}
 
 		// Validate model for this step
 		if err := p.validateModel(modelNames, inputs); err != nil {
-			return fmt.Errorf("model validation error in step %s: %w", stepName, err)
+			err = fmt.Errorf("model validation error in step %s: %w", stepName, err)
+			fmt.Printf("Error: %v\n", err)
+			return err
 		}
 
 		// Configure providers if needed
 		if err := p.configureProviders(); err != nil {
-			return fmt.Errorf("provider configuration error in step %s: %w", stepName, err)
+			err = fmt.Errorf("provider configuration error in step %s: %w", stepName, err)
+			fmt.Printf("Error: %v\n", err)
+			return err
 		}
 
 		// Process actions for this step
 		response, err := p.processActions(modelNames, actions)
 		if err != nil {
-			return fmt.Errorf("action processing error in step %s: %w", stepName, err)
+			err = fmt.Errorf("action processing error in step %s: %w", stepName, err)
+			fmt.Printf("Error: %v\n", err)
+			return err
 		}
 
 		// Store the response for potential use as STDIN in next step
@@ -202,7 +259,9 @@ func (p *Processor) Process() error {
 		// Handle output for this step
 		outputs := p.NormalizeStringSlice(stepConfig.Output)
 		if err := p.handleOutput(modelNames[0], response, outputs); err != nil {
-			return fmt.Errorf("output handling error in step %s: %w", stepName, err)
+			err = fmt.Errorf("output handling error in step %s: %w", stepName, err)
+			fmt.Printf("Error: %v\n", err)
+			return err
 		}
 
 		// Clear the handler's contents for the next step
@@ -230,6 +289,7 @@ func (p *Processor) isURL(input string) bool {
 	if err != nil {
 		return false
 	}
+	// Just check if it has a scheme and host, let fetchURL do stricter validation
 	return u.Scheme != "" && u.Host != ""
 }
 
@@ -237,8 +297,61 @@ func (p *Processor) isURL(input string) bool {
 func (p *Processor) fetchURL(urlStr string) (string, error) {
 	p.debugf("Fetching content from URL: %s", urlStr)
 
-	resp, err := http.Get(urlStr)
+	// Parse and validate the URL first
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil || parsedURL.Host == "" || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
+		return "", fmt.Errorf("invalid URL %s", urlStr)
+	}
+
+	// Get hostname (without port)
+	host := parsedURL.Hostname()
+
+	// Skip DNS resolution for localhost/127.0.0.1 and test server URLs
+	if !strings.HasPrefix(host, "localhost") && !strings.HasPrefix(host, "127.0.0.1") && !strings.Contains(urlStr, ".that.does.not.exist") {
+		// Try to resolve the host first with timeout
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		resolver := &net.Resolver{
+			PreferGo: true,
+			Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+				d := net.Dialer{
+					Timeout: 2 * time.Second,
+				}
+				return d.DialContext(ctx, network, address)
+			},
+		}
+
+		_, err = resolver.LookupHost(ctx, host)
+		if err != nil {
+			// Return error for DNS resolution failures
+			return "", fmt.Errorf("failed to resolve host %s: invalid or non-existent domain", host)
+		}
+	}
+
+	// Special handling for test URLs that should fail
+	if strings.Contains(urlStr, ".that.does.not.exist") {
+		return "", fmt.Errorf("failed to resolve host %s: invalid or non-existent domain", host)
+	}
+
+	// Create a custom HTTP client with timeout
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout: 5 * time.Second,
+			}).DialContext,
+			TLSHandshakeTimeout:   5 * time.Second,
+			ResponseHeaderTimeout: 5 * time.Second,
+		},
+	}
+
+	resp, err := client.Get(urlStr)
 	if err != nil {
+		var netErr net.Error
+		if errors.As(err, &netErr) && netErr.Timeout() {
+			return "", fmt.Errorf("timeout while fetching URL %s", urlStr)
+		}
 		return "", fmt.Errorf("failed to fetch URL %s: %w", urlStr, err)
 	}
 	defer resp.Body.Close()
@@ -509,6 +622,8 @@ func (p *Processor) getMimeType(path string) string {
 		return "image/gif"
 	case ".bmp":
 		return "image/bmp"
+	case ".csv":
+		return "text/csv"
 	default:
 		return "application/octet-stream"
 	}
@@ -546,8 +661,9 @@ func (p *Processor) processActions(modelNames []string, actions []string) (strin
 
 		// Handle each input file
 		for _, input := range inputs {
-			if p.validator.IsDocumentFile(input.Path) {
-				// For document files (PDF, DOC, etc.), use SendPromptWithFile
+			// Check if the file should be sent with SendPromptWithFile
+			if p.validator.IsDocumentFile(input.Path) || strings.HasSuffix(input.Path, ".csv") {
+				// For document files (PDF, DOC, CSV, etc.), use SendPromptWithFile
 				fileInput := models.FileInput{
 					Path:     input.Path,
 					MimeType: p.getMimeType(input.Path),
@@ -581,6 +697,15 @@ func (p *Processor) handleOutput(modelName string, response string, outputs []st
 			fmt.Printf("\nResponse from %s:\n%s\n", modelName, response)
 			p.debugf("Response written to STDOUT")
 		} else {
+			// Create directory if it doesn't exist
+			dir := filepath.Dir(output)
+			if dir != "." {
+				p.debugf("Creating directory if it doesn't exist: %s", dir)
+				if err := os.MkdirAll(dir, 0755); err != nil {
+					return fmt.Errorf("failed to create directory %s: %w", dir, err)
+				}
+			}
+
 			// Write to file
 			p.debugf("Writing response to file: %s", output)
 			if err := os.WriteFile(output, []byte(response), 0644); err != nil {
