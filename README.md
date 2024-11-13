@@ -11,6 +11,7 @@ COMandA allows you to use the best provider and model for each step and compose 
 - 📄 File-based operations and transformations
 - 🖼️ Support for image analysis with vision models (screenshots and common image formats)
 - 🌐 Direct URL input support for web content analysis
+- 🕷️ Advanced web scraping capabilities with configurable options
 - 🛠️ Extensible DSL for defining complex workflows
 - ⚡ Efficient processing of LLM chains
 - 🔒 HTTP server mode with bearer token authentication
@@ -506,20 +507,29 @@ comanda process examples/ollama-example.yaml
 #### 5. URL Input Example (url-example.yaml)
 
 ```yaml
-  analyze_webpage:
+scrape_webpage:
     input: https://example.com
-    model: gpt-4
-    action: Analyze the webpage content and provide a summary
+    model: gpt-4o-mini
+    action: Analyze the scraped content and provide insights
     output: STDOUT
-
-  analyze_api:
-    input: https://api.example.com/data.json
-    model: gpt-4
-    action: Extract key insights from the API response
-    output: analysis.txt
+    scrape_config:
+        allowed_domains:
+            - example.com
+        headers:
+            Accept: text/html,application/xhtml+xml
+            Accept-Language: en-US,en;q=0.9
+        extract:
+            - title     # Extract page title
+            - text      # Extract text content from paragraphs
+            - links     # Extract URLs from anchor tags
 ```
 
-This example shows how to analyze web content directly from URLs. The processor automatically handles different content types and stores them appropriately. To run:
+This example shows how to analyze web content with advanced scraping capabilities. The `scrape_config` tag allows you to configure:
+- Domain restrictions with `allowed_domains`
+- Custom HTTP headers
+- Specific elements to extract (title, text content, links)
+
+To run:
 
 ```bash
 comanda process examples/url-example.yaml
@@ -564,6 +574,7 @@ comanda/
 │   ├── config/            # Configuration handling
 │   ├── input/             # Input validation and processing
 │   ├── models/            # LLM provider implementations
+│   ├── scraper/           # Web scraping functionality
 │   └── processor/         # DSL processing logic
 ├── go.mod
 ├── go.sum
@@ -626,3 +637,4 @@ If you use COMandA in your research or academic work, please cite it as follows:
 - OpenAI and Anthropic for their LLM APIs
 - The Ollama project for local LLM support
 - The Go community for excellent libraries and tools
+- The Colly framework for web scraping capabilities
