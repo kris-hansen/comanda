@@ -24,13 +24,24 @@ const (
 	DirectoryInput
 	ScreenshotInput
 	ImageInput
+	WebScrapeInput // Changed from ScrapeInput to WebScrapeInput to avoid naming conflict
 )
+
+// ScrapeConfig represents the configuration for web scraping
+type ScrapeConfig struct {
+	URL            string            `yaml:"url"`
+	AllowedDomains []string          `yaml:"allowed_domains"`
+	Headers        map[string]string `yaml:"headers"`
+	Extract        []string          `yaml:"extract"`
+}
 
 // Input represents a file or directory to be processed
 type Input struct {
-	Path     string
-	Type     InputType
-	Contents []byte
+	Path         string
+	Type         InputType
+	Contents     []byte
+	Metadata     map[string]interface{} // For additional data like scraping config
+	ScrapeConfig *ScrapeConfig          // Specific configuration for web scraping
 }
 
 // Handler processes input files and directories
@@ -77,6 +88,31 @@ func (h *Handler) ProcessPath(path string) error {
 		return h.processImage(path)
 	}
 	return h.processFile(path)
+}
+
+// ProcessScrape handles web scraping input
+func (h *Handler) ProcessScrape(url string, config map[string]interface{}) error {
+	input := &Input{
+		Path:     url,
+		Type:     WebScrapeInput,
+		Metadata: config,
+	}
+
+	if scrapeConfig, ok := config["scrape_config"].(map[string]interface{}); ok {
+		input.ScrapeConfig = &ScrapeConfig{}
+		if domains, ok := scrapeConfig["allowed_domains"].([]string); ok {
+			input.ScrapeConfig.AllowedDomains = domains
+		}
+		if headers, ok := scrapeConfig["headers"].(map[string]string); ok {
+			input.ScrapeConfig.Headers = headers
+		}
+		if extract, ok := scrapeConfig["extract"].([]string); ok {
+			input.ScrapeConfig.Extract = extract
+		}
+	}
+
+	h.inputs = append(h.inputs, input)
+	return nil
 }
 
 // processFile handles single file input
