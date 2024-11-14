@@ -108,7 +108,7 @@ func TestValidateStepConfig(t *testing.T) {
 			stepName: "test_step",
 			config: StepConfig{
 				Input:  "test.txt",
-				Model:  "gpt-4",
+				Model:  "gpt-4o-mini",
 				Action: "analyze",
 				Output: "STDOUT",
 			},
@@ -118,7 +118,7 @@ func TestValidateStepConfig(t *testing.T) {
 			name:     "missing input tag",
 			stepName: "test_step",
 			config: StepConfig{
-				Model:  "gpt-4",
+				Model:  "gpt-4o-mini",
 				Action: "analyze",
 				Output: "STDOUT",
 			},
@@ -139,7 +139,7 @@ func TestValidateStepConfig(t *testing.T) {
 			stepName: "test_step",
 			config: StepConfig{
 				Input:  "test.txt",
-				Model:  "gpt-4",
+				Model:  "gpt-4o-mini",
 				Output: "STDOUT",
 			},
 			expectedError: "action is required",
@@ -149,7 +149,7 @@ func TestValidateStepConfig(t *testing.T) {
 			stepName: "test_step",
 			config: StepConfig{
 				Input:  "test.txt",
-				Model:  "gpt-4",
+				Model:  "gpt-4o-mini",
 				Action: "analyze",
 			},
 			expectedError: "output is required",
@@ -159,7 +159,7 @@ func TestValidateStepConfig(t *testing.T) {
 			stepName: "test_step",
 			config: StepConfig{
 				Input:  "",
-				Model:  "gpt-4",
+				Model:  "gpt-4o-mini",
 				Action: "analyze",
 				Output: "STDOUT",
 			},
@@ -170,7 +170,7 @@ func TestValidateStepConfig(t *testing.T) {
 			stepName: "test_step",
 			config: StepConfig{
 				Input:  "NA",
-				Model:  "gpt-4",
+				Model:  "gpt-4o-mini",
 				Action: "analyze",
 				Output: "STDOUT",
 			},
@@ -210,9 +210,14 @@ func TestProcess(t *testing.T) {
 		{
 			name: "single step with missing model",
 			config: DSLConfig{
-				"step_one": StepConfig{
-					Action: []string{"test action"},
-					Output: []string{"STDOUT"},
+				Steps: []Step{
+					{
+						Name: "step_one",
+						Config: StepConfig{
+							Action: []string{"test action"},
+							Output: []string{"STDOUT"},
+						},
+					},
 				},
 			},
 			expectError: true,
@@ -220,14 +225,62 @@ func TestProcess(t *testing.T) {
 		{
 			name: "valid single step",
 			config: DSLConfig{
-				"step_one": StepConfig{
-					Input:  []string{"NA"},
-					Model:  []string{"gpt-4"},
-					Action: []string{"test action"},
-					Output: []string{"STDOUT"},
+				Steps: []Step{
+					{
+						Name: "step_one",
+						Config: StepConfig{
+							Input:  []string{"NA"},
+							Model:  []string{"gpt-4o-mini"},
+							Action: []string{"test action"},
+							Output: []string{"STDOUT"},
+						},
+					},
 				},
 			},
 			expectError: false,
+		},
+		{
+			name: "input file exists as output in later step",
+			config: DSLConfig{
+				Steps: []Step{
+					{
+						Name: "step_one",
+						Config: StepConfig{
+							Input:  []string{"future_output.txt"},
+							Model:  []string{"gpt-4o-mini"},
+							Action: []string{"test action"},
+							Output: []string{"STDOUT"},
+						},
+					},
+					{
+						Name: "step_two",
+						Config: StepConfig{
+							Input:  []string{"NA"},
+							Model:  []string{"gpt-4o-mini"},
+							Action: []string{"generate"},
+							Output: []string{"future_output.txt"},
+						},
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "non-existent input file with no matching output",
+			config: DSLConfig{
+				Steps: []Step{
+					{
+						Name: "step_one",
+						Config: StepConfig{
+							Input:  []string{"nonexistent.txt"},
+							Model:  []string{"gpt-4o-mini"},
+							Action: []string{"test action"},
+							Output: []string{"STDOUT"},
+						},
+					},
+				},
+			},
+			expectError: true,
 		},
 	}
 

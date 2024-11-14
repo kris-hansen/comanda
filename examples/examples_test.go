@@ -56,6 +56,15 @@ func validateYAMLFile(t *testing.T, filename string) {
 		return
 	}
 
+	// First pass: collect all output files
+	outputFiles := make(map[string]bool)
+	for i := 0; i < len(doc.Content); i += 2 {
+		value := doc.Content[i+1]
+		if value.Kind == yaml.MappingNode {
+			collectOutputFiles(value, outputFiles)
+		}
+	}
+
 	// Validate each step in the document
 	foundSteps := false
 	for i := 0; i < len(doc.Content); i += 2 {
@@ -65,7 +74,7 @@ func validateYAMLFile(t *testing.T, filename string) {
 		// Consider any mapping with the required fields as a step
 		if value.Kind == yaml.MappingNode {
 			foundSteps = true
-			validateStep(t, filename, key.Value, value)
+			validateStep(t, filename, key.Value, value, outputFiles)
 		}
 	}
 
@@ -74,7 +83,24 @@ func validateYAMLFile(t *testing.T, filename string) {
 	}
 }
 
-func validateStep(t *testing.T, filename, stepName string, stepNode *yaml.Node) {
+func collectOutputFiles(stepNode *yaml.Node, outputFiles map[string]bool) {
+	for i := 0; i < len(stepNode.Content); i += 2 {
+		key := stepNode.Content[i].Value
+		value := stepNode.Content[i+1]
+
+		if key == "output" {
+			if value.Kind == yaml.ScalarNode {
+				outputFiles[value.Value] = true
+			} else if value.Kind == yaml.SequenceNode {
+				for _, item := range value.Content {
+					outputFiles[item.Value] = true
+				}
+			}
+		}
+	}
+}
+
+func validateStep(t *testing.T, filename, stepName string, stepNode *yaml.Node, outputFiles map[string]bool) {
 	if stepNode.Kind != yaml.MappingNode {
 		t.Errorf("Step %s in %s: expected mapping node", stepName, filename)
 		return
@@ -115,10 +141,10 @@ func validateStep(t *testing.T, filename, stepName string, stepNode *yaml.Node) 
 			// Validate input files exist if they're local files
 			if key == "input" {
 				if value.Kind == yaml.ScalarNode {
-					validateInputPath(t, filename, stepName, value.Value)
+					validateInputPath(t, filename, stepName, value.Value, outputFiles)
 				} else {
 					for _, item := range value.Content {
-						validateInputPath(t, filename, stepName, item.Value)
+						validateInputPath(t, filename, stepName, item.Value, outputFiles)
 					}
 				}
 			}
@@ -133,7 +159,7 @@ func validateStep(t *testing.T, filename, stepName string, stepNode *yaml.Node) 
 	}
 }
 
-func validateInputPath(t *testing.T, filename, stepName, input string) {
+func validateInputPath(t *testing.T, filename, stepName, input string, outputFiles map[string]bool) {
 	// Skip special input types
 	if isSpecialInput(input) {
 		return
@@ -146,23 +172,24 @@ func validateInputPath(t *testing.T, filename, stepName, input string) {
 		for _, file := range strings.Split(files, ",") {
 			file = strings.TrimSpace(file)
 			if file != "" {
-				validateSingleInputPath(t, filename, stepName, file)
+				validateSingleInputPath(t, filename, stepName, file, outputFiles)
 			}
 		}
 		return
 	}
 
-	validateSingleInputPath(t, filename, stepName, input)
+	validateSingleInputPath(t, filename, stepName, input, outputFiles)
 }
 
-func validateSingleInputPath(t *testing.T, filename, stepName, input string) {
+func validateSingleInputPath(t *testing.T, filename, stepName, input string, outputFiles map[string]bool) {
 	// For local files in examples directory, strip the prefix
 	localPath := input
 	if strings.HasPrefix(input, "examples/") {
 		localPath = strings.TrimPrefix(input, "examples/")
 	}
 
-	if _, err := os.Stat(localPath); err != nil {
+	// Check if file exists on disk or is an output of another step
+	if _, err := os.Stat(localPath); err != nil && !outputFiles[input] {
 		t.Errorf("Step %s in %s references non-existent input file: %s", stepName, filename, input)
 	}
 }

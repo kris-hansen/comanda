@@ -9,8 +9,16 @@ type StepConfig struct {
 	NextAction interface{} `yaml:"next-action"` // Can be string or []string
 }
 
+// Step represents a named step in the DSL
+type Step struct {
+	Name   string
+	Config StepConfig
+}
+
 // DSLConfig represents the structure of the DSL configuration
-type DSLConfig map[string]StepConfig
+type DSLConfig struct {
+	Steps []Step
+}
 
 // NormalizeOptions represents options for string slice normalization
 type NormalizeOptions struct {
