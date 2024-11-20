@@ -190,6 +190,19 @@ func (p *Processor) isScrapeInput(url string) bool {
 	return false
 }
 
+// isOutputInOtherSteps checks if a file is an output in any of the steps
+func (p *Processor) isOutputInOtherSteps(path string) bool {
+	for _, step := range p.config.Steps {
+		outputs := p.NormalizeStringSlice(step.Config.Output)
+		for _, output := range outputs {
+			if output != "STDOUT" && output == path {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // processRegularInput handles regular file and directory inputs
 func (p *Processor) processRegularInput(inputPath string) error {
 	// Check if the path exists
@@ -211,7 +224,14 @@ func (p *Processor) processRegularInput(inputPath string) error {
 				}
 				return nil
 			}
-			return fmt.Errorf("path does not exist: %s", inputPath)
+
+			// Check if the file is an output in any other step
+			if p.isOutputInOtherSteps(inputPath) {
+				p.debugf("File %s does not exist yet but will be created as output in another step", inputPath)
+				return nil
+			}
+
+			return fmt.Errorf("path does not exist and is not an output of any step: %s", inputPath)
 		}
 		return fmt.Errorf("error accessing path %s: %w", inputPath, err)
 	}

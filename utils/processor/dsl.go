@@ -80,24 +80,25 @@ func (p *Processor) validateStepConfig(stepName string, config StepConfig) error
 func (p *Processor) Process() error {
 	p.debugf("Starting DSL processing")
 
-	if len(*p.config) == 0 {
+	if len(p.config.Steps) == 0 {
 		return fmt.Errorf("no steps defined in DSL configuration")
 	}
 
 	// First validate all steps before processing
-	for stepName, stepConfig := range *p.config {
-		if err := p.validateStepConfig(stepName, stepConfig); err != nil {
+	for _, step := range p.config.Steps {
+		if err := p.validateStepConfig(step.Name, step.Config); err != nil {
 			fmt.Printf("Error: %v\n", err)
 			return err
 		}
 	}
 
-	for stepName, stepConfig := range *p.config {
-		p.debugf("Processing step: %s", stepName)
+	// Process steps in order
+	for _, step := range p.config.Steps {
+		p.debugf("Processing step: %s", step.Name)
 
 		// Handle input based on type
 		var inputs []string
-		switch v := stepConfig.Input.(type) {
+		switch v := step.Config.Input.(type) {
 		case map[string]interface{}:
 			// Handle scraping configuration
 			if url, ok := v["url"].(string); ok {
@@ -106,14 +107,14 @@ func (p *Processor) Process() error {
 				}
 				inputs = []string{url}
 			} else {
-				inputs = p.NormalizeStringSlice(stepConfig.Input)
+				inputs = p.NormalizeStringSlice(step.Config.Input)
 			}
 		default:
-			inputs = p.NormalizeStringSlice(stepConfig.Input)
+			inputs = p.NormalizeStringSlice(step.Config.Input)
 		}
 
-		modelNames := p.NormalizeStringSlice(stepConfig.Model)
-		actions := p.NormalizeStringSlice(stepConfig.Action)
+		modelNames := p.NormalizeStringSlice(step.Config.Model)
+		actions := p.NormalizeStringSlice(step.Config.Action)
 
 		p.debugf("Step configuration:")
 		p.debugf("- Inputs: %v", inputs)
@@ -124,14 +125,14 @@ func (p *Processor) Process() error {
 		if len(inputs) == 1 && inputs[0] == "STDIN" {
 			if p.lastOutput == "" {
 				err := fmt.Errorf("STDIN specified but no previous output available")
-				fmt.Printf("Error in step '%s': %v\n", stepName, err)
+				fmt.Printf("Error in step '%s': %v\n", step.Name, err)
 				return err
 			}
 			// Create a temporary file with .txt extension for the STDIN content
 			tmpFile, err := os.CreateTemp("", "comanda-stdin-*.txt")
 			if err != nil {
 				err = fmt.Errorf("failed to create temp file for STDIN: %w", err)
-				fmt.Printf("Error in step '%s': %v\n", stepName, err)
+				fmt.Printf("Error in step '%s': %v\n", step.Name, err)
 				return err
 			}
 			tmpPath := tmpFile.Name()
@@ -140,7 +141,7 @@ func (p *Processor) Process() error {
 			if _, err := tmpFile.WriteString(p.lastOutput); err != nil {
 				tmpFile.Close()
 				err = fmt.Errorf("failed to write to temp file: %w", err)
-				fmt.Printf("Error in step '%s': %v\n", stepName, err)
+				fmt.Printf("Error in step '%s': %v\n", step.Name, err)
 				return err
 			}
 			tmpFile.Close()
@@ -151,9 +152,9 @@ func (p *Processor) Process() error {
 
 		// Process inputs for this step
 		if len(inputs) != 1 || inputs[0] != "NA" {
-			p.debugf("Processing inputs for step %s...", stepName)
+			p.debugf("Processing inputs for step %s...", step.Name)
 			if err := p.processInputs(inputs); err != nil {
-				err = fmt.Errorf("input processing error in step %s: %w", stepName, err)
+				err = fmt.Errorf("input processing error in step %s: %w", step.Name, err)
 				fmt.Printf("Error: %v\n", err)
 				return err
 			}
@@ -161,14 +162,14 @@ func (p *Processor) Process() error {
 
 		// Validate model for this step
 		if err := p.validateModel(modelNames, inputs); err != nil {
-			err = fmt.Errorf("model validation error in step %s: %w", stepName, err)
+			err = fmt.Errorf("model validation error in step %s: %w", step.Name, err)
 			fmt.Printf("Error: %v\n", err)
 			return err
 		}
 
 		// Configure providers if needed
 		if err := p.configureProviders(); err != nil {
-			err = fmt.Errorf("provider configuration error in step %s: %w", stepName, err)
+			err = fmt.Errorf("provider configuration error in step %s: %w", step.Name, err)
 			fmt.Printf("Error: %v\n", err)
 			return err
 		}
@@ -176,7 +177,7 @@ func (p *Processor) Process() error {
 		// Process actions for this step
 		response, err := p.processActions(modelNames, actions)
 		if err != nil {
-			err = fmt.Errorf("action processing error in step %s: %w", stepName, err)
+			err = fmt.Errorf("action processing error in step %s: %w", step.Name, err)
 			fmt.Printf("Error: %v\n", err)
 			return err
 		}
@@ -185,9 +186,9 @@ func (p *Processor) Process() error {
 		p.lastOutput = response
 
 		// Handle output for this step
-		outputs := p.NormalizeStringSlice(stepConfig.Output)
+		outputs := p.NormalizeStringSlice(step.Config.Output)
 		if err := p.handleOutput(modelNames[0], response, outputs); err != nil {
-			err = fmt.Errorf("output handling error in step %s: %w", stepName, err)
+			err = fmt.Errorf("output handling error in step %s: %w", step.Name, err)
 			fmt.Printf("Error: %v\n", err)
 			return err
 		}

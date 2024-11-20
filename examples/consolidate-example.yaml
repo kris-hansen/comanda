@@ -1,0 +1,17 @@
+step_one:
+  input: NA
+  model: gpt-4o-mini
+  action: "write a first paragraph about a snail named Harvey"
+  output: examples/harvey1.txt
+
+step_two:
+  input: NA
+  model: gpt-4o-mini
+  action: "write a second paragraph about a snail named Harvey"
+  output: examples/harvey2.txt
+
+step_three:
+  input: "filenames: examples/harvey1.txt,examples/harvey2.txt"
+  model: gpt-4o-mini
+  action: "Read both files and combine their contents into a single consolidated story"
+  output: examples/consolidated.txt

@@ -16,6 +16,7 @@ COMandA allows you to use the best provider and model for each step and compose 
 - ⚡ Efficient processing of LLM chains
 - 🔒 HTTP server mode with bearer token authentication
 - 🔐 Secure configuration encryption for protecting API keys and secrets
+- 📁 Multi-file input support with content consolidation
 
 ## Installation
 
@@ -563,6 +564,34 @@ This example demonstrates using X.AI's grok-beta model. Make sure you have confi
 
 ```bash
 comanda process examples/xai-example.yaml
+```
+
+#### 7. Multi-File Consolidation Example (consolidate-example.yaml)
+
+```yaml
+step_one:
+  input: NA
+  model: gpt-4o-mini
+  action: "write a first paragraph about a snail named Harvey"
+  output: examples/harvey1.txt
+
+step_two:
+  input: NA
+  model: gpt-4o-mini
+  action: "write a second paragraph about a snail named Harvey"
+  output: examples/harvey2.txt
+
+step_three:
+  input: "filenames: examples/harvey1.txt,examples/harvey2.txt"
+  model: gpt-4o-mini
+  action: "Read both files and combine their contents into a single consolidated story"
+  output: examples/consolidated.txt
+```
+
+This example demonstrates the multi-file input feature, where multiple files can be processed together. The special `filenames:` prefix in the input field allows you to specify a comma-separated list of files to be processed as a single input. To run:
+
+```bash
+comanda process examples/consolidate-example.yaml
 ```
 
 ## Project Structure

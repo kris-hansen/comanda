@@ -72,8 +72,19 @@ func (p *Processor) processActions(modelNames []string, actions []string) (strin
 	for i, action := range actions {
 		p.debugf("Processing action %d/%d: %s", i+1, len(actions), action)
 
+		inputs := p.handler.GetInputs()
+		if len(inputs) == 0 {
+			// If there are no inputs, just send the action directly
+			response, err := configuredProvider.SendPrompt(modelName, action)
+			if err != nil {
+				return "", fmt.Errorf("failed to process action with model %s: %w", modelName, err)
+			}
+			finalResponse = response
+			continue
+		}
+
 		// Handle each input
-		for _, inputItem := range p.handler.GetInputs() {
+		for _, inputItem := range inputs {
 			var response string
 			var err error
 
@@ -110,16 +121,15 @@ func (p *Processor) processActions(modelNames []string, actions []string) (strin
 
 				response, err = configuredProvider.SendPrompt(modelName, fmt.Sprintf("Scraped Content:\n%s\n\nAction: %s", scrapedContent, action))
 			case input.FileInput:
-				if p.validator.IsDocumentFile(inputItem.Path) || strings.HasSuffix(inputItem.Path, ".csv") {
-					fileInput := models.FileInput{
-						Path:     inputItem.Path,
-						MimeType: p.getMimeType(inputItem.Path),
-					}
-					response, err = configuredProvider.SendPromptWithFile(modelName, action, fileInput)
-				} else {
-					fullPrompt := fmt.Sprintf("Input:\n%s\nAction: %s", string(inputItem.Contents), action)
-					response, err = configuredProvider.SendPrompt(modelName, fullPrompt)
+				fileInput := models.FileInput{
+					Path:     inputItem.Path,
+					MimeType: p.getMimeType(inputItem.Path),
 				}
+				// For multiple files, include the file name in the prompt
+				if len(inputs) > 1 {
+					action = fmt.Sprintf("Processing file %s: %s", filepath.Base(inputItem.Path), action)
+				}
+				response, err = configuredProvider.SendPromptWithFile(modelName, action, fileInput)
 			default:
 				fullPrompt := fmt.Sprintf("Input:\n%s\nAction: %s", string(inputItem.Contents), action)
 				response, err = configuredProvider.SendPrompt(modelName, fullPrompt)
