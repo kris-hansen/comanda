@@ -2,7 +2,11 @@ package cmd
 
 import (
 	"bufio"
+	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/kris-hansen/comanda/utils/config"
+	openai "github.com/sashabaranov/go-openai"
 	"github.com/spf13/cobra"
 )
 
@@ -22,24 +27,90 @@ var (
 	updateKeyFlag string
 )
 
+type OllamaModel struct {
+	Name    string `json:"name"`
+	ModTime string `json:"modified_at"`
+	Size    int64  `json:"size"`
+}
+
+func getOpenAIModels(apiKey string) ([]string, error) {
+	client := openai.NewClient(apiKey)
+	models, err := client.ListModels(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("error fetching OpenAI models: %v", err)
+	}
+
+	// Filter for commonly used models and sort them
+	commonModels := []string{
+		"gpt-4-turbo-preview",
+		"gpt-4-vision-preview",
+		"gpt-4",
+		"gpt-3.5-turbo",
+		"gpt-3.5-turbo-16k",
+	}
+
+	// Add any model that starts with gpt- but isn't in our common list
+	for _, model := range models.Models {
+		if strings.HasPrefix(model.ID, "gpt-") {
+			found := false
+			for _, common := range commonModels {
+				if model.ID == common {
+					found = true
+					break
+				}
+			}
+			if !found {
+				commonModels = append(commonModels, model.ID)
+			}
+		}
+	}
+
+	return commonModels, nil
+}
+
+func getAnthropicModels() []string {
+	return []string{
+		"claude-3-5-sonnet-20241022",
+		"claude-3-5-sonnet-latest",
+		"claude-3-5-haiku-latest",
+	}
+}
+
+func getXAIModels() []string {
+	return []string{
+		"grok-beta",
+		"grok-vision-beta",
+	}
+}
+
+func getOllamaModels() ([]OllamaModel, error) {
+	resp, err := http.Get("http://localhost:11434/api/tags")
+	if err != nil {
+		return nil, fmt.Errorf("error connecting to Ollama API: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("Ollama API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var models struct {
+		Models []OllamaModel `json:"models"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&models); err != nil {
+		return nil, fmt.Errorf("error decoding Ollama response: %v", err)
+	}
+
+	return models.Models, nil
+}
+
 func checkOllamaInstalled() bool {
 	cmd := exec.Command("ollama", "list")
 	if err := cmd.Run(); err != nil {
 		return false
 	}
 	return true
-}
-
-func isValidOllamaModel(modelName string) bool {
-	cmd := exec.Command("ollama", "list")
-	output, err := cmd.Output()
-	if err != nil {
-		return false
-	}
-
-	// Convert output to string and check if model exists
-	outputStr := string(output)
-	return strings.Contains(outputStr, modelName)
 }
 
 func validatePassword(password string) error {
@@ -119,6 +190,145 @@ func removeModel(envConfig *config.EnvConfig, modelName string) error {
 		return fmt.Errorf("model '%s' not found in any provider", modelName)
 	}
 	return nil
+}
+
+func parseModelSelection(input string, maxNum int) ([]int, error) {
+	var selected []int
+	parts := strings.Split(input, ",")
+
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		// Check if it's a range (e.g., "1-5")
+		if strings.Contains(part, "-") {
+			rangeParts := strings.Split(part, "-")
+			if len(rangeParts) != 2 {
+				return nil, fmt.Errorf("invalid range format: %s", part)
+			}
+
+			start, err := strconv.Atoi(strings.TrimSpace(rangeParts[0]))
+			if err != nil {
+				return nil, fmt.Errorf("invalid range start: %s", rangeParts[0])
+			}
+
+			end, err := strconv.Atoi(strings.TrimSpace(rangeParts[1]))
+			if err != nil {
+				return nil, fmt.Errorf("invalid range end: %s", rangeParts[1])
+			}
+
+			if start > end {
+				start, end = end, start // Swap if start is greater than end
+			}
+
+			if start < 1 || end > maxNum {
+				return nil, fmt.Errorf("range %d-%d is out of bounds (1-%d)", start, end, maxNum)
+			}
+
+			for i := start; i <= end; i++ {
+				selected = append(selected, i)
+			}
+		} else {
+			// Single number
+			num, err := strconv.Atoi(part)
+			if err != nil {
+				return nil, fmt.Errorf("invalid number: %s", part)
+			}
+
+			if num < 1 || num > maxNum {
+				return nil, fmt.Errorf("number %d is out of bounds (1-%d)", num, maxNum)
+			}
+
+			selected = append(selected, num)
+		}
+	}
+
+	// Remove duplicates while preserving order
+	seen := make(map[int]bool)
+	var unique []int
+	for _, num := range selected {
+		if !seen[num] {
+			seen[num] = true
+			unique = append(unique, num)
+		}
+	}
+
+	return unique, nil
+}
+
+func promptForModelSelection(models []string) ([]string, error) {
+	fmt.Println("\nAvailable models:")
+	for i, model := range models {
+		fmt.Printf("%d. %s\n", i+1, model)
+	}
+
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Print("\nEnter model numbers (comma-separated, ranges allowed e.g., 1,2,4-6): ")
+		input, _ := reader.ReadString('\n')
+		input = strings.TrimSpace(input)
+
+		selected, err := parseModelSelection(input, len(models))
+		if err != nil {
+			fmt.Printf("Error: %v\nPlease try again.\n", err)
+			continue
+		}
+
+		if len(selected) == 0 {
+			fmt.Println("No valid selections made. Please try again.")
+			continue
+		}
+
+		// Convert selected numbers to model names
+		selectedModels := make([]string, len(selected))
+		for i, num := range selected {
+			selectedModels[i] = models[num-1]
+		}
+
+		return selectedModels, nil
+	}
+}
+
+func promptForModes(reader *bufio.Reader, modelName string) ([]config.ModelMode, error) {
+	fmt.Printf("\nConfiguring modes for %s\n", modelName)
+	fmt.Println("Available modes:")
+	fmt.Println("1. text - Text processing mode")
+	fmt.Println("2. vision - Image and vision processing mode")
+	fmt.Println("3. multi - Multi-modal processing")
+	fmt.Println("4. file - File processing mode")
+	fmt.Print("\nEnter mode numbers (comma-separated, e.g., 1,2): ")
+	modesInput, _ := reader.ReadString('\n')
+	modesInput = strings.TrimSpace(modesInput)
+
+	var modes []config.ModelMode
+	if modesInput != "" {
+		modeNumbers := strings.Split(modesInput, ",")
+		for _, num := range modeNumbers {
+			num = strings.TrimSpace(num)
+			switch num {
+			case "1":
+				modes = append(modes, config.TextMode)
+			case "2":
+				modes = append(modes, config.VisionMode)
+			case "3":
+				modes = append(modes, config.MultiMode)
+			case "4":
+				modes = append(modes, config.FileMode)
+			default:
+				fmt.Printf("Warning: Invalid mode number '%s' ignored\n", num)
+			}
+		}
+	}
+
+	if len(modes) == 0 {
+		// Default to text mode if no modes selected
+		modes = append(modes, config.TextMode)
+		fmt.Println("No valid modes selected. Defaulting to text mode.")
+	}
+
+	return modes, nil
 }
 
 var configureCmd = &cobra.Command{
@@ -286,91 +496,115 @@ var configureCmd = &cobra.Command{
 				apiKey = existingProvider.APIKey
 			}
 
-			// Prompt for model name
-			var modelName string
-			for {
-				if provider == "ollama" {
-					fmt.Print("Enter model name (must be pulled in ollama): ")
-				} else if provider == "google" {
-					fmt.Print("Enter model name (e.g., gemini-pro): ")
-				} else if provider == "xai" {
-					fmt.Print("Enter model name (e.g., grok-beta): ")
-				} else {
-					fmt.Print("Enter model name: ")
+			// Get available models based on provider
+			var selectedModels []string
+			switch provider {
+			case "openai":
+				if apiKey == "" {
+					fmt.Println("Error: API key is required for OpenAI")
+					return
 				}
-				modelName, _ = reader.ReadString('\n')
-				modelName = strings.TrimSpace(modelName)
+				models, err := getOpenAIModels(apiKey)
+				if err != nil {
+					fmt.Printf("Error fetching OpenAI models: %v\n", err)
+					return
+				}
+				selectedModels, err = promptForModelSelection(models)
+				if err != nil {
+					fmt.Printf("Error selecting models: %v\n", err)
+					return
+				}
 
-				if provider == "ollama" {
-					if !isValidOllamaModel(modelName) {
-						fmt.Printf("Model '%s' is not available in ollama. Please pull it first using 'ollama pull %s'\n", modelName, modelName)
-						continue
-					}
-				} else if provider == "google" {
-					if !strings.HasPrefix(modelName, "gemini-") {
-						fmt.Println("Invalid model name. Google models should start with 'gemini-'")
-						continue
-					}
-				} else if provider == "xai" {
-					if !strings.HasPrefix(modelName, "grok-") {
-						fmt.Println("Invalid model name. X.AI models should start with 'grok-'")
-						continue
-					}
+			case "anthropic":
+				if apiKey == "" {
+					fmt.Println("Error: API key is required for Anthropic")
+					return
 				}
-				break
+				models := getAnthropicModels()
+				selectedModels, err = promptForModelSelection(models)
+				if err != nil {
+					fmt.Printf("Error selecting models: %v\n", err)
+					return
+				}
+
+			case "xai":
+				if apiKey == "" {
+					fmt.Println("Error: API key is required for X.AI")
+					return
+				}
+				models := getXAIModels()
+				selectedModels, err = promptForModelSelection(models)
+				if err != nil {
+					fmt.Printf("Error selecting models: %v\n", err)
+					return
+				}
+
+			case "ollama":
+				models, err := getOllamaModels()
+				if err != nil {
+					fmt.Printf("Error fetching Ollama models: %v\n", err)
+					return
+				}
+				modelNames := make([]string, len(models))
+				for i, model := range models {
+					modelNames[i] = model.Name
+				}
+				if len(modelNames) == 0 {
+					fmt.Println("No models found. Please pull a model first using 'ollama pull <model>'")
+					return
+				}
+				selectedModels, err = promptForModelSelection(modelNames)
+				if err != nil {
+					fmt.Printf("Error selecting models: %v\n", err)
+					return
+				}
+
+			default:
+				// For other providers (currently just Google)
+				for {
+					if provider == "google" {
+						fmt.Print("Enter model name (e.g., gemini-pro): ")
+					} else {
+						fmt.Print("Enter model name: ")
+					}
+					modelName, _ := reader.ReadString('\n')
+					modelName = strings.TrimSpace(modelName)
+
+					if provider == "google" {
+						if !strings.HasPrefix(modelName, "gemini-") {
+							fmt.Println("Invalid model name. Google models should start with 'gemini-'")
+							continue
+						}
+					}
+					selectedModels = []string{modelName}
+					break
+				}
 			}
 
-			// Prompt for model modes
-			fmt.Println("\nAvailable modes:")
-			fmt.Println("1. text - Text processing mode")
-			fmt.Println("2. vision - Image and vision processing mode")
-			fmt.Println("3. multi - Multi-modal processing")
-			fmt.Println("4. file - File processing mode")
-			fmt.Print("\nEnter mode numbers (comma-separated, e.g., 1,2): ")
-			modesInput, _ := reader.ReadString('\n')
-			modesInput = strings.TrimSpace(modesInput)
-
-			var modes []config.ModelMode
-			if modesInput != "" {
-				modeNumbers := strings.Split(modesInput, ",")
-				for _, num := range modeNumbers {
-					num = strings.TrimSpace(num)
-					switch num {
-					case "1":
-						modes = append(modes, config.TextMode)
-					case "2":
-						modes = append(modes, config.VisionMode)
-					case "3":
-						modes = append(modes, config.MultiMode)
-					case "4":
-						modes = append(modes, config.FileMode)
-					default:
-						fmt.Printf("Warning: Invalid mode number '%s' ignored\n", num)
-					}
-				}
-			}
-
-			if len(modes) == 0 {
-				// Default to text mode if no modes selected
-				modes = append(modes, config.TextMode)
-				fmt.Println("No valid modes selected. Defaulting to text mode.")
-			}
-
-			// Add new model to provider
+			// Add new models to provider
 			modelType := "external"
 			if provider == "ollama" {
 				modelType = "local"
 			}
 
-			newModel := config.Model{
-				Name:  modelName,
-				Type:  modelType,
-				Modes: modes,
-			}
+			for _, modelName := range selectedModels {
+				// Prompt for modes for each model
+				modes, err := promptForModes(reader, modelName)
+				if err != nil {
+					fmt.Printf("Error configuring modes for model %s: %v\n", modelName, err)
+					continue
+				}
 
-			if err := envConfig.AddModelToProvider(provider, newModel); err != nil {
-				fmt.Printf("Error adding model: %v\n", err)
-				return
+				newModel := config.Model{
+					Name:  modelName,
+					Type:  modelType,
+					Modes: modes,
+				}
+
+				if err := envConfig.AddModelToProvider(provider, newModel); err != nil {
+					fmt.Printf("Error adding model %s: %v\n", modelName, err)
+					continue
+				}
 			}
 		}
 
