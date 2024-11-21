@@ -17,6 +17,7 @@ var (
 	listFlag      bool
 	serverFlag    bool
 	encryptFlag   bool
+	decryptFlag   bool
 	removeFlag    string
 	updateKeyFlag string
 )
@@ -160,6 +161,42 @@ var configureCmd = &cobra.Command{
 				return
 			}
 			fmt.Println("Configuration encrypted successfully!")
+			return
+		}
+
+		if decryptFlag {
+			// Check if file exists and is encrypted
+			data, err := os.ReadFile(configPath)
+			if err != nil {
+				fmt.Printf("Error reading configuration file: %v\n", err)
+				return
+			}
+
+			if !config.IsEncrypted(data) {
+				fmt.Println("Configuration file is not encrypted")
+				return
+			}
+
+			password, err := config.PromptPassword("Enter decryption password: ")
+			if err != nil {
+				fmt.Printf("Error reading password: %v\n", err)
+				return
+			}
+
+			// Decrypt the configuration
+			decrypted, err := config.DecryptConfig(data, password)
+			if err != nil {
+				fmt.Printf("Error decrypting configuration: %v\n", err)
+				return
+			}
+
+			// Write the decrypted data back to the file
+			if err := os.WriteFile(configPath, decrypted, 0644); err != nil {
+				fmt.Printf("Error writing decrypted configuration: %v\n", err)
+				return
+			}
+
+			fmt.Println("Configuration decrypted successfully!")
 			return
 		}
 
@@ -417,6 +454,7 @@ func init() {
 	configureCmd.Flags().BoolVar(&listFlag, "list", false, "List all configured providers and models")
 	configureCmd.Flags().BoolVar(&serverFlag, "server", false, "Configure server settings")
 	configureCmd.Flags().BoolVar(&encryptFlag, "encrypt", false, "Encrypt the configuration file")
+	configureCmd.Flags().BoolVar(&decryptFlag, "decrypt", false, "Decrypt the configuration file")
 	configureCmd.Flags().StringVar(&removeFlag, "remove", "", "Remove a model by name")
 	configureCmd.Flags().StringVar(&updateKeyFlag, "update-key", "", "Update API key for specified provider")
 	rootCmd.AddCommand(configureCmd)
