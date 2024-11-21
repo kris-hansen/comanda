@@ -83,6 +83,17 @@ func getXAIModels() []string {
 	}
 }
 
+func getGoogleModels() []string {
+	return []string{
+		"gemini-1.5-flash",
+		"gemini-1.5-flash-8b",
+		"gemini-1.5-pro",
+		"gemini-1.0-pro",
+		"text-embedding-004",
+		"aqa",
+	}
+}
+
 func getOllamaModels() ([]OllamaModel, error) {
 	resp, err := http.Get("http://localhost:11434/api/tags")
 	if err != nil {
@@ -539,6 +550,18 @@ var configureCmd = &cobra.Command{
 					return
 				}
 
+			case "google":
+				if apiKey == "" {
+					fmt.Println("Error: API key is required for Google")
+					return
+				}
+				models := getGoogleModels()
+				selectedModels, err = promptForModelSelection(models)
+				if err != nil {
+					fmt.Printf("Error selecting models: %v\n", err)
+					return
+				}
+
 			case "ollama":
 				models, err := getOllamaModels()
 				if err != nil {
@@ -557,27 +580,6 @@ var configureCmd = &cobra.Command{
 				if err != nil {
 					fmt.Printf("Error selecting models: %v\n", err)
 					return
-				}
-
-			default:
-				// For other providers (currently just Google)
-				for {
-					if provider == "google" {
-						fmt.Print("Enter model name (e.g., gemini-pro): ")
-					} else {
-						fmt.Print("Enter model name: ")
-					}
-					modelName, _ := reader.ReadString('\n')
-					modelName = strings.TrimSpace(modelName)
-
-					if provider == "google" {
-						if !strings.HasPrefix(modelName, "gemini-") {
-							fmt.Println("Invalid model name. Google models should start with 'gemini-'")
-							continue
-						}
-					}
-					selectedModels = []string{modelName}
-					break
 				}
 			}
 

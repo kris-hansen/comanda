@@ -40,13 +40,10 @@ func (g *GoogleProvider) debugf(format string, args ...interface{}) {
 	}
 }
 
-// SupportsModel checks if the given model name is supported by Google
-func (g *GoogleProvider) SupportsModel(modelName string) bool {
-	g.debugf("Checking if model is supported: %s", modelName)
-	modelName = strings.ToLower(modelName)
-
-	// Support all Google AI models
-	supportedModels := []string{
+// ValidateModel checks if the specific Google model variant is valid
+func (g *GoogleProvider) ValidateModel(modelName string) bool {
+	g.debugf("Validating model: %s", modelName)
+	validModels := []string{
 		"gemini-1.5-flash",
 		"gemini-1.5-flash-8b",
 		"gemini-1.5-pro",
@@ -55,15 +52,22 @@ func (g *GoogleProvider) SupportsModel(modelName string) bool {
 		"aqa",
 	}
 
-	for _, model := range supportedModels {
-		if modelName == model {
-			g.debugf("Model %s is supported (exact match)", modelName)
+	modelName = strings.ToLower(modelName)
+	// Check exact matches
+	for _, valid := range validModels {
+		if modelName == valid {
+			g.debugf("Found exact model match: %s", modelName)
 			return true
 		}
 	}
 
-	g.debugf("Model %s is not supported", modelName)
+	g.debugf("Model %s validation failed - no matches found", modelName)
 	return false
+}
+
+// SupportsModel checks if the given model name is supported by Google
+func (g *GoogleProvider) SupportsModel(modelName string) bool {
+	return g.ValidateModel(modelName)
 }
 
 // Configure sets up the provider with necessary credentials
@@ -86,7 +90,7 @@ func (g *GoogleProvider) SendPrompt(modelName string, prompt string) (string, er
 		return "", fmt.Errorf("Google provider not configured: missing API key")
 	}
 
-	if !g.SupportsModel(modelName) {
+	if !g.ValidateModel(modelName) {
 		return "", fmt.Errorf("invalid Google model: %s", modelName)
 	}
 
@@ -139,7 +143,7 @@ func (g *GoogleProvider) SendPromptWithFile(modelName string, prompt string, fil
 		return "", fmt.Errorf("Google provider not configured: missing API key")
 	}
 
-	if !g.SupportsModel(modelName) {
+	if !g.ValidateModel(modelName) {
 		return "", fmt.Errorf("invalid Google model: %s", modelName)
 	}
 
