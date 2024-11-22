@@ -10,39 +10,6 @@ import (
 	"github.com/kris-hansen/comanda/utils/scraper"
 )
 
-// getMimeType returns the MIME type for a file based on its extension
-func (p *Processor) getMimeType(path string) string {
-	ext := strings.ToLower(filepath.Ext(path))
-	switch ext {
-	case ".pdf":
-		return "application/pdf"
-	case ".doc":
-		return "application/msword"
-	case ".docx":
-		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-	case ".txt":
-		return "text/plain"
-	case ".md":
-		return "text/markdown"
-	case ".json":
-		return "application/json"
-	case ".html":
-		return "text/html"
-	case ".png":
-		return "image/png"
-	case ".jpg", ".jpeg":
-		return "image/jpeg"
-	case ".gif":
-		return "image/gif"
-	case ".bmp":
-		return "image/bmp"
-	case ".csv":
-		return "text/csv"
-	default:
-		return "application/octet-stream"
-	}
-}
-
 // processActions handles the action section of the DSL
 func (p *Processor) processActions(modelNames []string, actions []string) (string, error) {
 	if len(modelNames) == 0 {
@@ -123,7 +90,7 @@ func (p *Processor) processActions(modelNames []string, actions []string) (strin
 			case input.FileInput:
 				fileInput := models.FileInput{
 					Path:     inputItem.Path,
-					MimeType: p.getMimeType(inputItem.Path),
+					MimeType: inputItem.MimeType, // Use MimeType from the input handler
 				}
 				// For multiple files, include the file name in the prompt
 				if len(inputs) > 1 {
