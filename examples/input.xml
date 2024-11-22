@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<customers>
+    <customer>
+        <id>1</id>
+        <name>John Smith</name>
+        <email>john.smith@example.com</email>
+        <orders>
+            <order>
+                <id>1001</id>
+                <date>2023-01-15</date>
+                <total>299.99</total>
+            </order>
+            <order>
+                <id>1002</id>
+                <date>2023-03-22</date>
+                <total>149.50</total>
+            </order>
+        </orders>
+    </customer>
+    <customer>
+        <id>2</id>
+        <name>Jane Doe</name>
+        <email>jane.doe@example.com</email>
+        <orders>
+            <order>
+                <id>1003</id>
+                <date>2023-02-28</date>
+                <total>499.99</total>
+            </order>
+        </orders>
+    </customer>
+</customers>

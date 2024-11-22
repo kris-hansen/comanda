@@ -18,6 +18,7 @@ var (
 		".html", // Added for URL content
 		".json", // Added for URL content
 		".csv",  // Added for CSV support
+		".xml",  // Added XML support
 	}
 
 	ImageExtensions = []string{
