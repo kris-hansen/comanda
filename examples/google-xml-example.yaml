@@ -1,0 +1,6 @@
+# Example showing XML file processing with Google's Gemini model
+step_one:
+  input: examples/input.xml
+  model: gemini-1.5-flash-8b
+  action: "Extract and analyze the data structure from this XML file"
+  output: STDOUT

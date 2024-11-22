@@ -42,6 +42,7 @@ type Input struct {
 	Contents     []byte
 	Metadata     map[string]interface{} // For additional data like scraping config
 	ScrapeConfig *ScrapeConfig          // Specific configuration for web scraping
+	MimeType     string                 // Added MimeType field
 }
 
 // Handler processes input files and directories
@@ -53,6 +54,43 @@ type Handler struct {
 func NewHandler() *Handler {
 	return &Handler{
 		inputs: make([]*Input, 0),
+	}
+}
+
+// getMimeType returns the appropriate MIME type for a file based on its extension
+func (h *Handler) getMimeType(path string) string {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".txt":
+		return "text/plain"
+	case ".html":
+		return "text/html"
+	case ".json":
+		return "application/json"
+	case ".xml":
+		return "text/xml"
+	case ".yaml", ".yml":
+		return "text/yaml"
+	case ".md":
+		return "text/markdown"
+	case ".csv":
+		return "text/csv"
+	case ".pdf":
+		return "application/pdf"
+	case ".doc":
+		return "application/msword"
+	case ".docx":
+		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".gif":
+		return "image/gif"
+	case ".bmp":
+		return "image/bmp"
+	default:
+		return "text/plain" // Default to text/plain for unknown types
 	}
 }
 
@@ -126,6 +164,7 @@ func (h *Handler) processFile(path string) error {
 		Path:     path,
 		Type:     FileInput,
 		Contents: contents,
+		MimeType: h.getMimeType(path), // Set the MIME type
 	}
 	h.inputs = append(h.inputs, input)
 	return nil
@@ -201,6 +240,7 @@ func (h *Handler) processImage(path string) error {
 		Path:     path,
 		Type:     ImageInput,
 		Contents: []byte(base64Data),
+		MimeType: mimeType, // Set the MIME type
 	}
 	h.inputs = append(h.inputs, input)
 	return nil
@@ -251,12 +291,14 @@ func (h *Handler) processScreenshot() error {
 	}
 
 	// Encode PNG data to base64 with proper MIME type prefix
-	base64Data := fmt.Sprintf("data:image/png;base64,%s", base64.StdEncoding.EncodeToString(buf.Bytes()))
+	mimeType := "image/png"
+	base64Data := fmt.Sprintf("data:%s;base64,%s", mimeType, base64.StdEncoding.EncodeToString(buf.Bytes()))
 
 	input := &Input{
 		Path:     "screenshot",
 		Type:     ScreenshotInput,
 		Contents: []byte(base64Data),
+		MimeType: mimeType,
 	}
 	h.inputs = append(h.inputs, input)
 	return nil
