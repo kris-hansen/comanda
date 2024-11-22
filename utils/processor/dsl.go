@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -19,6 +20,12 @@ type Processor struct {
 	providers  map[string]models.Provider // Key is provider name, not model name
 	verbose    bool
 	lastOutput string
+	spinner    *Spinner
+}
+
+// isTestMode checks if the code is running in test mode
+func isTestMode() bool {
+	return flag.Lookup("test.v") != nil
 }
 
 // NewProcessor creates a new DSL processor
@@ -30,7 +37,14 @@ func NewProcessor(config *DSLConfig, envConfig *config.EnvConfig, verbose bool) 
 		validator: input.NewValidator(nil),
 		providers: make(map[string]models.Provider),
 		verbose:   verbose,
+		spinner:   NewSpinner(),
 	}
+
+	// Disable spinner in test environments
+	if isTestMode() {
+		p.spinner.Disable()
+	}
+
 	p.debugf("Creating new validator with default extensions")
 	return p
 }
@@ -85,15 +99,20 @@ func (p *Processor) Process() error {
 	}
 
 	// First validate all steps before processing
+	p.spinner.Start("Validating DSL configuration")
 	for _, step := range p.config.Steps {
 		if err := p.validateStepConfig(step.Name, step.Config); err != nil {
+			p.spinner.Stop()
 			fmt.Printf("Error: %v\n", err)
 			return err
 		}
 	}
+	p.spinner.Stop()
 
 	// Process steps in order
-	for _, step := range p.config.Steps {
+	for stepIndex, step := range p.config.Steps {
+		stepMsg := fmt.Sprintf("Processing step %d/%d: %s", stepIndex+1, len(p.config.Steps), step.Name)
+		p.spinner.Start(stepMsg)
 		p.debugf("Processing step: %s", step.Name)
 
 		// Handle input based on type
@@ -102,10 +121,14 @@ func (p *Processor) Process() error {
 		case map[string]interface{}:
 			// Handle scraping configuration
 			if url, ok := v["url"].(string); ok {
+				p.spinner.Stop()
+				p.spinner.Start(fmt.Sprintf("Scraping content from %s", url))
 				if err := p.handler.ProcessScrape(url, v); err != nil {
+					p.spinner.Stop()
 					return fmt.Errorf("failed to process scraping input: %w", err)
 				}
 				inputs = []string{url}
+				p.spinner.Stop()
 			} else {
 				inputs = p.NormalizeStringSlice(step.Config.Input)
 			}
@@ -124,13 +147,16 @@ func (p *Processor) Process() error {
 		// Handle STDIN specially
 		if len(inputs) == 1 && inputs[0] == "STDIN" {
 			if p.lastOutput == "" {
+				p.spinner.Stop()
 				err := fmt.Errorf("STDIN specified but no previous output available")
 				fmt.Printf("Error in step '%s': %v\n", step.Name, err)
 				return err
 			}
+			p.spinner.Start("Processing STDIN input")
 			// Create a temporary file with .txt extension for the STDIN content
 			tmpFile, err := os.CreateTemp("", "comanda-stdin-*.txt")
 			if err != nil {
+				p.spinner.Stop()
 				err = fmt.Errorf("failed to create temp file for STDIN: %w", err)
 				fmt.Printf("Error in step '%s': %v\n", step.Name, err)
 				return err
@@ -140,11 +166,13 @@ func (p *Processor) Process() error {
 
 			if _, err := tmpFile.WriteString(p.lastOutput); err != nil {
 				tmpFile.Close()
+				p.spinner.Stop()
 				err = fmt.Errorf("failed to write to temp file: %w", err)
 				fmt.Printf("Error in step '%s': %v\n", step.Name, err)
 				return err
 			}
 			tmpFile.Close()
+			p.spinner.Stop()
 
 			// Update inputs to use the temporary file
 			inputs = []string{tmpPath}
@@ -152,46 +180,61 @@ func (p *Processor) Process() error {
 
 		// Process inputs for this step
 		if len(inputs) != 1 || inputs[0] != "NA" {
+			p.spinner.Start("Processing input files")
 			p.debugf("Processing inputs for step %s...", step.Name)
 			if err := p.processInputs(inputs); err != nil {
+				p.spinner.Stop()
 				err = fmt.Errorf("input processing error in step %s: %w", step.Name, err)
 				fmt.Printf("Error: %v\n", err)
 				return err
 			}
+			p.spinner.Stop()
 		}
 
 		// Validate model for this step
+		p.spinner.Start("Validating model configuration")
 		if err := p.validateModel(modelNames, inputs); err != nil {
+			p.spinner.Stop()
 			err = fmt.Errorf("model validation error in step %s: %w", step.Name, err)
 			fmt.Printf("Error: %v\n", err)
 			return err
 		}
+		p.spinner.Stop()
 
 		// Configure providers if needed
+		p.spinner.Start("Configuring model providers")
 		if err := p.configureProviders(); err != nil {
+			p.spinner.Stop()
 			err = fmt.Errorf("provider configuration error in step %s: %w", step.Name, err)
 			fmt.Printf("Error: %v\n", err)
 			return err
 		}
+		p.spinner.Stop()
 
 		// Process actions for this step
+		p.spinner.Start("Processing actions")
 		response, err := p.processActions(modelNames, actions)
 		if err != nil {
+			p.spinner.Stop()
 			err = fmt.Errorf("action processing error in step %s: %w", step.Name, err)
 			fmt.Printf("Error: %v\n", err)
 			return err
 		}
+		p.spinner.Stop()
 
 		// Store the response for potential use as STDIN in next step
 		p.lastOutput = response
 
 		// Handle output for this step
 		outputs := p.NormalizeStringSlice(step.Config.Output)
+		p.spinner.Start("Handling output")
 		if err := p.handleOutput(modelNames[0], response, outputs); err != nil {
+			p.spinner.Stop()
 			err = fmt.Errorf("output handling error in step %s: %w", step.Name, err)
 			fmt.Printf("Error: %v\n", err)
 			return err
 		}
+		p.spinner.Stop()
 
 		// Clear the handler's contents for the next step
 		p.handler = input.NewHandler()
