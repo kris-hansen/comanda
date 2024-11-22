@@ -1,0 +1,4 @@
+To extract customer names from the provided XML data, we can look for the `<name>` tags under each `<customer>` element. The extracted customer names are:
+
+1. John Smith
+2. Jane Doe
