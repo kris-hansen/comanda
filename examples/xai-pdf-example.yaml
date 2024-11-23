@@ -1,0 +1,9 @@
+step_one:
+  input:
+    - examples/sample.pdf
+  model:
+    - grok-beta
+  action:
+    - provide a summary of this pdf document
+  output:
+    - STDOUT

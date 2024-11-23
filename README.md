@@ -172,7 +172,7 @@ openai:
 
 xai:
   - grok-beta (external)
-    Modes: text
+    Modes: text, file
 
 anthropic:
   - claude-3-5-sonnet-latest (external)
