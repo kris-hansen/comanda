@@ -1,6 +1,9 @@
+![robot image](comanda-small.jpg)
 # COMandA (Chain of Models and Actions)
 
-COMandA is a command-line tool that enables the composition of Large Language Model (LLM) operations using a YAML-based Domain Specific Language (DSL). It simplifies the process of creating and managing chains of LLM activities that operate on files and information.
+COMandA is a command-line tool that enables the composition of Large Language Model (LLM) operations using a YAML-based Domain Specific Language (DSL). It simplifies the process of creating and managing agentic workflows composed of downloads, files, text, images, documents, multiple providers and multiple models.
+
+Create YAML 'recipes' and use `comanda process` to execute the recipe file.
 
 COMandA allows you to use the best provider and model for each step and compose information pipelines that combine the stregths of different LLMs. It supports multiple LLM providers (OpenAI, Anthropic, Google, X.AI, Ollama) and provides extensible DSL capabilities for defining complex information workflows.
 
