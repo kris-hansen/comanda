@@ -168,7 +168,62 @@ func (x *XAIProvider) SendPromptWithFile(modelName string, prompt string, file F
 		return "", fmt.Errorf("failed to read file: %v", err)
 	}
 
-	// Combine file content with the prompt
+	config := openai.DefaultConfig(x.apiKey)
+	config.BaseURL = "https://api.x.ai/v1"
+	client := openai.NewClientWithConfig(config)
+
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+
+	// For image files, use MultiContent approach similar to OpenAI
+	if strings.HasPrefix(file.MimeType, "image/") {
+		base64Data := fmt.Sprintf("data:%s;base64,%s", file.MimeType, string(fileData))
+		content := []openai.ChatMessagePart{
+			{
+				Type: openai.ChatMessagePartTypeText,
+				Text: prompt,
+			},
+			{
+				Type: openai.ChatMessagePartTypeImageURL,
+				ImageURL: &openai.ChatMessageImageURL{
+					URL: base64Data,
+				},
+			},
+		}
+
+		resp, err := client.CreateChatCompletion(
+			ctx,
+			openai.ChatCompletionRequest{
+				Model: modelName,
+				Messages: []openai.ChatCompletionMessage{
+					{
+						Role:         openai.ChatMessageRoleUser,
+						MultiContent: content,
+					},
+				},
+				MaxTokens: x.config.MaxTokens,
+			},
+		)
+
+		if err != nil {
+			if ctx.Err() == context.DeadlineExceeded {
+				return "", fmt.Errorf("request timed out after %v", defaultTimeout)
+			}
+			return "", fmt.Errorf("X.AI API error: %v", err)
+		}
+
+		if len(resp.Choices) == 0 {
+			return "", fmt.Errorf("no response choices returned from X.AI")
+		}
+
+		response := resp.Choices[0].Message.Content
+		x.debugf("API call completed, response length: %d characters", len(response))
+
+		return response, nil
+	}
+
+	// For non-image files, combine content with prompt
 	fileContent := string(fileData)
 	combinedPrompt := fmt.Sprintf("File content:\n%s\n\nUser prompt: %s", fileContent, prompt)
 
@@ -177,14 +232,6 @@ func (x *XAIProvider) SendPromptWithFile(modelName string, prompt string, file F
 	if estimatedTokens > maxPromptTokens {
 		return "", fmt.Errorf("combined prompt likely exceeds maximum token limit of %d (estimated tokens: %d)", maxPromptTokens, estimatedTokens)
 	}
-
-	config := openai.DefaultConfig(x.apiKey)
-	config.BaseURL = "https://api.x.ai/v1"
-	client := openai.NewClientWithConfig(config)
-
-	// Create context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
-	defer cancel()
 
 	resp, err := client.CreateChatCompletion(
 		ctx,
