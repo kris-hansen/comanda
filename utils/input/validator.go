@@ -34,6 +34,29 @@ var (
 		".doc",
 		".docx",
 	}
+
+	SourceCodeExtensions = []string{
+		".go",
+		".py",
+		".js",
+		".ts",
+		".java",
+		".c",
+		".cpp",
+		".h",
+		".hpp",
+		".rs",
+		".rb",
+		".php",
+		".swift",
+		".kt",
+		".scala",
+		".cs",
+		".sh",
+		".pl",
+		".r",
+		".sql",
+	}
 )
 
 // Validator validates input paths
@@ -43,10 +66,11 @@ type Validator struct {
 
 // NewValidator creates a new input validator with default text extensions
 func NewValidator(additionalExtensions []string) *Validator {
-	// Start with text, image, and document extensions
+	// Start with text, image, document, and source code extensions
 	allExtensions := append([]string{}, TextExtensions...)
 	allExtensions = append(allExtensions, ImageExtensions...)
 	allExtensions = append(allExtensions, DocumentExtensions...)
+	allExtensions = append(allExtensions, SourceCodeExtensions...)
 
 	// Add any additional extensions
 	if len(additionalExtensions) > 0 {
@@ -117,6 +141,19 @@ func (v *Validator) IsDocumentFile(path string) bool {
 	for _, docExt := range DocumentExtensions {
 		if ext == docExt {
 			config.DebugLog("[Validator] Found matching document extension: %s", ext)
+			return true
+		}
+	}
+	return false
+}
+
+// IsSourceCodeFile checks if the file has a source code extension
+func (v *Validator) IsSourceCodeFile(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	config.DebugLog("[Validator] Checking if %s is a source code extension", ext)
+	for _, srcExt := range SourceCodeExtensions {
+		if ext == srcExt {
+			config.DebugLog("[Validator] Found matching source code extension: %s", ext)
 			return true
 		}
 	}

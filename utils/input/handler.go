@@ -24,7 +24,8 @@ const (
 	DirectoryInput
 	ScreenshotInput
 	ImageInput
-	WebScrapeInput // Changed from ScrapeInput to WebScrapeInput to avoid naming conflict
+	WebScrapeInput
+	SourceCodeInput // Added SourceCodeInput type
 )
 
 // ScrapeConfig represents the configuration for web scraping
@@ -61,6 +62,7 @@ func NewHandler() *Handler {
 func (h *Handler) getMimeType(path string) string {
 	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
+	// Text files
 	case ".txt":
 		return "text/plain"
 	case ".html":
@@ -75,12 +77,16 @@ func (h *Handler) getMimeType(path string) string {
 		return "text/markdown"
 	case ".csv":
 		return "text/csv"
+
+	// Documents
 	case ".pdf":
 		return "application/pdf"
 	case ".doc":
 		return "application/msword"
 	case ".docx":
 		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+	// Images
 	case ".png":
 		return "image/png"
 	case ".jpg", ".jpeg":
@@ -89,9 +95,80 @@ func (h *Handler) getMimeType(path string) string {
 		return "image/gif"
 	case ".bmp":
 		return "image/bmp"
+
+	// Source code files
+	case ".go":
+		return "text/x-go"
+	case ".py":
+		return "text/x-python"
+	case ".js":
+		return "text/javascript"
+	case ".ts":
+		return "text/typescript"
+	case ".java":
+		return "text/x-java"
+	case ".c":
+		return "text/x-c"
+	case ".cpp":
+		return "text/x-c++"
+	case ".h":
+		return "text/x-c"
+	case ".hpp":
+		return "text/x-c++"
+	case ".rs":
+		return "text/x-rust"
+	case ".rb":
+		return "text/x-ruby"
+	case ".php":
+		return "text/x-php"
+	case ".swift":
+		return "text/x-swift"
+	case ".kt":
+		return "text/x-kotlin"
+	case ".scala":
+		return "text/x-scala"
+	case ".cs":
+		return "text/x-csharp"
+	case ".sh":
+		return "text/x-shellscript"
+	case ".pl":
+		return "text/x-perl"
+	case ".r":
+		return "text/x-r"
+	case ".sql":
+		return "text/x-sql"
+
 	default:
 		return "text/plain" // Default to text/plain for unknown types
 	}
+}
+
+// isSourceCode checks if the file is a source code file based on extension
+func (h *Handler) isSourceCode(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	sourceExts := map[string]bool{
+		".go":    true,
+		".py":    true,
+		".js":    true,
+		".ts":    true,
+		".java":  true,
+		".c":     true,
+		".cpp":   true,
+		".h":     true,
+		".hpp":   true,
+		".rs":    true,
+		".rb":    true,
+		".php":   true,
+		".swift": true,
+		".kt":    true,
+		".scala": true,
+		".cs":    true,
+		".sh":    true,
+		".pl":    true,
+		".r":     true,
+		".sql":   true,
+	}
+	return sourceExts[ext]
 }
 
 // isImageFile checks if the file is an image based on extension
@@ -125,6 +202,11 @@ func (h *Handler) ProcessPath(path string) error {
 	if h.isImageFile(path) {
 		return h.processImage(path)
 	}
+
+	if h.isSourceCode(path) {
+		return h.processSourceCode(path)
+	}
+
 	return h.processFile(path)
 }
 
@@ -164,7 +246,24 @@ func (h *Handler) processFile(path string) error {
 		Path:     path,
 		Type:     FileInput,
 		Contents: contents,
-		MimeType: h.getMimeType(path), // Set the MIME type
+		MimeType: h.getMimeType(path),
+	}
+	h.inputs = append(h.inputs, input)
+	return nil
+}
+
+// processSourceCode handles source code file input
+func (h *Handler) processSourceCode(path string) error {
+	contents, err := ioutil.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("error reading source code file %s: %w", path, err)
+	}
+
+	input := &Input{
+		Path:     path,
+		Type:     SourceCodeInput,
+		Contents: contents,
+		MimeType: h.getMimeType(path),
 	}
 	h.inputs = append(h.inputs, input)
 	return nil
@@ -240,7 +339,7 @@ func (h *Handler) processImage(path string) error {
 		Path:     path,
 		Type:     ImageInput,
 		Contents: []byte(base64Data),
-		MimeType: mimeType, // Set the MIME type
+		MimeType: mimeType,
 	}
 	h.inputs = append(h.inputs, input)
 	return nil
@@ -323,7 +422,7 @@ func (h *Handler) GetFileContents(path string) ([]byte, error) {
 func (h *Handler) GetAllContents() []byte {
 	var allContents []byte
 	for _, input := range h.inputs {
-		if input.Type == FileInput || input.Type == ScreenshotInput || input.Type == ImageInput {
+		if input.Type == FileInput || input.Type == ScreenshotInput || input.Type == ImageInput || input.Type == SourceCodeInput {
 			allContents = append(allContents, input.Contents...)
 			allContents = append(allContents, '\n')
 		}
