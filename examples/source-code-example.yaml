@@ -10,4 +10,4 @@ step_one:
       3. Identification of any potential bugs or issues
       4. Would this code run or compile as is?
     # Save the analysis to a file
-    output: eamples/code-analysis.txt
+    output: examples/code-analysis.txt
