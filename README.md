@@ -20,6 +20,7 @@ COMandA allows you to use the best provider and model for each step and compose 
 - 🔒 HTTP server mode with bearer token authentication
 - 🔐 Secure configuration encryption for protecting API keys and secrets
 - 📁 Multi-file input support with content consolidation
+- 📝 Markdown file support for reusable actions (prompts)
 
 ## Installation
 
@@ -172,7 +173,7 @@ openai:
 
 xai:
   - grok-beta (external)
-    Modes: text, file
+    Modes: text
 
 anthropic:
   - claude-3-5-sonnet-latest (external)
@@ -595,6 +596,34 @@ This example demonstrates the multi-file input feature, where multiple files can
 
 ```bash
 comanda process examples/consolidate-example.yaml
+```
+
+#### 8. Markdown Action Example (markdown-action-example.yaml)
+
+The action stage of a step can be a markdown file. This allows you to store complex prompts or actions in separate files for better organization and reuse.
+
+```yaml
+step1:
+  input: examples/test.csv
+  model: gpt-4
+  action: examples/test-action.md
+  output: STDOUT
+```
+
+This example demonstrates using a markdown file as an action. Instead of specifying the action directly in the YAML file, you can reference a markdown file that contains the action text. This is particularly useful for:
+- Reusing common actions across multiple steps or files
+- Storing complex prompts in separate files for better organization
+- Version controlling your prompts alongside your code
+- Making actions more maintainable and easier to edit
+
+The contents of test-action.md:
+```markdown
+Analyze this input and provide a detailed summary of its key points and main themes.
+```
+
+To run:
+```bash
+comanda process examples/markdown-action-example.yaml
 ```
 
 ## Project Structure

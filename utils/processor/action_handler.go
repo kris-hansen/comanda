@@ -2,6 +2,7 @@ package processor
 
 import (
 	"fmt"
+	"io/ioutil"
 	"path/filepath"
 	"strings"
 
@@ -38,6 +39,16 @@ func (p *Processor) processActions(modelNames []string, actions []string) (strin
 
 	for i, action := range actions {
 		p.debugf("Processing action %d/%d: %s", i+1, len(actions), action)
+
+		// Check if action is a markdown file
+		if strings.HasSuffix(strings.ToLower(action), ".md") {
+			content, err := ioutil.ReadFile(action)
+			if err != nil {
+				return "", fmt.Errorf("failed to read markdown file %s: %w", action, err)
+			}
+			action = string(content)
+			p.debugf("Loaded action content from markdown file: %s", action)
+		}
 
 		inputs := p.handler.GetInputs()
 		if len(inputs) == 0 {
