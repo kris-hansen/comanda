@@ -1,5 +1,5 @@
 
-![robot image](comanda-small.jpg)
+![robot image](../comanda-small.jpg)
 # COMandA Examples
 
 This directory contains various examples demonstrating different capabilities of COMandA. The examples are organized into categories based on their primary functionality.
