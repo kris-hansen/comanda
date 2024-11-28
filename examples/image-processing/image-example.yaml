@@ -1,5 +1,5 @@
 step:
-  input: examples/image.jpeg
+  input: image.jpeg
   model: gpt-4o
   action: "Analyze this screenshot and describe what you see in detail."
   output: STDOUT

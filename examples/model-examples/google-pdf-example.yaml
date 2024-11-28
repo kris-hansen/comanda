@@ -1,6 +1,6 @@
 step_one:
   input:
-    - examples/sample.pdf
+    - ../document-processing/sample.pdf
   model:
     - gemini-1.5-pro
   action:
