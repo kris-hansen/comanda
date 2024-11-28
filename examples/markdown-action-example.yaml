@@ -1,5 +1,0 @@
-step1:
-  input: examples/test.csv
-  model: gpt-4o
-  action: examples/test-action.md
-  output: STDOUT

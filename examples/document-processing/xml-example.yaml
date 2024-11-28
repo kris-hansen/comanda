@@ -1,6 +1,6 @@
 # Example showing XML file processing
 process_xml:
-  input: examples/input.xml
+  input: input.xml
   model: gpt-4o-mini
   action: "Extract customer names from the XML data"
-  output: examples/output.xml
+  output: output.xml

@@ -1,5 +1,5 @@
 step_one:
-    input: examples/main-example.py
+    input: main-example.py
     # Use a model that's good at code analysis
     model: gpt-4o-mini
     # Ask for specific analysis of the code
@@ -10,4 +10,4 @@ step_one:
       3. Identification of any potential bugs or issues
       4. Would this code run or compile as is?
     # Save the analysis to a file
-    output: examples/code-analysis.txt
+    output: code-analysis.txt

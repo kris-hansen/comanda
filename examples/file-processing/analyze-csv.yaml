@@ -1,7 +1,7 @@
 # This example shows how to use csv as input and requires the openai provider to be configured
 # and the gpt-4o-mini model to be available.
 step_one:
-  input: examples/test.csv
+  input: test.csv
   model: gpt-4o-mini
   action: "Analyze this CSV data and provide a summary of its contents."
   output: STDOUT

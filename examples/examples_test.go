@@ -2,6 +2,7 @@ package examples
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -9,18 +10,31 @@ import (
 )
 
 func TestYAMLFiles(t *testing.T) {
-	files, err := os.ReadDir(".")
-	if err != nil {
-		t.Fatalf("Failed to read examples directory: %v", err)
+	// Directories to check for YAML files
+	dirs := []string{
+		".",
+		"model-examples",
+		"file-processing",
+		"web-scraping",
+		"document-processing",
+		"image-processing",
 	}
 
 	yamlCount := 0
-	for _, file := range files {
-		if !file.IsDir() && strings.HasSuffix(file.Name(), ".yaml") {
-			yamlCount++
-			t.Run(file.Name(), func(t *testing.T) {
-				validateYAMLFile(t, file.Name())
-			})
+	for _, dir := range dirs {
+		files, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatalf("Failed to read directory %s: %v", dir, err)
+		}
+
+		for _, file := range files {
+			if !file.IsDir() && strings.HasSuffix(file.Name(), ".yaml") {
+				yamlCount++
+				filePath := filepath.Join(dir, file.Name())
+				t.Run(filePath, func(t *testing.T) {
+					validateYAMLFile(t, filePath)
+				})
+			}
 		}
 	}
 
@@ -182,14 +196,35 @@ func validateInputPath(t *testing.T, filename, stepName, input string, outputFil
 }
 
 func validateSingleInputPath(t *testing.T, filename, stepName, input string, outputFiles map[string]bool) {
-	// For local files in examples directory, strip the prefix
-	localPath := input
-	if strings.HasPrefix(input, "examples/") {
-		localPath = strings.TrimPrefix(input, "examples/")
+	// If it's an output from another step, no need to check the file
+	if outputFiles[input] {
+		return
 	}
 
-	// Check if file exists on disk or is an output of another step
-	if _, err := os.Stat(localPath); err != nil && !outputFiles[input] {
+	// Get the directory of the YAML file
+	yamlDir := filepath.Dir(filename)
+
+	// Possible paths to check
+	paths := []string{
+		input,                         // As is
+		filepath.Join(yamlDir, input), // Relative to YAML file
+	}
+
+	// If input starts with "examples/", also check without the prefix
+	if strings.HasPrefix(input, "examples/") {
+		paths = append(paths, strings.TrimPrefix(input, "examples/"))
+	}
+
+	// Check if file exists in any of the possible paths
+	fileExists := false
+	for _, path := range paths {
+		if _, err := os.Stat(path); err == nil {
+			fileExists = true
+			break
+		}
+	}
+
+	if !fileExists {
 		t.Errorf("Step %s in %s references non-existent input file: %s", stepName, filename, input)
 	}
 }

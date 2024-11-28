@@ -4,7 +4,7 @@
 
 step_one:
   input:
-    - examples/sample.pdf
+    - ../document-processing/sample.pdf
   model:
     - claude-3-5-sonnet-20241022
   action:
