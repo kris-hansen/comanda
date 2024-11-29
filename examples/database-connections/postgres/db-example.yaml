@@ -1,24 +1,12 @@
-steps:
-  - name: Read customers
+step_one:
     input:
-      database: mydb
+      database: mydatabase
       sql: SELECT * FROM customers LIMIT 5
-    model: gpt-4o
+    model: NA
     action: analyze
     output: STDOUT
-
-  - name: Insert new customer
-    input: STDIN
-    model: gpt-4o
-    action: generate-sql
-    output:
-      database: mydb
-      sql: INSERT INTO customers (first_name, last_name, email) VALUES ('John', 'Doe', 'john.doe@example.com')
-
-  - name: Read updated customers
-    input:
-      database: mydb
-      sql: SELECT * FROM customers WHERE email = 'john.doe@example.com'
-    model: gpt-4o
-    action: analyze
+step_two:
+    input: STDIN as $customers
+    model: gpt-4o-mini
+    action: what do these customers have in common? $customers
     output: STDOUT

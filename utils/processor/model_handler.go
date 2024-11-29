@@ -13,6 +13,12 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 		return fmt.Errorf("no model specified")
 	}
 
+	// Special case: if the only model is "NA", skip validation
+	if len(modelNames) == 1 && modelNames[0] == "NA" {
+		p.debugf("Model is NA, skipping provider validation")
+		return nil
+	}
+
 	p.debugf("Validating %d model(s)", len(modelNames))
 	for _, modelName := range modelNames {
 		p.debugf("Detecting provider for model: %s", modelName)
@@ -118,6 +124,11 @@ func (p *Processor) configureProviders() error {
 
 // GetModelProvider returns the provider for the specified model
 func (p *Processor) GetModelProvider(modelName string) models.Provider {
+	// Special case: if model is "NA", return nil since no provider is needed
+	if modelName == "NA" {
+		return nil
+	}
+
 	provider := models.DetectProvider(modelName)
 	if provider == nil {
 		return nil
