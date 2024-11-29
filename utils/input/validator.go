@@ -87,8 +87,13 @@ func NewValidator(additionalExtensions []string) *Validator {
 
 // ValidatePath checks if the path is valid
 func (v *Validator) ValidatePath(path string) error {
-	// Special case for screenshot input
+	// Special cases
 	if path == "screenshot" {
+		return nil
+	}
+
+	// Handle STDIN input with variable assignment
+	if strings.HasPrefix(path, "STDIN") {
 		return nil
 	}
 
@@ -101,8 +106,13 @@ func (v *Validator) ValidatePath(path string) error {
 
 // ValidateFileExtension checks if the file has an allowed extension
 func (v *Validator) ValidateFileExtension(path string) error {
-	// Special case for screenshot input
+	// Special cases
 	if path == "screenshot" {
+		return nil
+	}
+
+	// Handle STDIN input with variable assignment
+	if strings.HasPrefix(path, "STDIN") {
 		return nil
 	}
 

@@ -1,0 +1,17 @@
+step_one:
+  input:
+    - examples/example_filename.txt
+  model:
+    - gpt-4o-mini
+  action:
+    - analyze these customers and output a JSON array of their names
+  output:
+    - STDOUT
+
+step_two:
+  input: STDIN as $customers
+  model:
+    - gpt-4o-mini
+  action: what do these customers have in common? $customers
+  output:
+    - STDOUT

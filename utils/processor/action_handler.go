@@ -20,6 +20,22 @@ func (p *Processor) processActions(modelNames []string, actions []string) (strin
 	// For now, use the first model specified
 	modelName := modelNames[0]
 
+	// Special case: if model is NA, return the input content directly
+	if modelName == "NA" {
+		inputs := p.handler.GetInputs()
+		if len(inputs) == 0 {
+			// If there are no inputs, return empty string since there's no content to process
+			return "", nil
+		}
+
+		// For NA model, concatenate all input contents
+		var contents []string
+		for _, inputItem := range inputs {
+			contents = append(contents, string(inputItem.Contents))
+		}
+		return strings.Join(contents, "\n"), nil
+	}
+
 	// Get provider by detecting it from the model name
 	provider := models.DetectProvider(modelName)
 	if provider == nil {

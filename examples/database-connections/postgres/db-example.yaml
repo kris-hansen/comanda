@@ -1,0 +1,12 @@
+step_one:
+    input:
+      database: mydatabase
+      sql: SELECT * FROM customers LIMIT 5
+    model: NA
+    action: analyze
+    output: STDOUT
+step_two:
+    input: STDIN as $customers
+    model: gpt-4o-mini
+    action: what do these customers have in common? $customers
+    output: STDOUT

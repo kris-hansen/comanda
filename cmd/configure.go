@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/kris-hansen/comanda/utils/config"
+	"github.com/kris-hansen/comanda/utils/database"
 	openai "github.com/sashabaranov/go-openai"
 	"github.com/spf13/cobra"
 )
@@ -25,7 +26,11 @@ var (
 	decryptFlag   bool
 	removeFlag    string
 	updateKeyFlag string
+	databaseFlag  bool
 )
+
+// Green checkmark for successful operations
+const greenCheckmark = "\u2705"
 
 type OllamaModel struct {
 	Name    string `json:"name"`
@@ -128,6 +133,68 @@ func validatePassword(password string) error {
 	if len(password) < 6 {
 		return fmt.Errorf("password must be at least 6 characters long")
 	}
+	return nil
+}
+
+func configureDatabase(reader *bufio.Reader, envConfig *config.EnvConfig) error {
+	fmt.Print("Enter database name: ")
+	dbName, _ := reader.ReadString('\n')
+	dbName = strings.TrimSpace(dbName)
+
+	// Create new database config
+	dbConfig := config.DatabaseConfig{
+		Type:     config.PostgreSQL, // Currently only supporting PostgreSQL
+		Database: dbName,            // Use the same name for both config and connection
+	}
+
+	// Get database connection details
+	fmt.Print("Enter database host (default: localhost): ")
+	host, _ := reader.ReadString('\n')
+	host = strings.TrimSpace(host)
+	if host == "" {
+		host = "localhost"
+	}
+	dbConfig.Host = host
+
+	fmt.Print("Enter database port (default: 5432): ")
+	portStr, _ := reader.ReadString('\n')
+	portStr = strings.TrimSpace(portStr)
+	if portStr == "" {
+		dbConfig.Port = 5432
+	} else {
+		port, err := strconv.Atoi(portStr)
+		if err != nil {
+			return fmt.Errorf("invalid port number: %v", err)
+		}
+		dbConfig.Port = port
+	}
+
+	fmt.Print("Enter database user: ")
+	user, _ := reader.ReadString('\n')
+	dbConfig.User = strings.TrimSpace(user)
+
+	// Use secure password prompt
+	password, err := config.PromptPassword("Enter database password: ")
+	if err != nil {
+		return fmt.Errorf("error reading password: %v", err)
+	}
+	dbConfig.Password = password
+
+	// Add database configuration
+	envConfig.AddDatabase(dbName, dbConfig)
+
+	// Ask if user wants to test the connection
+	fmt.Print("Would you like to test the database connection? (y/n): ")
+	testConn, _ := reader.ReadString('\n')
+	if strings.TrimSpace(strings.ToLower(testConn)) == "y" {
+		// Create a database handler and test the connection
+		dbHandler := database.NewHandler(envConfig)
+		if err := dbHandler.TestConnection(dbName); err != nil {
+			return fmt.Errorf("connection test failed: %v", err)
+		}
+		fmt.Printf("%s Database connection successful!\n", greenCheckmark)
+	}
+
 	return nil
 }
 
@@ -466,6 +533,12 @@ var configureCmd = &cobra.Command{
 				fmt.Printf("Error configuring server: %v\n", err)
 				return
 			}
+		} else if databaseFlag {
+			reader := bufio.NewReader(os.Stdin)
+			if err := configureDatabase(reader, envConfig); err != nil {
+				fmt.Printf("Error configuring database: %v\n", err)
+				return
+			}
 		} else {
 			reader := bufio.NewReader(os.Stdin)
 			// Prompt for provider
@@ -658,6 +731,20 @@ func listConfiguration() {
 		fmt.Println()
 	}
 
+	// List databases if they exist
+	if len(envConfig.Databases) > 0 {
+		fmt.Println("Database Configurations:")
+		for name, db := range envConfig.Databases {
+			fmt.Printf("\n%s:\n", name)
+			fmt.Printf("  Type: %s\n", db.Type)
+			fmt.Printf("  Host: %s\n", db.Host)
+			fmt.Printf("  Port: %d\n", db.Port)
+			fmt.Printf("  User: %s\n", db.User)
+			fmt.Printf("  Database: %s\n", db.Database)
+		}
+		fmt.Println()
+	}
+
 	// List providers
 	if len(envConfig.Providers) == 0 {
 		fmt.Println("No providers configured.")
@@ -693,5 +780,6 @@ func init() {
 	configureCmd.Flags().BoolVar(&decryptFlag, "decrypt", false, "Decrypt the configuration file")
 	configureCmd.Flags().StringVar(&removeFlag, "remove", "", "Remove a model by name")
 	configureCmd.Flags().StringVar(&updateKeyFlag, "update-key", "", "Update API key for specified provider")
+	configureCmd.Flags().BoolVar(&databaseFlag, "database", false, "Configure database settings")
 	rootCmd.AddCommand(configureCmd)
 }

@@ -239,7 +239,7 @@ func isSpecialInput(input string) bool {
 
 	// Check if input is a special type
 	for _, special := range specialInputs {
-		if input == special {
+		if input == special || strings.HasPrefix(input, "STDIN as $") {
 			return true
 		}
 	}
