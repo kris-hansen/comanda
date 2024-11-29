@@ -17,7 +17,7 @@ type Processor struct {
 	envConfig  *config.EnvConfig
 	handler    *input.Handler
 	validator  *input.Validator
-	providers  map[string]models.Provider // Key is provider name, not model name
+	providers  map[string]models.Provider
 	verbose    bool
 	lastOutput string
 	spinner    *Spinner
@@ -119,8 +119,18 @@ func (p *Processor) Process() error {
 		var inputs []string
 		switch v := step.Config.Input.(type) {
 		case map[string]interface{}:
-			// Handle scraping configuration
-			if url, ok := v["url"].(string); ok {
+			// Check for database input
+			if _, hasDB := v["database"]; hasDB {
+				p.spinner.Stop()
+				p.spinner.Start("Processing database input")
+				if err := p.handleDatabaseInput(v); err != nil {
+					p.spinner.Stop()
+					return fmt.Errorf("failed to process database input: %w", err)
+				}
+				inputs = []string{"NA"} // Skip regular input processing
+				p.spinner.Stop()
+			} else if url, ok := v["url"].(string); ok {
+				// Handle scraping configuration
 				p.spinner.Stop()
 				p.spinner.Start(fmt.Sprintf("Scraping content from %s", url))
 				if err := p.handler.ProcessScrape(url, v); err != nil {
@@ -226,14 +236,34 @@ func (p *Processor) Process() error {
 		p.lastOutput = response
 
 		// Handle output for this step
-		outputs := p.NormalizeStringSlice(step.Config.Output)
 		p.spinner.Start("Handling output")
-		if err := p.handleOutput(modelNames[0], response, outputs); err != nil {
-			p.spinner.Stop()
-			err = fmt.Errorf("output handling error in step %s: %w", step.Name, err)
-			fmt.Printf("Error: %v\n", err)
-			return err
+
+		// Handle output based on type
+		var handled bool
+		switch v := step.Config.Output.(type) {
+		case map[string]interface{}:
+			if _, hasDB := v["database"]; hasDB {
+				if err := p.handleDatabaseOutput(response, v); err != nil {
+					p.spinner.Stop()
+					err = fmt.Errorf("database output error in step %s: %w", step.Name, err)
+					fmt.Printf("Error: %v\n", err)
+					return err
+				}
+				handled = true
+			}
 		}
+
+		// Handle regular output if not already handled
+		if !handled {
+			outputs := p.NormalizeStringSlice(step.Config.Output)
+			if err := p.handleOutput(modelNames[0], response, outputs); err != nil {
+				p.spinner.Stop()
+				err = fmt.Errorf("output handling error in step %s: %w", step.Name, err)
+				fmt.Printf("Error: %v\n", err)
+				return err
+			}
+		}
+
 		p.spinner.Stop()
 
 		// Clear the handler's contents for the next step

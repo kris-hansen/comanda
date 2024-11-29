@@ -1,10 +1,23 @@
-
 ![robot image](../comanda-small.jpg)
 # COMandA Examples
 
 This directory contains various examples demonstrating different capabilities of COMandA. The examples are organized into categories based on their primary functionality.
 
 ## Categories
+
+### Database Connections (`database-connections/`)
+Examples demonstrating database integration:
+- `db-example.yaml` - Database read/write operations
+- `simpledb.sql` - Sample database schema and data
+- Supporting files: `Dockerfile` for test environment
+
+To start up the docker container for testing the database examples, run the following commands (after installing Docker)
+```bash
+cd examples/database-connections/postgres
+docker build -t comanda-postgres .
+docker run -d -p 5432:5432 comanda-postgres
+```
+
 
 ### Model Examples (`model-examples/`)
 Examples demonstrating integration with different AI models:
@@ -66,11 +79,27 @@ Each example includes comments explaining its functionality and any specific req
    - `file-processing/consolidate-example.yaml` (multi-file processing)
    - `web-scraping/screenshot-example.yaml` (browser interaction)
    - `document-processing/markdown-action-example.yaml` (external action files)
+   - `database-connections/db-example.yaml` (database operations)
 
 3. **Integration Examples**: Show provider-specific features
    - `model-examples/anthropic-pdf-example.yaml` (PDF processing)
    - `model-examples/google-example.yaml` (Google AI integration)
    - `model-examples/xai-example.yaml` (X.AI integration)
+
+4. **Data Examples**: Demonstrate data processing capabilities
+   - 'database-connections/postgres/db-example.yaml' (database operations)
+
+### Test Environment
+
+A Docker environment is provided for testing database operations:
+
+```bash
+cd examples/database-connections/postgres
+docker build -t comanda-postgres .
+docker run -d -p 5432:5432 comanda-postgres
+```
+
+This creates a PostgreSQL database with sample customer and order data.
 
 ## Contributing
 

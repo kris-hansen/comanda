@@ -3,6 +3,8 @@
 
 COMandA is a command-line tool that enables the composition of Large Language Model (LLM) operations using a YAML-based Domain Specific Language (DSL). It simplifies the process of creating and managing agentic workflows composed of downloads, files, text, images, documents, multiple providers and multiple models.
 
+Think of each step in a YAML file as the equivalent of a Lego block. You can chain these blocks together to create more complex structures which can help solve problems.
+
 Create YAML 'recipes' and use `comanda process` to execute the recipe file.
 
 COMandA allows you to use the best provider and model for each step and compose information pipelines that combine the stregths of different LLMs. It supports multiple LLM providers (OpenAI, Anthropic, Google, X.AI, Ollama) and provides extensible DSL capabilities for defining complex information workflows.
@@ -21,6 +23,7 @@ COMandA allows you to use the best provider and model for each step and compose 
 - 🔐 Secure configuration encryption for protecting API keys and secrets
 - 📁 Multi-file input support with content consolidation
 - 📝 Markdown file support for reusable actions (prompts)
+- 🗄️ Database integration for read/write operations for inputs and outputs
 
 ## Installation
 
@@ -161,15 +164,21 @@ When configuring a model that already exists, you'll be prompted to update its m
 Example configuration output:
 
 ``` yaml
-ollama:
-  - llama3.2 (local)
-    Modes: text
+Server Configuration:
+Port: 8080
+Data Directory: data
+Authentication Enabled: false
 
-openai:
-  - gpt-4o-mini (external)
-    Modes: text
-  - gpt-4o (external)
-    Modes: text, vision
+Database Configurations:
+
+mydatabase:
+  Type: postgres
+  Host: localhost
+  Port: 5432
+  User: myuser
+  Database: mydatabase
+
+Configured Providers:
 
 xai:
   - grok-beta (external)
@@ -188,6 +197,24 @@ google:
     Modes: text
   - gemini-1.5-pro (external)
     Modes: text, file, vision
+  - gemini-1.5-flash (external)
+    Modes: text, multi, file
+  - gemini-1.5-flash-8b (external)
+    Modes: text, vision, multi, file
+
+ollama:
+  - llama3.2 (local)
+    Modes: text
+  - llama2 (local)
+    Modes: text
+
+openai:
+  - gpt-4o-mini (external)
+    Modes: text, file
+  - gpt-4o (external)
+    Modes: text, vision
+  - gpt-4o-2024-11-20 (external)
+    Modes: text, vision, multi, file
 ```
 
 ### Server Configuration
@@ -425,206 +452,41 @@ Certainly! Here are some snappy taglines for each of the company names that coul
 5. **Zenith Industries**: "At the Pinnacle of Climate Control Excellence."
 ```
 
+## Database Operations
+
+COMandA supports database operations as input and output in the YAML DSL. Currently, PostgreSQL is supported.
+
+### Database Configuration
+
+Before using database operations, configure your database connection:
+
+```bash
+comanda configure --database
+```
+
+This will prompt for:
+- Database configuration name (used in YAML files)
+- Database type (postgres)
+- Host, port, username, password, database name
+
+### Database Input/Output Format
+
+Reading from a database:
+```yaml
+input:
+  database: mydb  # Database configuration name
+  sql: SELECT * FROM customers LIMIT 5  # Must be SELECT statement
+```
+
+Writing to a database:
+```yaml
+output:
+  database: mydb
+  sql: INSERT INTO customers (first_name, last_name, email) VALUES ('John', 'Doe', 'john.doe@example.com')
+```
+
 ### Example YAML Files
-
-Currently the key tags in the YAML files are `stepname` (can be anything), `input`, `model`, `action`, `output` - CoMandA will parse and process based on these tags.
-
-The project includes several example YAML files demonstrating different use cases:
-
-#### 1. OpenAI Multi-Step Example (openai-example.yaml)
-
-```yaml
-step_one:
-  input:
-    - examples/example_filename.txt
-  model:
-    - gpt-4o-mini
-  action:
-    - look through these company names and identify the top five which seem most likely to be startups
-  output:
-    - STDOUT
-
-step_two:
-  input:
-    - STDIN
-  model:
-    - gpt-4o
-  action:
-    - for each of these company names provide a snappy tagline that would make them stand out
-  output:
-    - STDOUT
-```
-
-This example shows how to chain multiple steps together, where the output of the first step (STDOUT) becomes the input of the second step (STDIN). To run:
-
-```bash
-comanda process examples/openai-example.yaml
-```
-
-#### 2. Image Analysis Example (image-example.yaml)
-
-```yaml
-step:
-  input: examples/image.jpeg
-  model: gpt-4o
-  action: "Analyze this screenshot and describe what you see in detail."
-  output: STDOUT
-```
-
-This example demonstrates how to analyze an image file using a vision-capable model. To run:
-
-```bash
-comanda process examples/image-example.yaml
-```
-
-#### 3. Screenshot Analysis Example (screenshot-example.yaml)
-
-```yaml
-step:
-  input: screenshot
-  model: gpt-4o
-  action: "Analyze this screenshot and describe what you see in detail."
-  output: STDOUT
-```
-
-This example shows how to capture and analyze the current screen state. To run:
-
-```bash
-comanda process examples/screenshot-example.yaml
-```
-
-#### 4. Local Model Example (ollama-example.yaml)
-
-```yaml
-step:
-  input: examples/example_filename.txt
-  model: llama2
-  action: look through these company names and identify the top five which seem most likely in the HVAC business
-  output: STDOUT
-```
-
-This example demonstrates using a local model through Ollama. Make sure you have Ollama installed and the specified model pulled before running:
-
-```bash
-comanda process examples/ollama-example.yaml
-```
-
-#### 5. URL Input Example (url-example.yaml)
-
-```yaml
-scrape_webpage:
-    input: https://example.com
-    model: gpt-4o-mini
-    action: Analyze the scraped content and provide insights
-    output: STDOUT
-    scrape_config:
-        allowed_domains:
-            - example.com
-        headers:
-            Accept: text/html,application/xhtml+xml
-            Accept-Language: en-US,en;q=0.9
-        extract:
-            - title     # Extract page title
-            - text      # Extract text content from paragraphs
-            - links     # Extract URLs from anchor tags
-```
-
-This example shows how to analyze web content with advanced scraping capabilities. The `scrape_config` tag allows you to configure:
-- Domain restrictions with `allowed_domains`
-- Custom HTTP headers
-- Specific elements to extract (title, text content, links)
-
-To run:
-
-```bash
-comanda process examples/url-example.yaml
-```
-
-#### 6. X.AI Example (xai-example.yaml)
-
-```yaml
-step_one:
-  input:
-    - examples/example_filename.txt
-  model:
-    - grok-beta
-  action:
-    - analyze these company names and identify which ones have the strongest brand potential
-  output:
-    - STDOUT
-
-step_two:
-  input:
-    - STDIN
-  model:
-    - grok-beta
-  action:
-    - for each of these companies, suggest a modern social media marketing strategy
-  output:
-    - STDOUT
-```
-
-This example demonstrates using X.AI's grok-beta model. Make sure you have configured your X.AI API key before running:
-
-```bash
-comanda process examples/xai-example.yaml
-```
-
-#### 7. Multi-File Consolidation Example (consolidate-example.yaml)
-
-```yaml
-step_one:
-  input: NA
-  model: gpt-4o-mini
-  action: "write a first paragraph about a snail named Harvey"
-  output: examples/harvey1.txt
-
-step_two:
-  input: NA
-  model: gpt-4o-mini
-  action: "write a second paragraph about a snail named Harvey"
-  output: examples/harvey2.txt
-
-step_three:
-  input: "filenames: examples/harvey1.txt,examples/harvey2.txt"
-  model: gpt-4o-mini
-  action: "Read both files and combine their contents into a single consolidated story"
-  output: examples/consolidated.txt
-```
-
-This example demonstrates the multi-file input feature, where multiple files can be processed together. The special `filenames:` prefix in the input field allows you to specify a comma-separated list of files to be processed as a single input. To run:
-
-```bash
-comanda process examples/consolidate-example.yaml
-```
-
-#### 8. Markdown Action Example (markdown-action-example.yaml)
-
-The action stage of a step can be a markdown file. This allows you to store complex prompts or actions in separate files for better organization and reuse.
-
-```yaml
-step1:
-  input: examples/test.csv
-  model: gpt-4
-  action: examples/test-action.md
-  output: STDOUT
-```
-
-This example demonstrates using a markdown file as an action. Instead of specifying the action directly in the YAML file, you can reference a markdown file that contains the action text. This is particularly useful for:
-- Reusing common actions across multiple steps or files
-- Storing complex prompts in separate files for better organization
-- Version controlling your prompts alongside your code
-- Making actions more maintainable and easier to edit
-
-The contents of test-action.md:
-```markdown
-Analyze this input and provide a detailed summary of its key points and main themes.
-```
-
-To run:
-```bash
-comanda process examples/markdown-action-example.yaml
-```
+Examples can be found in the `examples/` directory. Here is a link to the README for the examples: [examples/README.md](examples/README.md)
 
 ## Project Structure
 

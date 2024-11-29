@@ -26,6 +26,23 @@ const (
 	FileMode   ModelMode = "file" // Added for file handling support
 )
 
+// DatabaseType represents supported database types
+type DatabaseType string
+
+const (
+	PostgreSQL DatabaseType = "postgres"
+)
+
+// DatabaseConfig represents a database connection configuration
+type DatabaseConfig struct {
+	Type     DatabaseType `yaml:"type"`
+	Host     string       `yaml:"host"`
+	Port     int          `yaml:"port"`
+	User     string       `yaml:"user"`
+	Password string       `yaml:"password"`
+	Database string       `yaml:"database"`
+}
+
 // Model represents a single model configuration
 type Model struct {
 	Name  string      `yaml:"name"`
@@ -49,8 +66,9 @@ type ServerConfig struct {
 
 // EnvConfig represents the complete environment configuration
 type EnvConfig struct {
-	Providers map[string]*Provider `yaml:"providers"` // Changed to store pointers to Provider
-	Server    *ServerConfig        `yaml:"server,omitempty"`
+	Providers map[string]*Provider      `yaml:"providers"` // Changed to store pointers to Provider
+	Server    *ServerConfig             `yaml:"server,omitempty"`
+	Databases map[string]DatabaseConfig `yaml:"databases,omitempty"` // Added database configurations
 }
 
 // Verbose indicates whether verbose logging is enabled
@@ -223,6 +241,11 @@ func LoadEnvConfig(path string) (*EnvConfig, error) {
 		}
 	}
 
+	// Initialize databases map if nil
+	if config.Databases == nil {
+		config.Databases = make(map[string]DatabaseConfig)
+	}
+
 	DebugLog("Successfully loaded environment configuration")
 	return &config, nil
 }
@@ -259,6 +282,11 @@ func LoadEncryptedEnvConfig(path string, password string) (*EnvConfig, error) {
 		}
 	}
 
+	// Initialize databases map if nil
+	if config.Databases == nil {
+		config.Databases = make(map[string]DatabaseConfig)
+	}
+
 	return &config, nil
 }
 
@@ -269,6 +297,7 @@ func LoadEnvConfigWithPassword(path string) (*EnvConfig, error) {
 		if os.IsNotExist(err) {
 			return &EnvConfig{
 				Providers: make(map[string]*Provider),
+				Databases: make(map[string]DatabaseConfig),
 			}, nil
 		}
 		return nil, fmt.Errorf("error reading env file: %w", err)
@@ -457,4 +486,37 @@ func (c *EnvConfig) UpdateModelModes(providerName, modelName string, modes []Mod
 	}
 
 	return fmt.Errorf("model %s not found for provider %s", modelName, providerName)
+}
+
+// GetDatabaseConfig retrieves configuration for a specific database
+func (c *EnvConfig) GetDatabaseConfig(name string) (*DatabaseConfig, error) {
+	if c.Databases == nil {
+		return nil, fmt.Errorf("no databases configured")
+	}
+
+	db, exists := c.Databases[name]
+	if !exists {
+		return nil, fmt.Errorf("database %s not found in configuration", name)
+	}
+
+	return &db, nil
+}
+
+// AddDatabase adds or updates a database configuration
+func (c *EnvConfig) AddDatabase(name string, config DatabaseConfig) {
+	if c.Databases == nil {
+		c.Databases = make(map[string]DatabaseConfig)
+	}
+	c.Databases[name] = config
+}
+
+// GetConnectionString returns a connection string for the specified database
+func (c *DatabaseConfig) GetConnectionString() string {
+	switch c.Type {
+	case PostgreSQL:
+		return fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable",
+			c.User, c.Password, c.Host, c.Port, c.Database)
+	default:
+		return ""
+	}
 }
