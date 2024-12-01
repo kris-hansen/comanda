@@ -29,6 +29,14 @@ Examples demonstrating server functionality and STDIN input:
     "http://localhost:8080/process?filename=server-examples/stdin-example.yaml"
   ```
 
+This server example also demonstrates how comanda can be used as part of a comand line data pipe:
+
+```bash
+
+cat text.txt|comanda process stdin-example.yaml
+
+```
+
 ### Database Connections (`database-connections/`)
 Examples demonstrating database integration:
 - `db-example.yaml` - Database read/write operations

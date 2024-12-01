@@ -1,4 +1,5 @@
 ![robot image](comanda-small.jpg)
+
 # COMandA (Chain of Models and Actions)
 
 COMandA is a command-line tool that enables the composition of Large Language Model (LLM) operations using a YAML-based Domain Specific Language (DSL). It simplifies the process of creating and managing agentic workflows composed of downloads, files, text, images, documents, multiple providers and multiple models.
@@ -19,7 +20,7 @@ COMandA allows you to use the best provider and model for each step and compose 
 - 🕷️ Advanced web scraping capabilities with configurable options
 - 🛠️ Extensible DSL for defining complex workflows
 - ⚡ Efficient processing of LLM chains
-- 🔒 HTTP server mode with bearer token authentication
+- 🔒 HTTP server mode: use it as a multi-LLM workflow wrapper
 - 🔐 Secure configuration encryption for protecting API keys and secrets
 - 📁 Multi-file input support with content consolidation
 - 📝 Markdown file support for reusable actions (prompts)
