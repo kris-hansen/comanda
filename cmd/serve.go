@@ -124,16 +124,39 @@ func checkAuth(serverConfig *config.ServerConfig, w http.ResponseWriter, r *http
 }
 
 // hasStdinInput checks if the first step in the YAML uses STDIN as input
-func hasStdinInput(config *processor.DSLConfig) bool {
-	if len(config.Steps) == 0 {
+func hasStdinInput(yamlContent []byte) bool {
+	// Parse YAML as a map to handle top-level keys as steps
+	var yamlMap map[string]map[string]interface{}
+	if err := yaml.Unmarshal(yamlContent, &yamlMap); err != nil {
 		return false
 	}
 
-	firstStep := config.Steps[0]
+	// Find the first step and check its input
+	var firstStep map[string]interface{}
+	var firstStepName string
+	for name, step := range yamlMap {
+		if firstStep == nil || name < firstStepName { // Use alphabetical order to determine first step
+			firstStep = step
+			firstStepName = name
+		}
+	}
 
-	// Check if input is a string and equals "STDIN"
-	if inputStr, ok := firstStep.Config.Input.(string); ok {
-		return inputStr == "STDIN"
+	if firstStep == nil {
+		return false
+	}
+
+	// Check if the first step's input is STDIN
+	if input, ok := firstStep["input"]; ok {
+		switch v := input.(type) {
+		case string:
+			return strings.EqualFold(v, "STDIN")
+		case []interface{}:
+			if len(v) > 0 {
+				if str, ok := v[0].(string); ok {
+					return strings.EqualFold(str, "STDIN")
+				}
+			}
+		}
 	}
 
 	return false
@@ -198,18 +221,13 @@ var serveCmd = &cobra.Command{
 				}
 
 				// Read and parse YAML to check if it accepts POST
-				yamlFile, err := os.ReadFile(file)
+				yamlContent, err := os.ReadFile(file)
 				if err != nil {
 					continue
 				}
 
-				var dslConfig processor.DSLConfig
-				if err := yaml.Unmarshal(yamlFile, &dslConfig); err != nil {
-					continue
-				}
-
 				methods := "GET"
-				if hasStdinInput(&dslConfig) {
+				if hasStdinInput(yamlContent) {
 					methods = "GET,POST"
 				}
 
@@ -277,7 +295,7 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *config.
 	}
 
 	// Read YAML file
-	yamlFile, err := os.ReadFile(filename)
+	yamlContent, err := os.ReadFile(filename)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(ProcessResponse{
@@ -287,24 +305,23 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *config.
 		return
 	}
 
-	// Parse YAML into DSL config
-	var dslConfig processor.DSLConfig
-	err = yaml.Unmarshal(yamlFile, &dslConfig)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(ProcessResponse{
-			Success: false,
-			Error:   fmt.Sprintf("Error parsing YAML file: %v", err),
-		})
-		return
-	}
-
 	// Check if POST is allowed for this YAML
-	if r.Method == http.MethodPost && !hasStdinInput(&dslConfig) {
+	if r.Method == http.MethodPost && !hasStdinInput(yamlContent) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		json.NewEncoder(w).Encode(ProcessResponse{
 			Success: false,
 			Error:   "POST method not allowed for this YAML file (no STDIN input)",
+		})
+		return
+	}
+
+	// Parse YAML into DSL config for processing
+	var dslConfig processor.DSLConfig
+	if err := yaml.Unmarshal(yamlContent, &dslConfig); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ProcessResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Error parsing YAML file: %v", err),
 		})
 		return
 	}
