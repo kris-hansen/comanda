@@ -5,8 +5,8 @@ This directory contains various examples demonstrating different capabilities of
 
 ## Categories
 
-### STDIN and Server Integration
-Examples demonstrating STDIN input and server functionality:
+### Server Examples (`server-examples/`)
+Examples demonstrating server functionality and STDIN input:
 - `stdin-example.yaml` - Shows STDIN input usage with server POST requests
   ```yaml
   # Can be processed via HTTP POST with input string
@@ -20,13 +20,13 @@ Examples demonstrating STDIN input and server functionality:
   Process via server:
   ```bash
   # Using query parameter
-  curl -X POST "http://localhost:8080/process?filename=stdin-example.yaml&input=your text here"
+  curl -X POST "http://localhost:8080/process?filename=server-examples/stdin-example.yaml&input=your text here"
 
   # Using JSON body
   curl -X POST \
     -H "Content-Type: application/json" \
     -d '{"input":"your text here"}' \
-    "http://localhost:8080/process?filename=stdin-example.yaml"
+    "http://localhost:8080/process?filename=server-examples/stdin-example.yaml"
   ```
 
 ### Database Connections (`database-connections/`)
@@ -98,7 +98,7 @@ Each example includes comments explaining its functionality and any specific req
 1. **Basic Examples**: Start with these to understand core functionality
    - `model-examples/openai-example.yaml`
    - `model-examples/ollama-example.yaml`
-   - `stdin-example.yaml` (server POST integration)
+   - `server-examples/stdin-example.yaml` (server POST integration)
 
 2. **Advanced Examples**: Demonstrate more complex features
    - `file-processing/consolidate-example.yaml` (multi-file processing)
@@ -115,7 +115,7 @@ Each example includes comments explaining its functionality and any specific req
    - 'database-connections/postgres/db-example.yaml' (database operations)
 
 5. **Server Examples**: Show HTTP server functionality
-   - `stdin-example.yaml` (POST request with string input)
+   - `server-examples/stdin-example.yaml` (POST request with string input)
    ```bash
    # Check if YAML supports POST
    curl "http://localhost:8080/list"
@@ -124,7 +124,7 @@ Each example includes comments explaining its functionality and any specific req
    curl -X POST \
      -H "Content-Type: application/json" \
      -d '{"input":"analyze this text"}' \
-     "http://localhost:8080/process?filename=stdin-example.yaml"
+     "http://localhost:8080/process?filename=server-examples/stdin-example.yaml"
    ```
 
 ### Test Environment
