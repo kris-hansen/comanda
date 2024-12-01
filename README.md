@@ -27,11 +27,22 @@ COMandA allows you to use the best provider and model for each step and compose 
 
 ## Installation
 
+### Download Pre-built Binary
+
+The easiest way to get started is to download a pre-built binary from the [GitHub Releases page](https://github.com/kris-hansen/comanda/releases). Binaries are available for:
+- Windows (386, amd64)
+- macOS (amd64, arm64)
+- Linux (386, amd64, arm64)
+
+Download the appropriate binary for your system, extract it if needed, and place it somewhere in your system's PATH.
+
+### Install via Go
+
 ```bash
 go install github.com/kris-hansen/comanda@latest
 ```
 
-Or clone and build from source:
+### Build from Source
 
 ```bash
 git clone https://github.com/kris-hansen/comanda.git

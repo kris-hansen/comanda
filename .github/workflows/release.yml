@@ -1,0 +1,91 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Run Tests
+        run: go test -v ./...
+
+      - name: Get latest tag
+        id: get_latest_tag
+        run: |
+          git fetch --tags
+          latest_tag=$(git describe --tags `git rev-list --tags --max-count=1` 2>/dev/null || echo "v0.0.0")
+          echo "LATEST_TAG=$latest_tag" >> $GITHUB_ENV
+
+      - name: Bump version and push tag
+        id: tag_version
+        run: |
+          # Parse the latest version
+          version=${LATEST_TAG#v}
+          IFS='.' read -ra ADDR <<< "$version"
+          major="${ADDR[0]:-0}"
+          minor="${ADDR[1]:-0}"
+          patch="${ADDR[2]:-0}"
+          
+          # Increment patch version
+          patch=$((patch + 1))
+          
+          # Create new version
+          new_version="v$major.$minor.$patch"
+          
+          # Create and push new tag
+          git tag $new_version
+          git push origin $new_version
+          echo "NEW_VERSION=$new_version" >> $GITHUB_ENV
+
+      - name: Build Release Binaries
+        run: |
+          platforms=("windows/amd64" "windows/386" "darwin/amd64" "darwin/arm64" "linux/amd64" "linux/386" "linux/arm64")
+          for platform in "${platforms[@]}"
+          do
+            platform_split=(${platform//\// })
+            GOOS=${platform_split[0]}
+            GOARCH=${platform_split[1]}
+            output_name="comanda-$GOOS-$GOARCH"
+            if [ $GOOS = "windows" ]; then
+              output_name+=".exe"
+            fi
+            
+            echo "Building for $GOOS/$GOARCH..."
+            GOOS=$GOOS GOARCH=$GOARCH go build -o "dist/$output_name" .
+            if [ $? -ne 0 ]; then
+              echo "Error building for $GOOS/$GOARCH"
+              exit 1
+            fi
+          done
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ env.NEW_VERSION }}
+          name: Release ${{ env.NEW_VERSION }}
+          draft: false
+          prerelease: false
+          files: |
+            dist/comanda-windows-amd64.exe
+            dist/comanda-windows-386.exe
+            dist/comanda-darwin-amd64
+            dist/comanda-darwin-arm64
+            dist/comanda-linux-amd64
+            dist/comanda-linux-386
+            dist/comanda-linux-arm64
