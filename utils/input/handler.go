@@ -61,6 +61,16 @@ func NewHandler() *Handler {
 
 // ProcessStdin handles string input as STDIN
 func (h *Handler) ProcessStdin(content string) error {
+	// Check if stdin is available and is a terminal/pipe
+	if _, err := os.Stdin.Stat(); err != nil {
+		return fmt.Errorf("error accessing stdin: %w", err)
+	}
+
+	// Validate that content is not empty
+	if strings.TrimSpace(content) == "" {
+		return fmt.Errorf("stdin content cannot be empty")
+	}
+
 	input := &Input{
 		Path:     "STDIN",
 		Type:     StdinInput,

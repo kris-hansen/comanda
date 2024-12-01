@@ -35,7 +35,7 @@ type HealthResponse struct {
 
 type YAMLFileInfo struct {
 	Name    string `json:"name"`
-	Methods string `json:"methods"` // "GET" or "GET,POST"
+	Methods string `json:"methods"` // "GET" or "POST"
 }
 
 type ListResponse struct {
@@ -228,7 +228,7 @@ var serveCmd = &cobra.Command{
 
 				methods := "GET"
 				if hasStdinInput(yamlContent) {
-					methods = "GET,POST"
+					methods = "POST" // Changed from "GET,POST" to "POST" only
 				}
 
 				fileInfos = append(fileInfos, YAMLFileInfo{
@@ -305,12 +305,25 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *config.
 		return
 	}
 
-	// Check if POST is allowed for this YAML
-	if r.Method == http.MethodPost && !hasStdinInput(yamlContent) {
+	// Check if the YAML requires STDIN input
+	requiresStdin := hasStdinInput(yamlContent)
+
+	// If YAML requires STDIN, only allow POST requests
+	if requiresStdin && r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		json.NewEncoder(w).Encode(ProcessResponse{
 			Success: false,
-			Error:   "POST method not allowed for this YAML file (no STDIN input)",
+			Error:   "This YAML file requires STDIN input and can only be accessed via POST",
+		})
+		return
+	}
+
+	// If YAML doesn't require STDIN, only allow GET requests
+	if !requiresStdin && r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(ProcessResponse{
+			Success: false,
+			Error:   "This YAML file does not accept STDIN input and can only be accessed via GET",
 		})
 		return
 	}
@@ -335,7 +348,7 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *config.
 		stdinInput := r.URL.Query().Get("input")
 
 		// If not in query, check JSON body
-		if stdinInput == "" {
+		if stdinInput == "" && r.Body != nil {
 			var jsonBody struct {
 				Input string `json:"input"`
 			}
