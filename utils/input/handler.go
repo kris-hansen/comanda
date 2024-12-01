@@ -25,7 +25,8 @@ const (
 	ScreenshotInput
 	ImageInput
 	WebScrapeInput
-	SourceCodeInput // Added SourceCodeInput type
+	SourceCodeInput
+	StdinInput // Added StdinInput type
 )
 
 // ScrapeConfig represents the configuration for web scraping
@@ -56,6 +57,18 @@ func NewHandler() *Handler {
 	return &Handler{
 		inputs: make([]*Input, 0),
 	}
+}
+
+// ProcessStdin handles string input as STDIN
+func (h *Handler) ProcessStdin(content string) error {
+	input := &Input{
+		Path:     "STDIN",
+		Type:     StdinInput,
+		Contents: []byte(content),
+		MimeType: "text/plain",
+	}
+	h.inputs = append(h.inputs, input)
+	return nil
 }
 
 // getMimeType returns the appropriate MIME type for a file based on its extension
@@ -422,7 +435,7 @@ func (h *Handler) GetFileContents(path string) ([]byte, error) {
 func (h *Handler) GetAllContents() []byte {
 	var allContents []byte
 	for _, input := range h.inputs {
-		if input.Type == FileInput || input.Type == ScreenshotInput || input.Type == ImageInput || input.Type == SourceCodeInput {
+		if input.Type == FileInput || input.Type == ScreenshotInput || input.Type == ImageInput || input.Type == SourceCodeInput || input.Type == StdinInput {
 			allContents = append(allContents, input.Contents...)
 			allContents = append(allContents, '\n')
 		}

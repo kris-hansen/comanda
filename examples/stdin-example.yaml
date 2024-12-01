@@ -1,0 +1,14 @@
+# Example YAML showing STDIN input usage
+# This YAML can be processed via POST request since it uses STDIN as first input
+
+analyze_text:
+  input: STDIN  # This makes the YAML eligible for POST requests
+  model: gpt-4o
+  action: "Analyze the following text and provide key insights:"
+  output: STDOUT
+
+summarize:
+  input: STDIN  # Takes output from previous step
+  model: gpt-4o-mini
+  action: "Summarize the analysis in 3 bullet points:"
+  output: STDOUT

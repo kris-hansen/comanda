@@ -17,6 +17,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/kris-hansen/comanda/utils/config"
+	"github.com/kris-hansen/comanda/utils/input"
 	"github.com/kris-hansen/comanda/utils/processor"
 )
 
@@ -32,10 +33,15 @@ type HealthResponse struct {
 	Timestamp string `json:"timestamp"`
 }
 
+type YAMLFileInfo struct {
+	Name    string `json:"name"`
+	Methods string `json:"methods"` // "GET" or "GET,POST"
+}
+
 type ListResponse struct {
-	Success bool     `json:"success"`
-	Files   []string `json:"files"`
-	Error   string   `json:"error,omitempty"`
+	Success bool           `json:"success"`
+	Files   []YAMLFileInfo `json:"files"`
+	Error   string         `json:"error,omitempty"`
 }
 
 // responseWriter wraps http.ResponseWriter to capture the status code
@@ -117,6 +123,22 @@ func checkAuth(serverConfig *config.ServerConfig, w http.ResponseWriter, r *http
 	return true
 }
 
+// hasStdinInput checks if the first step in the YAML uses STDIN as input
+func hasStdinInput(config *processor.DSLConfig) bool {
+	if len(config.Steps) == 0 {
+		return false
+	}
+
+	firstStep := config.Steps[0]
+
+	// Check if input is a string and equals "STDIN"
+	if inputStr, ok := firstStep.Config.Input.(string); ok {
+		return inputStr == "STDIN"
+	}
+
+	return false
+}
+
 var serveCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Start HTTP server for processing YAML files",
@@ -168,19 +190,38 @@ var serveCmd = &cobra.Command{
 				return
 			}
 
-			// Convert absolute paths to relative paths
-			var relFiles []string
+			var fileInfos []YAMLFileInfo
 			for _, file := range files {
 				relFile, err := filepath.Rel(serverConfig.DataDir, file)
 				if err != nil {
 					continue
 				}
-				relFiles = append(relFiles, relFile)
+
+				// Read and parse YAML to check if it accepts POST
+				yamlFile, err := os.ReadFile(file)
+				if err != nil {
+					continue
+				}
+
+				var dslConfig processor.DSLConfig
+				if err := yaml.Unmarshal(yamlFile, &dslConfig); err != nil {
+					continue
+				}
+
+				methods := "GET"
+				if hasStdinInput(&dslConfig) {
+					methods = "GET,POST"
+				}
+
+				fileInfos = append(fileInfos, YAMLFileInfo{
+					Name:    relFile,
+					Methods: methods,
+				})
 			}
 
 			json.NewEncoder(w).Encode(ListResponse{
 				Success: true,
-				Files:   relFiles,
+				Files:   fileInfos,
 			})
 		}))
 
@@ -218,16 +259,6 @@ var serveCmd = &cobra.Command{
 
 func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *config.ServerConfig, envConfig *config.EnvConfig) {
 	w.Header().Set("Content-Type", "application/json")
-
-	// Only allow GET requests
-	if r.Method != http.MethodGet {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		json.NewEncoder(w).Encode(ProcessResponse{
-			Success: false,
-			Error:   "Only GET requests are supported",
-		})
-		return
-	}
 
 	// Get filename from query parameters
 	filename := r.URL.Query().Get("filename")
@@ -268,6 +299,54 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *config.
 		return
 	}
 
+	// Check if POST is allowed for this YAML
+	if r.Method == http.MethodPost && !hasStdinInput(&dslConfig) {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(ProcessResponse{
+			Success: false,
+			Error:   "POST method not allowed for this YAML file (no STDIN input)",
+		})
+		return
+	}
+
+	// Create input handler
+	inputHandler := input.NewHandler()
+
+	// Handle POST input if present
+	if r.Method == http.MethodPost {
+		// First check query parameter
+		stdinInput := r.URL.Query().Get("input")
+
+		// If not in query, check JSON body
+		if stdinInput == "" {
+			var jsonBody struct {
+				Input string `json:"input"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&jsonBody); err == nil {
+				stdinInput = jsonBody.Input
+			}
+		}
+
+		if stdinInput == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(ProcessResponse{
+				Success: false,
+				Error:   "POST request requires 'input' query parameter or JSON body with 'input' field",
+			})
+			return
+		}
+
+		// Process STDIN input
+		if err := inputHandler.ProcessStdin(stdinInput); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(ProcessResponse{
+				Success: false,
+				Error:   fmt.Sprintf("Error processing input: %v", err),
+			})
+			return
+		}
+	}
+
 	// Create a buffer to capture output
 	var buf bytes.Buffer
 
@@ -276,7 +355,7 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *config.
 	pipeReader, pipeWriter, _ := os.Pipe()
 	os.Stdout = pipeWriter
 
-	// Create and run processor
+	// Create and run processor with input handler
 	proc := processor.NewProcessor(&dslConfig, envConfig, verbose)
 	err = proc.Process()
 

@@ -251,8 +251,9 @@ The server provides the following endpoints:
 
 ### 1. Process Endpoint
 
-`GET /process` processes a YAML file from the configured data directory:
+`GET /process` processes a YAML file from the configured data directory. For YAML files that use STDIN as their first input, `POST /process` is also supported.
 
+#### GET Request
 ```bash
 # Without authentication
 curl "http://localhost:8080/process?filename=openai-example.yaml"
@@ -260,6 +261,22 @@ curl "http://localhost:8080/process?filename=openai-example.yaml"
 # With authentication (when enabled)
 curl -H "Authorization: Bearer your-token" "http://localhost:8080/process?filename=openai-example.yaml"
 ```
+
+#### POST Request (for YAML files with STDIN input)
+You can provide input either through a query parameter or JSON body:
+
+```bash
+# Using query parameter
+curl -X POST "http://localhost:8080/process?filename=stdin-example.yaml&input=your text here"
+
+# Using JSON body
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"input":"your text here"}' \
+  "http://localhost:8080/process?filename=stdin-example.yaml"
+```
+
+Note: POST requests are only allowed for YAML files where the first step uses "STDIN" as input. The /list endpoint shows which methods (GET or GET,POST) are supported for each YAML file.
 
 Response format:
 ```json
@@ -281,7 +298,7 @@ Error response:
 
 ### 2. List Endpoint
 
-`GET /list` returns a list of YAML files in the configured data directory:
+`GET /list` returns a list of YAML files in the configured data directory, along with their supported HTTP methods:
 
 ```bash
 curl -H "Authorization: Bearer your-token" "http://localhost:8080/list"
@@ -292,12 +309,20 @@ Response format:
 {
   "success": true,
   "files": [
-    "openai-example.yaml",
-    "image-example.yaml",
-    "screenshot-example.yaml"
+    {
+      "name": "openai-example.yaml",
+      "methods": "GET"
+    },
+    {
+      "name": "stdin-example.yaml",
+      "methods": "GET,POST"
+    }
   ]
 }
 ```
+The `methods` field indicates which HTTP methods are supported:
+- `GET`: The YAML file can be processed normally
+- `GET,POST`: The YAML file accepts STDIN string input via POST request
 
 ### 3. Health Check Endpoint
 
