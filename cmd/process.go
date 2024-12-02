@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -33,6 +36,26 @@ var processCmd = &cobra.Command{
 
 		if verbose {
 			fmt.Println("[DEBUG] Environment configuration loaded successfully")
+		}
+
+		// Check if there's data on STDIN
+		stat, _ := os.Stdin.Stat()
+		var stdinData string
+		if (stat.Mode() & os.ModeCharDevice) == 0 {
+			// Read from STDIN
+			reader := bufio.NewReader(os.Stdin)
+			var builder strings.Builder
+			for {
+				input, err := reader.ReadString('\n')
+				if err != nil && err != io.EOF {
+					log.Fatalf("Error reading from STDIN: %v", err)
+				}
+				builder.WriteString(input)
+				if err == io.EOF {
+					break
+				}
+			}
+			stdinData = builder.String()
 		}
 
 		for _, file := range args {
@@ -70,6 +93,11 @@ var processCmd = &cobra.Command{
 				fmt.Printf("[DEBUG] Creating processor for %s\n", file)
 			}
 			proc := processor.NewProcessor(&dslConfig, envConfig, verbose)
+
+			// If we have STDIN data, set it as initial output
+			if stdinData != "" {
+				proc.SetLastOutput(stdinData)
+			}
 
 			// Print configuration summary before processing
 			fmt.Println("\nConfiguration:")

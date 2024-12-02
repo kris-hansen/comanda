@@ -5,6 +5,38 @@ This directory contains various examples demonstrating different capabilities of
 
 ## Categories
 
+### Server Examples (`server-examples/`)
+Examples demonstrating server functionality and STDIN input:
+- `stdin-example.yaml` - Shows STDIN input usage with server POST requests
+  ```yaml
+  # Can be processed via HTTP POST with input string
+  analyze_text:
+    input: STDIN  # Makes YAML eligible for POST requests
+    model: gpt-4o
+    action: "Analyze the following text and provide key insights:"
+    output: STDOUT
+  ```
+
+  Process via server:
+  ```bash
+  # Using query parameter
+  curl -X POST "http://localhost:8080/process?filename=server-examples/stdin-example.yaml&input=your text here"
+
+  # Using JSON body
+  curl -X POST \
+    -H "Content-Type: application/json" \
+    -d '{"input":"your text here"}' \
+    "http://localhost:8080/process?filename=server-examples/stdin-example.yaml"
+  ```
+
+This server example also demonstrates how comanda can be used as part of a comand line data pipe:
+
+```bash
+
+cat text.txt|comanda process stdin-example.yaml
+
+```
+
 ### Database Connections (`database-connections/`)
 Examples demonstrating database integration:
 - `db-example.yaml` - Database read/write operations
@@ -74,6 +106,7 @@ Each example includes comments explaining its functionality and any specific req
 1. **Basic Examples**: Start with these to understand core functionality
    - `model-examples/openai-example.yaml`
    - `model-examples/ollama-example.yaml`
+   - `server-examples/stdin-example.yaml` (server POST integration)
 
 2. **Advanced Examples**: Demonstrate more complex features
    - `file-processing/consolidate-example.yaml` (multi-file processing)
@@ -88,6 +121,19 @@ Each example includes comments explaining its functionality and any specific req
 
 4. **Data Examples**: Demonstrate data processing capabilities
    - 'database-connections/postgres/db-example.yaml' (database operations)
+
+5. **Server Examples**: Show HTTP server functionality
+   - `server-examples/stdin-example.yaml` (POST request with string input)
+   ```bash
+   # Check if YAML supports POST
+   curl "http://localhost:8080/list"
+   
+   # Process with POST if supported
+   curl -X POST \
+     -H "Content-Type: application/json" \
+     -d '{"input":"analyze this text"}' \
+     "http://localhost:8080/process?filename=server-examples/stdin-example.yaml"
+   ```
 
 ### Test Environment
 

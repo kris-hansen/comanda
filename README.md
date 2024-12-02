@@ -1,4 +1,5 @@
 ![robot image](comanda-small.jpg)
+
 # COMandA (Chain of Models and Actions)
 
 COMandA is a command-line tool that enables the composition of Large Language Model (LLM) operations using a YAML-based Domain Specific Language (DSL). It simplifies the process of creating and managing agentic workflows composed of downloads, files, text, images, documents, multiple providers and multiple models.
@@ -19,7 +20,7 @@ COMandA allows you to use the best provider and model for each step and compose 
 - 🕷️ Advanced web scraping capabilities with configurable options
 - 🛠️ Extensible DSL for defining complex workflows
 - ⚡ Efficient processing of LLM chains
-- 🔒 HTTP server mode with bearer token authentication
+- 🔒 HTTP server mode: use it as a multi-LLM workflow wrapper
 - 🔐 Secure configuration encryption for protecting API keys and secrets
 - 📁 Multi-file input support with content consolidation
 - 📝 Markdown file support for reusable actions (prompts)
@@ -27,11 +28,22 @@ COMandA allows you to use the best provider and model for each step and compose 
 
 ## Installation
 
+### Download Pre-built Binary
+
+The easiest way to get started is to download a pre-built binary from the [GitHub Releases page](https://github.com/kris-hansen/comanda/releases). Binaries are available for:
+- Windows (386, amd64)
+- macOS (amd64, arm64)
+- Linux (386, amd64, arm64)
+
+Download the appropriate binary for your system, extract it if needed, and place it somewhere in your system's PATH.
+
+### Install via Go
+
 ```bash
 go install github.com/kris-hansen/comanda@latest
 ```
 
-Or clone and build from source:
+### Build from Source
 
 ```bash
 git clone https://github.com/kris-hansen/comanda.git
@@ -251,8 +263,9 @@ The server provides the following endpoints:
 
 ### 1. Process Endpoint
 
-`GET /process` processes a YAML file from the configured data directory:
+`GET /process` processes a YAML file from the configured data directory. For YAML files that use STDIN as their first input, `POST /process` is also supported.
 
+#### GET Request
 ```bash
 # Without authentication
 curl "http://localhost:8080/process?filename=openai-example.yaml"
@@ -260,6 +273,22 @@ curl "http://localhost:8080/process?filename=openai-example.yaml"
 # With authentication (when enabled)
 curl -H "Authorization: Bearer your-token" "http://localhost:8080/process?filename=openai-example.yaml"
 ```
+
+#### POST Request (for YAML files with STDIN input)
+You can provide input either through a query parameter or JSON body:
+
+```bash
+# Using query parameter
+curl -X POST "http://localhost:8080/process?filename=stdin-example.yaml&input=your text here"
+
+# Using JSON body
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"input":"your text here"}' \
+  "http://localhost:8080/process?filename=stdin-example.yaml"
+```
+
+Note: POST requests are only allowed for YAML files where the first step uses "STDIN" as input. The /list endpoint shows which methods (GET or GET,POST) are supported for each YAML file.
 
 Response format:
 ```json
@@ -281,7 +310,7 @@ Error response:
 
 ### 2. List Endpoint
 
-`GET /list` returns a list of YAML files in the configured data directory:
+`GET /list` returns a list of YAML files in the configured data directory, along with their supported HTTP methods:
 
 ```bash
 curl -H "Authorization: Bearer your-token" "http://localhost:8080/list"
@@ -292,12 +321,20 @@ Response format:
 {
   "success": true,
   "files": [
-    "openai-example.yaml",
-    "image-example.yaml",
-    "screenshot-example.yaml"
+    {
+      "name": "openai-example.yaml",
+      "methods": "GET"
+    },
+    {
+      "name": "stdin-example.yaml",
+      "methods": "GET,POST"
+    }
   ]
 }
 ```
+The `methods` field indicates which HTTP methods are supported:
+- `GET`: The YAML file can be processed normally
+- `GET,POST`: The YAML file accepts STDIN string input via POST request
 
 ### 3. Health Check Endpoint
 

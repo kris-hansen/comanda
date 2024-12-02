@@ -51,6 +51,16 @@ func NewProcessor(config *DSLConfig, envConfig *config.EnvConfig, verbose bool) 
 	return p
 }
 
+// SetLastOutput sets the last output value, useful for initializing with STDIN data
+func (p *Processor) SetLastOutput(output string) {
+	p.lastOutput = output
+}
+
+// LastOutput returns the last output value
+func (p *Processor) LastOutput() string {
+	return p.lastOutput
+}
+
 // debugf prints debug information if verbose mode is enabled
 func (p *Processor) debugf(format string, args ...interface{}) {
 	if p.verbose {
