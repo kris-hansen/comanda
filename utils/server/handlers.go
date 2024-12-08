@@ -13,7 +13,6 @@ import (
 	"sync"
 
 	"github.com/kris-hansen/comanda/utils/config"
-	"github.com/kris-hansen/comanda/utils/input"
 	"github.com/kris-hansen/comanda/utils/processor"
 	"gopkg.in/yaml.v3"
 )
@@ -56,7 +55,7 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerC
 		return
 	}
 
-	// Check if the YAML requires STDIN input
+	// Check if the YAML requires STDIN input using the existing function from auth.go
 	requiresStdin := hasStdinInput(yamlContent)
 	config.DebugLog("YAML STDIN requirement: %v", requiresStdin)
 
@@ -84,9 +83,9 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerC
 		return
 	}
 
-	// First unmarshal into a map to preserve step names
-	var rawConfig map[string]processor.StepConfig
-	if err := yaml.Unmarshal(yamlContent, &rawConfig); err != nil {
+	// Parse YAML using the core processor's DSLConfig
+	var dslConfig processor.DSLConfig
+	if err := yaml.Unmarshal(yamlContent, &dslConfig); err != nil {
 		config.VerboseLog("Error parsing YAML: %v", err)
 		config.DebugLog("YAML parse error: %v", err)
 		w.WriteHeader(http.StatusBadRequest)
@@ -97,18 +96,8 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerC
 		return
 	}
 
-	// Convert map to ordered Steps slice
-	var dslConfig processor.DSLConfig
-	for name, config := range rawConfig {
-		dslConfig.Steps = append(dslConfig.Steps, processor.Step{
-			Name:   name,
-			Config: config,
-		})
-	}
-
-	// Create input handler and processor
-	inputHandler := input.NewHandler()
-	proc := processor.NewProcessor(&dslConfig, envConfig, true) // verbose set to true for server
+	// Create processor instance with validation enabled
+	proc := processor.NewProcessor(&dslConfig, envConfig, true)
 
 	// Handle POST input if present
 	if r.Method == http.MethodPost {
@@ -142,18 +131,6 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerC
 		config.VerboseLog("Processing STDIN input")
 		config.DebugLog("Input length: %d bytes", len(stdinInput))
 
-		// Process STDIN input and set it as the processor's last output
-		if err := inputHandler.ProcessStdin(stdinInput); err != nil {
-			config.VerboseLog("Error processing input: %v", err)
-			config.DebugLog("STDIN processing error: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(ProcessResponse{
-				Success: false,
-				Error:   fmt.Sprintf("Error processing input: %v", err),
-			})
-			return
-		}
-
 		// Set the STDIN input as the processor's last output
 		proc.SetLastOutput(stdinInput)
 	}
@@ -178,7 +155,7 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerC
 
 	config.DebugLog("Starting DSL processing")
 
-	// Run the processor
+	// Run the processor which includes validation
 	err = proc.Process()
 
 	// Create a WaitGroup to ensure we capture all output
