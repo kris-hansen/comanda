@@ -1,4 +1,4 @@
-package cmd
+package server
 
 import (
 	"io"
@@ -64,4 +64,12 @@ func (w *filteringWriter) Write(p []byte) (n int, err error) {
 
 	// This is actual output, write to both
 	return w.output.Write(p)
+}
+
+// ServerConfig holds the configuration for the HTTP server
+type ServerConfig struct {
+	Port        int
+	DataDir     string
+	BearerToken string
+	Enabled     bool
 }

@@ -1,4 +1,4 @@
-package cmd
+package server
 
 import (
 	"bytes"
@@ -18,7 +18,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *config.ServerConfig, envConfig *config.EnvConfig) {
+func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerConfig, envConfig *config.EnvConfig) {
 	w.Header().Set("Content-Type", "application/json")
 
 	// Get filename from query parameters
@@ -108,7 +108,7 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *config.
 
 	// Create input handler and processor
 	inputHandler := input.NewHandler()
-	proc := processor.NewProcessor(&dslConfig, envConfig, verbose)
+	proc := processor.NewProcessor(&dslConfig, envConfig, true) // verbose set to true for server
 
 	// Handle POST input if present
 	if r.Method == http.MethodPost {

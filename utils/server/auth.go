@@ -1,4 +1,4 @@
-package cmd
+package server
 
 import (
 	"encoding/json"
@@ -10,7 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func checkAuth(serverConfig *config.ServerConfig, w http.ResponseWriter, r *http.Request) bool {
+func checkAuth(serverConfig *ServerConfig, w http.ResponseWriter, r *http.Request) bool {
 	if !serverConfig.Enabled {
 		config.VerboseLog("Authentication disabled")
 		config.DebugLog("Auth check skipped: server auth is disabled")
