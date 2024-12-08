@@ -36,14 +36,55 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerC
 	config.VerboseLog("Processing file: %s", filename)
 	config.DebugLog("Starting process request for file: %s", filename)
 
+	// Clean the path to remove any . or .. components
+	cleanPath := filepath.Clean(filename)
+
 	// If filename doesn't start with data directory, prepend it
-	if !strings.HasPrefix(filename, serverConfig.DataDir) {
-		filename = filepath.Join(serverConfig.DataDir, filename)
-		config.DebugLog("Adjusted filename path: %s", filename)
+	if !strings.HasPrefix(cleanPath, serverConfig.DataDir) {
+		cleanPath = filepath.Join(serverConfig.DataDir, cleanPath)
+		config.DebugLog("Adjusted filename path: %s", cleanPath)
+	}
+
+	// Get the relative path between the data directory and the target file
+	relPath, err := filepath.Rel(serverConfig.DataDir, cleanPath)
+	if err != nil {
+		config.VerboseLog("Error validating file path: %v", err)
+		config.DebugLog("Path validation error: %v", err)
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ProcessResponse{
+			Success: false,
+			Error:   "Invalid file path",
+		})
+		return
+	}
+
+	// Check if the relative path tries to escape the data directory
+	if strings.HasPrefix(relPath, "..") || strings.Contains(relPath, "/../") {
+		config.VerboseLog("Attempted directory traversal detected")
+		config.DebugLog("Security violation: attempted path traversal")
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(ProcessResponse{
+			Success: false,
+			Error:   "Invalid file path: attempted directory traversal",
+		})
+		return
+	}
+
+	// Verify the final path exists and is within the data directory
+	finalPath := filepath.Clean(cleanPath)
+	if !strings.HasPrefix(finalPath, filepath.Clean(serverConfig.DataDir)) {
+		config.VerboseLog("File path escapes data directory")
+		config.DebugLog("Security violation: path escapes data directory")
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(ProcessResponse{
+			Success: false,
+			Error:   "Invalid file path: access denied",
+		})
+		return
 	}
 
 	// Read YAML file
-	yamlContent, err := os.ReadFile(filename)
+	yamlContent, err := os.ReadFile(finalPath)
 	if err != nil {
 		config.VerboseLog("Error reading file: %v", err)
 		config.DebugLog("File read error: %v", err)
