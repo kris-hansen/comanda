@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/kris-hansen/comanda/utils/config"
-	"github.com/kris-hansen/comanda/utils/processor"
 	"gopkg.in/yaml.v3"
 )
 
@@ -57,54 +56,93 @@ func checkAuth(serverConfig *ServerConfig, w http.ResponseWriter, r *http.Reques
 	return true
 }
 
-// hasStdinInput checks if the first step in the YAML uses STDIN as input
+// containsStdin checks if a string contains STDIN, handling variable assignments
+func containsStdin(input string) bool {
+	// Split on "as $" to handle variable assignments
+	parts := strings.Split(input, " as $")
+	// Check the first part (before any variable assignment)
+	return strings.EqualFold(strings.TrimSpace(parts[0]), "STDIN")
+}
+
+// hasStdinInput checks if any step in the YAML uses STDIN as input
 func hasStdinInput(yamlContent []byte) bool {
 	config.VerboseLog("Checking YAML for STDIN input requirement")
 
-	// Parse YAML into the same structure used by handleProcess
-	var rawConfig map[string]processor.StepConfig
-	if err := yaml.Unmarshal(yamlContent, &rawConfig); err != nil {
-		config.DebugLog("YAML parse error: %v", err)
-		return false
+	// First try parsing with a Node to preserve comments and formatting
+	var node yaml.Node
+	if err := yaml.Unmarshal(yamlContent, &node); err != nil {
+		config.DebugLog("YAML node parse error: %v", err)
+		// If node parsing fails, try direct string parsing
+		return hasStdinInputFallback(string(yamlContent))
 	}
 
-	// Find the first step alphabetically
-	var firstStepName string
-	var firstStepConfig processor.StepConfig
-	for name, config := range rawConfig {
-		if firstStepName == "" || name < firstStepName {
-			firstStepName = name
-			firstStepConfig = config
+	// Parse YAML into a map to preserve step order
+	var rawConfig map[string]interface{}
+	if err := yaml.Unmarshal(yamlContent, &rawConfig); err != nil {
+		config.DebugLog("YAML map parse error: %v", err)
+		// If map parsing fails, try direct string parsing
+		return hasStdinInputFallback(string(yamlContent))
+	}
+
+	// Check each step's input field
+	for stepName, stepConfig := range rawConfig {
+		config.DebugLog("Checking step: %s", stepName)
+
+		// Convert step to map
+		stepMap, ok := stepConfig.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		// Get input field
+		input, exists := stepMap["input"]
+		if !exists {
+			continue
+		}
+
+		// Check input based on type
+		switch v := input.(type) {
+		case string:
+			if containsStdin(v) {
+				config.DebugLog("Found STDIN input in string format")
+				return true
+			}
+		case []interface{}:
+			// Check all array elements for STDIN
+			for _, item := range v {
+				if str, ok := item.(string); ok && containsStdin(str) {
+					config.DebugLog("Found STDIN input in array format")
+					return true
+				}
+			}
+		case map[string]interface{}:
+			// Handle map type inputs (like database configs)
+			config.DebugLog("Found map input type")
 		}
 	}
 
-	if firstStepName == "" {
-		config.DebugLog("No steps found in YAML content")
-		return false
-	}
+	config.DebugLog("No STDIN input found in YAML")
+	return false
+}
 
-	config.DebugLog("First step name: %s", firstStepName)
+// hasStdinInputFallback is a more lenient fallback parser that looks for STDIN in the raw content
+func hasStdinInputFallback(content string) bool {
+	lines := strings.Split(content, "\n")
+	for _, line := range lines {
+		// Remove comments
+		if idx := strings.Index(line, "#"); idx >= 0 {
+			line = line[:idx]
+		}
 
-	// Handle input field based on its type
-	switch input := firstStepConfig.Input.(type) {
-	case string:
-		isStdin := strings.EqualFold(input, "STDIN")
-		config.DebugLog("Found string input: %s, isStdin=%v", input, isStdin)
-		return isStdin
-	case []interface{}:
-		if len(input) > 0 {
-			if str, ok := input[0].(string); ok {
-				isStdin := strings.EqualFold(str, "STDIN")
-				config.DebugLog("Found array input: %v, isStdin=%v", input, isStdin)
-				return isStdin
+		// Look for input: STDIN pattern
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(strings.ToLower(line), "input:") {
+			value := strings.TrimSpace(strings.TrimPrefix(strings.ToLower(line), "input:"))
+			if strings.HasPrefix(value, "stdin") {
+				config.DebugLog("Found STDIN input using fallback parser")
+				return true
 			}
 		}
-	case map[string]interface{}:
-		config.DebugLog("Found map input: %v", input)
-		return false
-	default:
-		config.DebugLog("Input field has unexpected type: %T", input)
 	}
-
 	return false
 }
