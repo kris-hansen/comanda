@@ -3,9 +3,9 @@ package models
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
+	"github.com/kris-hansen/comanda/utils/fileutil"
 	openai "github.com/sashabaranov/go-openai"
 )
 
@@ -139,8 +139,8 @@ func (o *OpenAIProvider) SendPromptWithFile(modelName string, prompt string, fil
 		return "", fmt.Errorf("invalid OpenAI model: %s", modelName)
 	}
 
-	// Read the file content
-	fileData, err := os.ReadFile(file.Path)
+	// Read the file content with size check
+	fileData, err := fileutil.SafeReadFile(file.Path)
 	if err != nil {
 		return "", fmt.Errorf("failed to read file: %v", err)
 	}

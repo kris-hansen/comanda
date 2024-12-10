@@ -2,9 +2,9 @@ package processor
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
+	"github.com/kris-hansen/comanda/utils/fileutil"
 	"github.com/kris-hansen/comanda/utils/input"
 	"github.com/kris-hansen/comanda/utils/models"
 	"github.com/kris-hansen/comanda/utils/scraper"
@@ -55,7 +55,7 @@ func (p *Processor) processActions(modelNames []string, actions []string) (strin
 
 		// Check if action is a markdown file
 		if strings.HasSuffix(strings.ToLower(action), ".md") {
-			content, err := os.ReadFile(action)
+			content, err := fileutil.SafeReadFile(action)
 			if err != nil {
 				return "", fmt.Errorf("failed to read markdown file %s: %w", action, err)
 			}
@@ -123,7 +123,7 @@ func (p *Processor) processActions(modelNames []string, actions []string) (strin
 			// For multiple files, combine them into a single prompt
 			var combinedPrompt string
 			for i, file := range fileInputs {
-				content, err := os.ReadFile(file.Path)
+				content, err := fileutil.SafeReadFile(file.Path)
 				if err != nil {
 					return "", fmt.Errorf("failed to read file %s: %w", file.Path, err)
 				}

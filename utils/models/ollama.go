@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
+
+	"github.com/kris-hansen/comanda/utils/fileutil"
 )
 
 // OllamaProvider handles Ollama family of models
@@ -135,8 +136,8 @@ func (o *OllamaProvider) SendPromptWithFile(modelName string, prompt string, fil
 	o.debugf("Preparing to send prompt with file to model: %s", modelName)
 	o.debugf("File path: %s", file.Path)
 
-	// Read the file content
-	fileData, err := os.ReadFile(file.Path)
+	// Read the file content with size check
+	fileData, err := fileutil.SafeReadFile(file.Path)
 	if err != nil {
 		return "", fmt.Errorf("failed to read file: %v", err)
 	}

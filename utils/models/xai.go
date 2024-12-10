@@ -3,10 +3,10 @@ package models
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
+	"github.com/kris-hansen/comanda/utils/fileutil"
 	openai "github.com/sashabaranov/go-openai"
 )
 
@@ -162,8 +162,8 @@ func (x *XAIProvider) SendPromptWithFile(modelName string, prompt string, file F
 		return "", fmt.Errorf("invalid X.AI model: %s", modelName)
 	}
 
-	// Read the file content
-	fileData, err := os.ReadFile(file.Path)
+	// Read the file content with size check
+	fileData, err := fileutil.SafeReadFile(file.Path)
 	if err != nil {
 		return "", fmt.Errorf("failed to read file: %v", err)
 	}

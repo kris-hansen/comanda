@@ -7,8 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
+
+	"github.com/kris-hansen/comanda/utils/fileutil"
 )
 
 // AnthropicProvider handles Anthropic family of models
@@ -192,8 +193,8 @@ func (a *AnthropicProvider) SendPromptWithFile(modelName string, prompt string, 
 		return "", fmt.Errorf("invalid Anthropic model: %s", modelName)
 	}
 
-	// Read the file content
-	fileData, err := os.ReadFile(file.Path)
+	// Read the file content with size check
+	fileData, err := fileutil.SafeReadFile(file.Path)
 	if err != nil {
 		return "", fmt.Errorf("failed to read file: %v", err)
 	}

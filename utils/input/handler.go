@@ -7,12 +7,12 @@ import (
 	"image"
 	_ "image/jpeg" // Register JPEG format
 	"image/png"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/kbinani/screenshot"
+	"github.com/kris-hansen/comanda/utils/fileutil"
 	"golang.org/x/image/draw"
 )
 
@@ -260,7 +260,7 @@ func (h *Handler) ProcessScrape(url string, config map[string]interface{}) error
 
 // processFile handles single file input
 func (h *Handler) processFile(path string) error {
-	contents, err := ioutil.ReadFile(path)
+	contents, err := fileutil.SafeReadFile(path)
 	if err != nil {
 		return fmt.Errorf("error reading file %s: %w", path, err)
 	}
@@ -277,7 +277,7 @@ func (h *Handler) processFile(path string) error {
 
 // processSourceCode handles source code file input
 func (h *Handler) processSourceCode(path string) error {
-	contents, err := ioutil.ReadFile(path)
+	contents, err := fileutil.SafeReadFile(path)
 	if err != nil {
 		return fmt.Errorf("error reading source code file %s: %w", path, err)
 	}
@@ -323,7 +323,7 @@ func (h *Handler) resizeImage(img image.Image) image.Image {
 // processImage handles image file input
 func (h *Handler) processImage(path string) error {
 	// Read the image file
-	imgFile, err := os.Open(path)
+	imgFile, err := fileutil.SafeOpenFile(path)
 	if err != nil {
 		return fmt.Errorf("error opening image %s: %w", path, err)
 	}
@@ -370,7 +370,7 @@ func (h *Handler) processImage(path string) error {
 
 // processDirectory handles directory input
 func (h *Handler) processDirectory(path string) error {
-	files, err := ioutil.ReadDir(path)
+	files, err := os.ReadDir(path)
 	if err != nil {
 		return fmt.Errorf("error reading directory %s: %w", path, err)
 	}
