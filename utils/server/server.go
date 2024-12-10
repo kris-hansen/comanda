@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/kris-hansen/comanda/utils/config"
+	"github.com/kris-hansen/comanda/utils/fileutil"
 )
 
 // New creates a new HTTP server with the given configuration
@@ -76,8 +77,8 @@ func New(envConfig *config.EnvConfig) (*http.Server, error) {
 
 			config.DebugLog("Processing file: %s", relFile)
 
-			// Read and parse YAML to check if it accepts POST
-			yamlContent, err := os.ReadFile(file)
+			// Read and parse YAML with size check
+			yamlContent, err := fileutil.SafeReadFile(file)
 			if err != nil {
 				config.DebugLog("Error reading file %s: %v", file, err)
 				continue

@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/kris-hansen/comanda/utils/config"
+	"github.com/kris-hansen/comanda/utils/fileutil"
 	"github.com/kris-hansen/comanda/utils/processor"
 	"gopkg.in/yaml.v3"
 )
@@ -83,8 +84,8 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerC
 		return
 	}
 
-	// Read YAML file
-	yamlContent, err := os.ReadFile(finalPath)
+	// Read YAML file with size check
+	yamlContent, err := fileutil.SafeReadFile(finalPath)
 	if err != nil {
 		config.VerboseLog("Error reading file: %v", err)
 		config.DebugLog("File read error: %v", err)

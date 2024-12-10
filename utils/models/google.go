@@ -3,10 +3,10 @@ package models
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/google/generative-ai-go/genai"
+	"github.com/kris-hansen/comanda/utils/fileutil"
 	"google.golang.org/api/option"
 )
 
@@ -154,8 +154,8 @@ func (g *GoogleProvider) SendPromptWithFile(modelName string, prompt string, fil
 	}
 	defer client.Close()
 
-	// Read the file content
-	fileData, err := os.ReadFile(file.Path)
+	// Read the file content with size check
+	fileData, err := fileutil.SafeReadFile(file.Path)
 	if err != nil {
 		return "", fmt.Errorf("failed to read file: %v", err)
 	}
