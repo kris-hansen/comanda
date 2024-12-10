@@ -1,5 +1,5 @@
 step1:
-  input: ../file-processing/test.csv
+  input: ../test.csv
   model: gpt-4o
   action: test-action.md
   output: STDOUT

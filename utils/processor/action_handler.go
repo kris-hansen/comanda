@@ -3,7 +3,6 @@ package processor
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/kris-hansen/comanda/utils/input"
@@ -51,8 +50,6 @@ func (p *Processor) processActions(modelNames []string, actions []string) (strin
 	p.debugf("Using model %s with provider %s", modelName, configuredProvider.Name())
 	p.debugf("Processing %d action(s)", len(actions))
 
-	var finalResponse string
-
 	for i, action := range actions {
 		p.debugf("Processing action %d/%d: %s", i+1, len(actions), action)
 
@@ -69,20 +66,20 @@ func (p *Processor) processActions(modelNames []string, actions []string) (strin
 		inputs := p.handler.GetInputs()
 		if len(inputs) == 0 {
 			// If there are no inputs, just send the action directly
-			response, err := configuredProvider.SendPrompt(modelName, action)
-			if err != nil {
-				return "", fmt.Errorf("failed to process action with model %s: %w", modelName, err)
-			}
-			finalResponse = response
-			continue
+			return configuredProvider.SendPrompt(modelName, action)
 		}
 
-		// Handle each input
-		for _, inputItem := range inputs {
-			var response string
-			var err error
+		// Process inputs based on their type
+		var fileInputs []models.FileInput
+		var nonFileInputs []string
 
+		for _, inputItem := range inputs {
 			switch inputItem.Type {
+			case input.FileInput:
+				fileInputs = append(fileInputs, models.FileInput{
+					Path:     inputItem.Path,
+					MimeType: inputItem.MimeType,
+				})
 			case input.WebScrapeInput:
 				// Handle scraping input
 				scraper := scraper.NewScraper()
@@ -107,34 +104,41 @@ func (p *Processor) processActions(modelNames []string, actions []string) (strin
 					return "", fmt.Errorf("failed to scrape URL %s: %w", inputItem.Path, err)
 				}
 
-				// Convert scraped data to string for model processing
+				// Convert scraped data to string
 				scrapedContent := fmt.Sprintf("Title: %s\n\nText Content:\n%s\n\nLinks:\n%s",
 					scrapedData.Title,
 					strings.Join(scrapedData.Text, "\n"),
 					strings.Join(scrapedData.Links, "\n"))
-
-				response, err = configuredProvider.SendPrompt(modelName, fmt.Sprintf("Scraped Content:\n%s\n\nAction: %s", scrapedContent, action))
-			case input.FileInput:
-				fileInput := models.FileInput{
-					Path:     inputItem.Path,
-					MimeType: inputItem.MimeType, // Use MimeType from the input handler
-				}
-				// For multiple files, include the file name in the prompt
-				if len(inputs) > 1 {
-					action = fmt.Sprintf("Processing file %s: %s", filepath.Base(inputItem.Path), action)
-				}
-				response, err = configuredProvider.SendPromptWithFile(modelName, action, fileInput)
+				nonFileInputs = append(nonFileInputs, scrapedContent)
 			default:
-				fullPrompt := fmt.Sprintf("Input:\n%s\nAction: %s", string(inputItem.Contents), action)
-				response, err = configuredProvider.SendPrompt(modelName, fullPrompt)
+				nonFileInputs = append(nonFileInputs, string(inputItem.Contents))
 			}
+		}
 
-			if err != nil {
-				return "", fmt.Errorf("failed to process input %s with model %s: %w", inputItem.Path, modelName, err)
+		// If we have file inputs, use SendPromptWithFile
+		if len(fileInputs) > 0 {
+			if len(fileInputs) == 1 {
+				return configuredProvider.SendPromptWithFile(modelName, action, fileInputs[0])
 			}
-			finalResponse = response
+			// For multiple files, combine them into a single prompt
+			var combinedPrompt string
+			for i, file := range fileInputs {
+				content, err := os.ReadFile(file.Path)
+				if err != nil {
+					return "", fmt.Errorf("failed to read file %s: %w", file.Path, err)
+				}
+				combinedPrompt += fmt.Sprintf("File %d (%s):\n%s\n\n", i+1, file.Path, string(content))
+			}
+			combinedPrompt += fmt.Sprintf("\nAction: %s", action)
+			return configuredProvider.SendPrompt(modelName, combinedPrompt)
+		}
+
+		// If we have non-file inputs, combine them and use SendPrompt
+		if len(nonFileInputs) > 0 {
+			combinedInput := strings.Join(nonFileInputs, "\n\n")
+			return configuredProvider.SendPrompt(modelName, fmt.Sprintf("Input:\n%s\n\nAction: %s", combinedInput, action))
 		}
 	}
 
-	return finalResponse, nil
+	return "", fmt.Errorf("no actions processed")
 }
