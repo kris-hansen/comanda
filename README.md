@@ -75,7 +75,7 @@ To encrypt your configuration:
 comanda configure --encrypt
 ```
 
-You'll be prompted to enter and confirm an encryption password. Once encrypted, all commands that need to access the configuration (process, serve, configure) will prompt for the password.
+You'll be prompted to enter and confirm an encryption password. Once encrypted, all commands that need to access the configuration (process, server, configure) will prompt for the password.
 
 Example workflow:
 ```bash
@@ -231,17 +231,21 @@ openai:
 
 ### Server Configuration
 
-COMandA can run as an HTTP server, allowing you to process chains of models and actions defined in YAML files via HTTP requests. To configure the server:
+COMandA can run as an HTTP server, allowing you to process chains of models and actions defined in YAML files via HTTP requests. The server is managed using the `server` command:
 
 ```bash
-comanda configure --server
-```
+# Start the server
+comanda server
 
-This will prompt you to:
-1. Set the server port (default: 8080)
-2. Set the data directory path (default: data)
-3. Generate a bearer token for authentication
-4. Enable/disable authentication
+# Configure server settings
+comanda server configure        # Interactive configuration
+comanda server show            # Show current configuration
+comanda server port 8080       # Set server port
+comanda server datadir ./data  # Set data directory
+comanda server auth on         # Enable authentication
+comanda server auth off        # Disable authentication
+comanda server newtoken       # Generate new bearer token
+```
 
 The server configuration is stored in your `.env` file alongside provider and model settings:
 
@@ -256,7 +260,7 @@ server:
 To start the server:
 
 ```bash
-comanda serve
+comanda server
 ```
 
 The server provides the following endpoints:
