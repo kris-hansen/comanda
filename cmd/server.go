@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -123,6 +124,44 @@ var updateDataDirCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		dataDir := args[0]
 
+		// Clean and resolve the path
+		absPath, err := filepath.Abs(dataDir)
+		if err != nil {
+			fmt.Printf("Error: Invalid directory path: %v\n", err)
+			return
+		}
+
+		// Check if path is valid for the OS
+		if !filepath.IsAbs(absPath) {
+			fmt.Printf("Error: Path must be absolute: %s\n", absPath)
+			return
+		}
+
+		// Check if parent directory exists and is accessible
+		parentDir := filepath.Dir(absPath)
+		if _, err := os.Stat(parentDir); err != nil {
+			if os.IsNotExist(err) {
+				fmt.Printf("Error: Parent directory does not exist: %s\n", parentDir)
+			} else {
+				fmt.Printf("Error: Cannot access parent directory: %v\n", err)
+			}
+			return
+		}
+
+		// Try to create the directory to verify write permissions
+		if err := os.MkdirAll(absPath, 0755); err != nil {
+			fmt.Printf("Error: Cannot create directory (check permissions): %v\n", err)
+			return
+		}
+
+		// Verify the directory is writable by creating a test file
+		testFile := filepath.Join(absPath, ".write_test")
+		if err := os.WriteFile(testFile, []byte(""), 0644); err != nil {
+			fmt.Printf("Error: Directory is not writable: %v\n", err)
+			return
+		}
+		os.Remove(testFile) // Clean up test file
+
 		configPath := config.GetEnvPath()
 		envConfig, err := config.LoadEnvConfigWithPassword(configPath)
 		if err != nil {
@@ -131,21 +170,15 @@ var updateDataDirCmd = &cobra.Command{
 		}
 
 		serverConfig := envConfig.GetServerConfig()
-		serverConfig.DataDir = dataDir
+		serverConfig.DataDir = absPath
 		envConfig.UpdateServerConfig(*serverConfig)
-
-		// Create data directory if it doesn't exist
-		if err := os.MkdirAll(dataDir, 0755); err != nil {
-			fmt.Printf("Error creating data directory: %v\n", err)
-			return
-		}
 
 		if err := config.SaveEnvConfig(configPath, envConfig); err != nil {
 			fmt.Printf("Error saving configuration: %v\n", err)
 			return
 		}
 
-		fmt.Printf("Data directory updated to %s\n", dataDir)
+		fmt.Printf("Data directory updated to %s\n", absPath)
 	},
 }
 
