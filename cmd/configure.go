@@ -21,7 +21,6 @@ import (
 
 var (
 	listFlag      bool
-	serverFlag    bool
 	encryptFlag   bool
 	decryptFlag   bool
 	removeFlag    string
@@ -195,55 +194,6 @@ func configureDatabase(reader *bufio.Reader, envConfig *config.EnvConfig) error 
 		fmt.Printf("%s Database connection successful!\n", greenCheckmark)
 	}
 
-	return nil
-}
-
-func configureServer(reader *bufio.Reader, envConfig *config.EnvConfig) error {
-	serverConfig := envConfig.GetServerConfig()
-
-	// Prompt for port
-	fmt.Printf("Enter server port (default: %d): ", serverConfig.Port)
-	portStr, _ := reader.ReadString('\n')
-	portStr = strings.TrimSpace(portStr)
-	if portStr != "" {
-		port, err := strconv.Atoi(portStr)
-		if err != nil {
-			return fmt.Errorf("invalid port number: %v", err)
-		}
-		serverConfig.Port = port
-	}
-
-	// Prompt for data directory
-	fmt.Printf("Enter data directory path (default: %s): ", serverConfig.DataDir)
-	dataDir, _ := reader.ReadString('\n')
-	dataDir = strings.TrimSpace(dataDir)
-	if dataDir != "" {
-		serverConfig.DataDir = dataDir
-	}
-
-	// Create data directory if it doesn't exist
-	if err := os.MkdirAll(serverConfig.DataDir, 0755); err != nil {
-		return fmt.Errorf("error creating data directory: %v", err)
-	}
-
-	// Prompt for bearer token generation
-	fmt.Print("Generate new bearer token? (y/n): ")
-	genToken, _ := reader.ReadString('\n')
-	if strings.TrimSpace(strings.ToLower(genToken)) == "y" {
-		token, err := config.GenerateBearerToken()
-		if err != nil {
-			return fmt.Errorf("error generating bearer token: %v", err)
-		}
-		serverConfig.BearerToken = token
-		fmt.Printf("Generated bearer token: %s\n", token)
-	}
-
-	// Prompt for server enable/disable
-	fmt.Print("Enable server authentication? (y/n): ")
-	enableStr, _ := reader.ReadString('\n')
-	serverConfig.Enabled = strings.TrimSpace(strings.ToLower(enableStr)) == "y"
-
-	envConfig.UpdateServerConfig(*serverConfig)
 	return nil
 }
 
@@ -527,12 +477,6 @@ var configureCmd = &cobra.Command{
 				fmt.Printf("Error: %v\n", err)
 				return
 			}
-		} else if serverFlag {
-			reader := bufio.NewReader(os.Stdin)
-			if err := configureServer(reader, envConfig); err != nil {
-				fmt.Printf("Error configuring server: %v\n", err)
-				return
-			}
 		} else if databaseFlag {
 			reader := bufio.NewReader(os.Stdin)
 			if err := configureDatabase(reader, envConfig); err != nil {
@@ -775,7 +719,6 @@ func listConfiguration() {
 
 func init() {
 	configureCmd.Flags().BoolVar(&listFlag, "list", false, "List all configured providers and models")
-	configureCmd.Flags().BoolVar(&serverFlag, "server", false, "Configure server settings")
 	configureCmd.Flags().BoolVar(&encryptFlag, "encrypt", false, "Encrypt the configuration file")
 	configureCmd.Flags().BoolVar(&decryptFlag, "decrypt", false, "Decrypt the configuration file")
 	configureCmd.Flags().StringVar(&removeFlag, "remove", "", "Remove a model by name")
