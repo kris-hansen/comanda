@@ -12,7 +12,7 @@ step_two:
   input:
     - STDIN
   model:
-    - gemini-1.5-flash
+    - gemini-2.0-flash-exp
   action:
     - for each of these company names provide a snappy tagline that would make them stand out
   output:
