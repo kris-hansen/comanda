@@ -2,9 +2,10 @@ package models
 
 // ModelConfig represents configuration options for model calls
 type ModelConfig struct {
-	Temperature float64
-	MaxTokens   int
-	TopP        float64
+	Temperature         float64
+	MaxTokens           int
+	MaxCompletionTokens int
+	TopP                float64
 }
 
 // FileInput represents a file to be processed by the model

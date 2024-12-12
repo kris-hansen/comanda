@@ -12,7 +12,7 @@ step_two:
   input:
     - STDIN
   model:
-    - gpt-4o
+    - o1-mini
   action:
     - for each of these company names provide a snappy tagline that would make them stand out
   output:
