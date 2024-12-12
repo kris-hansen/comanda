@@ -6,8 +6,10 @@ require (
 	github.com/gocolly/colly/v2 v2.1.0
 	github.com/google/generative-ai-go v0.18.0
 	github.com/kbinani/screenshot v0.0.0-20240820160931-a8a2c5d0e191
+	github.com/lib/pq v1.10.9
 	github.com/sashabaranov/go-openai v1.32.3
 	github.com/spf13/cobra v1.8.0
+	github.com/stretchr/testify v1.9.0
 	golang.org/x/image v0.21.0
 	golang.org/x/term v0.25.0
 	google.golang.org/api v0.205.0
@@ -26,6 +28,7 @@ require (
 	github.com/antchfx/htmlquery v1.2.3 // indirect
 	github.com/antchfx/xmlquery v1.3.1 // indirect
 	github.com/antchfx/xpath v1.1.10 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/gen2brain/shm v0.1.1 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
@@ -41,8 +44,8 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jezek/xgb v1.1.1 // indirect
 	github.com/kennygrant/sanitize v1.2.4 // indirect
-	github.com/lib/pq v1.10.9 // indirect
 	github.com/lxn/win v0.0.0-20210218163916-a377121e959e // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/saintfish/chardet v0.0.0-20120816061221-3af4cd4741ca // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/temoto/robotstxt v1.1.1 // indirect

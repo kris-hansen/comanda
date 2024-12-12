@@ -125,9 +125,9 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerC
 		return
 	}
 
-	// Parse YAML using the core processor's DSLConfig
-	var dslConfig processor.DSLConfig
-	if err := yaml.Unmarshal(yamlContent, &dslConfig); err != nil {
+	// First unmarshal into a map to preserve step names (same as CLI)
+	var rawConfig map[string]processor.StepConfig
+	if err := yaml.Unmarshal(yamlContent, &rawConfig); err != nil {
 		config.VerboseLog("Error parsing YAML: %v", err)
 		config.DebugLog("YAML parse error: %v", err)
 		w.WriteHeader(http.StatusBadRequest)
@@ -136,6 +136,15 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerC
 			Error:   fmt.Sprintf("Error parsing YAML file: %v", err),
 		})
 		return
+	}
+
+	// Convert map to ordered Steps slice (same as CLI)
+	var dslConfig processor.DSLConfig
+	for name, config := range rawConfig {
+		dslConfig.Steps = append(dslConfig.Steps, processor.Step{
+			Name:   name,
+			Config: config,
+		})
 	}
 
 	// Create processor instance with validation enabled
