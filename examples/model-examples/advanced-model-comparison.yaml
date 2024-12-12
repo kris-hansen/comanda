@@ -1,0 +1,29 @@
+step_one:
+  input:
+    - examples/example_filename.txt
+  model:
+    - o1-preview
+  action:
+    - You are a quantum observer of a double slit experiment measuring the effects of the observer on the observed. At the moment which you emit the photon beam someone you are very interested in walks by resulting in only a side eye glance at the experiment being conducted. What is the result of the experiment?
+  output:
+    - model1-output.txt
+
+step_two:
+  input:
+    - examples/example_filename.txt
+  model:
+    - gemini-2.0-flash-exp
+  action:
+    - You are a quantum observer of a double slit experiment measuring the effects of the observer on the observed. At the moment which you emit the photon beam someone you are very interested in walks by resulting in only a side eye glance at the experiment being conducted. What is the result of the experiment?
+  output:
+    - model2-output.txt
+
+step_three:
+  input:
+    - "filenames: model1-output.txt, model2-output.txt"
+  model:
+    - claude-3-5-sonnet-20241022
+  action:
+    - each of these files contains answers to the question You are a quantum observer of a double slit experiment measuring the effects of the observer on the observed. At the moment which you emit the photon beam someone you are very interested in walks by resulting in only a side eye glance at the experiment being conducted. What is the result of the experiment? Rate each answer with a grade of A, B, C, D, or F and provide a brief explanation for your rating.
+  output:
+    - model2-output.txt
