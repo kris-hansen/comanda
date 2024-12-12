@@ -44,32 +44,12 @@ func getOpenAIModels(apiKey string) ([]string, error) {
 		return nil, fmt.Errorf("error fetching OpenAI models: %v", err)
 	}
 
-	// Filter for commonly used models and sort them
-	commonModels := []string{
-		"gpt-4-turbo-preview",
-		"gpt-4-vision-preview",
-		"gpt-4",
-		"gpt-3.5-turbo",
-		"gpt-3.5-turbo-16k",
-	}
-
-	// Add any model that starts with gpt- but isn't in our common list
+	var allModels []string
 	for _, model := range models.Models {
-		if strings.HasPrefix(model.ID, "gpt-") {
-			found := false
-			for _, common := range commonModels {
-				if model.ID == common {
-					found = true
-					break
-				}
-			}
-			if !found {
-				commonModels = append(commonModels, model.ID)
-			}
-		}
+		allModels = append(allModels, model.ID)
 	}
 
-	return commonModels, nil
+	return allModels, nil
 }
 
 func getAnthropicModels() []string {
@@ -93,6 +73,7 @@ func getGoogleModels() []string {
 		"gemini-1.5-flash-8b",
 		"gemini-1.5-pro",
 		"gemini-1.0-pro",
+		"gemini-2.0-flash-exp",
 		"text-embedding-004",
 		"aqa",
 	}

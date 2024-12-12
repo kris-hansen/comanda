@@ -71,21 +71,33 @@ var processCmd = &cobra.Command{
 				continue
 			}
 
-			// First unmarshal into a map to preserve step names
-			var rawConfig map[string]processor.StepConfig
-			err = yaml.Unmarshal(yamlFile, &rawConfig)
+			// Parse YAML while preserving order
+			var node yaml.Node
+			err = yaml.Unmarshal(yamlFile, &node)
 			if err != nil {
 				log.Printf("Error parsing YAML file %s: %v\n", file, err)
 				continue
 			}
 
-			// Convert map to ordered Steps slice
+			// Convert YAML nodes to Steps slice preserving order
 			var dslConfig processor.DSLConfig
-			for name, config := range rawConfig {
-				dslConfig.Steps = append(dslConfig.Steps, processor.Step{
-					Name:   name,
-					Config: config,
-				})
+			// The document node should have one child which is the mapping
+			if len(node.Content) > 0 && node.Content[0].Kind == yaml.MappingNode {
+				mapping := node.Content[0]
+				// Each pair of nodes in the mapping represents a key and its value
+				for i := 0; i < len(mapping.Content); i += 2 {
+					name := mapping.Content[i].Value
+					var config processor.StepConfig
+					err = mapping.Content[i+1].Decode(&config)
+					if err != nil {
+						log.Printf("Error decoding step %s in %s: %v\n", name, file, err)
+						continue
+					}
+					dslConfig.Steps = append(dslConfig.Steps, processor.Step{
+						Name:   name,
+						Config: config,
+					})
+				}
 			}
 
 			// Create processor

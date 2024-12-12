@@ -20,9 +20,10 @@ type OpenAIProvider struct {
 func NewOpenAIProvider() *OpenAIProvider {
 	return &OpenAIProvider{
 		config: ModelConfig{
-			Temperature: 0.7,
-			MaxTokens:   2000,
-			TopP:        1.0,
+			Temperature:         0.7,
+			MaxTokens:           2000,
+			MaxCompletionTokens: 2000,
+			TopP:                1.0,
 		},
 	}
 }
@@ -72,6 +73,38 @@ func (o *OpenAIProvider) Configure(apiKey string) error {
 	return nil
 }
 
+// isNewModelSeries checks if the model is part of the newer series (4o or o1)
+func (o *OpenAIProvider) isNewModelSeries(modelName string) bool {
+	modelName = strings.ToLower(modelName)
+	return strings.Contains(modelName, "4o") || strings.HasPrefix(modelName, "o1-")
+}
+
+// createChatCompletionRequest creates a ChatCompletionRequest with the appropriate parameters
+func (o *OpenAIProvider) createChatCompletionRequest(modelName string, messages []openai.ChatCompletionMessage) openai.ChatCompletionRequest {
+	req := openai.ChatCompletionRequest{
+		Model:    modelName,
+		Messages: messages,
+	}
+
+	if o.isNewModelSeries(modelName) {
+		// New model series (4o and o1) have fixed parameters
+		req.MaxCompletionTokens = o.config.MaxCompletionTokens
+		req.Temperature = 1.0
+		req.TopP = 1.0
+		req.PresencePenalty = 0.0
+		req.FrequencyPenalty = 0.0
+		o.debugf("Using fixed parameters for new model series: Temperature=1.0, TopP=1.0, PresencePenalty=0.0, FrequencyPenalty=0.0")
+	} else {
+		// Legacy models use configurable parameters
+		req.MaxTokens = o.config.MaxTokens
+		req.Temperature = float32(o.config.Temperature)
+		req.TopP = float32(o.config.TopP)
+		o.debugf("Using configured parameters for legacy model: Temperature=%.2f, TopP=%.2f", o.config.Temperature, o.config.TopP)
+	}
+
+	return req
+}
+
 // SendPrompt sends a prompt to the specified model and returns the response
 func (o *OpenAIProvider) SendPrompt(modelName string, prompt string) (string, error) {
 	o.debugf("Preparing to send prompt to model: %s", modelName)
@@ -86,8 +119,6 @@ func (o *OpenAIProvider) SendPrompt(modelName string, prompt string) (string, er
 	}
 
 	o.debugf("Model validation passed, preparing API call")
-	o.debugf("Using configuration: Temperature=%.2f, MaxTokens=%d, TopP=%.2f",
-		o.config.Temperature, o.config.MaxTokens, o.config.TopP)
 
 	client := openai.NewClient(o.apiKey)
 
@@ -96,21 +127,15 @@ func (o *OpenAIProvider) SendPrompt(modelName string, prompt string) (string, er
 		return o.handleVisionPrompt(client, prompt, modelName)
 	}
 
-	resp, err := client.CreateChatCompletion(
-		context.Background(),
-		openai.ChatCompletionRequest{
-			Model: modelName,
-			Messages: []openai.ChatCompletionMessage{
-				{
-					Role:    openai.ChatMessageRoleUser,
-					Content: prompt,
-				},
-			},
-			Temperature: float32(o.config.Temperature),
-			MaxTokens:   o.config.MaxTokens,
-			TopP:        float32(o.config.TopP),
+	messages := []openai.ChatCompletionMessage{
+		{
+			Role:    openai.ChatMessageRoleUser,
+			Content: prompt,
 		},
-	)
+	}
+
+	req := o.createChatCompletionRequest(modelName, messages)
+	resp, err := client.CreateChatCompletion(context.Background(), req)
 
 	if err != nil {
 		return "", fmt.Errorf("OpenAI API error: %v", err)
@@ -156,21 +181,15 @@ func (o *OpenAIProvider) SendPromptWithFile(modelName string, prompt string, fil
 	fileContent := string(fileData)
 	combinedPrompt := fmt.Sprintf("File content:\n%s\n\nUser prompt: %s", fileContent, prompt)
 
-	resp, err := client.CreateChatCompletion(
-		context.Background(),
-		openai.ChatCompletionRequest{
-			Model: modelName,
-			Messages: []openai.ChatCompletionMessage{
-				{
-					Role:    openai.ChatMessageRoleUser,
-					Content: combinedPrompt,
-				},
-			},
-			Temperature: float32(o.config.Temperature),
-			MaxTokens:   o.config.MaxTokens,
-			TopP:        float32(o.config.TopP),
+	messages := []openai.ChatCompletionMessage{
+		{
+			Role:    openai.ChatMessageRoleUser,
+			Content: combinedPrompt,
 		},
-	)
+	}
+
+	req := o.createChatCompletionRequest(modelName, messages)
+	resp, err := client.CreateChatCompletion(context.Background(), req)
 
 	if err != nil {
 		return "", fmt.Errorf("OpenAI API error: %v", err)
@@ -205,19 +224,15 @@ func (o *OpenAIProvider) handleFileAsVision(client *openai.Client, prompt string
 		},
 	}
 
-	resp, err := client.CreateChatCompletion(
-		context.Background(),
-		openai.ChatCompletionRequest{
-			Model: modelName,
-			Messages: []openai.ChatCompletionMessage{
-				{
-					Role:         openai.ChatMessageRoleUser,
-					MultiContent: content,
-				},
-			},
-			MaxTokens: o.config.MaxTokens,
+	messages := []openai.ChatCompletionMessage{
+		{
+			Role:         openai.ChatMessageRoleUser,
+			MultiContent: content,
 		},
-	)
+	}
+
+	req := o.createChatCompletionRequest(modelName, messages)
+	resp, err := client.CreateChatCompletion(context.Background(), req)
 
 	if err != nil {
 		return "", fmt.Errorf("OpenAI Vision API error: %v", err)
@@ -269,19 +284,15 @@ func (o *OpenAIProvider) handleVisionPrompt(client *openai.Client, prompt string
 		},
 	}
 
-	resp, err := client.CreateChatCompletion(
-		context.Background(),
-		openai.ChatCompletionRequest{
-			Model: modelName,
-			Messages: []openai.ChatCompletionMessage{
-				{
-					Role:         openai.ChatMessageRoleUser,
-					MultiContent: content,
-				},
-			},
-			MaxTokens: o.config.MaxTokens,
+	messages := []openai.ChatCompletionMessage{
+		{
+			Role:         openai.ChatMessageRoleUser,
+			MultiContent: content,
 		},
-	)
+	}
+
+	req := o.createChatCompletionRequest(modelName, messages)
+	resp, err := client.CreateChatCompletion(context.Background(), req)
 
 	if err != nil {
 		return "", fmt.Errorf("OpenAI Vision API error: %v", err)
@@ -302,11 +313,11 @@ func (o *OpenAIProvider) ValidateModel(modelName string) bool {
 // SetConfig updates the provider configuration
 func (o *OpenAIProvider) SetConfig(config ModelConfig) {
 	o.debugf("Updating provider configuration")
-	o.debugf("Old config: Temperature=%.2f, MaxTokens=%d, TopP=%.2f",
-		o.config.Temperature, o.config.MaxTokens, o.config.TopP)
+	o.debugf("Old config: Temperature=%.2f, MaxTokens=%d, MaxCompletionTokens=%d, TopP=%.2f",
+		o.config.Temperature, o.config.MaxTokens, o.config.MaxCompletionTokens, o.config.TopP)
 	o.config = config
-	o.debugf("New config: Temperature=%.2f, MaxTokens=%d, TopP=%.2f",
-		o.config.Temperature, o.config.MaxTokens, o.config.TopP)
+	o.debugf("New config: Temperature=%.2f, MaxTokens=%d, MaxCompletionTokens=%d, TopP=%.2f",
+		o.config.Temperature, o.config.MaxTokens, o.config.MaxCompletionTokens, o.config.TopP)
 }
 
 // GetConfig returns the current provider configuration
