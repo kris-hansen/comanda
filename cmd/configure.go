@@ -51,6 +51,8 @@ func getOpenAIModels(apiKey string) ([]string, error) {
 		"gpt-4",
 		"gpt-3.5-turbo",
 		"gpt-3.5-turbo-16k",
+		"o1-mini",
+		"o1-preview",
 	}
 
 	// Add any model that starts with gpt- but isn't in our common list
@@ -93,6 +95,7 @@ func getGoogleModels() []string {
 		"gemini-1.5-flash-8b",
 		"gemini-1.5-pro",
 		"gemini-1.0-pro",
+		"gemini-2.0-flash-exp",
 		"text-embedding-004",
 		"aqa",
 	}
