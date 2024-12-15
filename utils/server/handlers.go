@@ -97,7 +97,7 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerC
 		return
 	}
 
-	// Check if the YAML requires STDIN input using the existing function from auth.go
+	// Check if the YAML requires STDIN input
 	requiresStdin := hasStdinInput(yamlContent)
 	config.DebugLog("YAML STDIN requirement: %v", requiresStdin)
 

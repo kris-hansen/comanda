@@ -6,11 +6,86 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/kris-hansen/comanda/utils/config"
-	"github.com/kris-hansen/comanda/utils/fileutil"
 )
+
+// Server represents the HTTP server
+type Server struct {
+	mux       *http.ServeMux
+	config    *ServerConfig
+	envConfig *config.EnvConfig
+}
+
+// validatePath ensures a path is relative and within the data directory
+func (s *Server) validatePath(path string) (string, error) {
+	// Handle empty path by using default filename
+	if path == "" || path == "." {
+		path = "file.txt"
+	}
+
+	// Initial validation before any path manipulation
+	if filepath.IsAbs(path) {
+		return "", fmt.Errorf("absolute paths are not allowed")
+	}
+
+	// Normalize path separators to forward slashes for consistent checking
+	normalizedPath := filepath.ToSlash(path)
+
+	// Check for various path traversal patterns
+	traversalPatterns := []string{
+		"../", "/..", "../", "..\\", "\\..",
+		"/../", "\\..\\", "/../../", "\\..\\..\\",
+	}
+	for _, pattern := range traversalPatterns {
+		if strings.Contains(normalizedPath, pattern) {
+			return "", fmt.Errorf("path attempts to escape data directory")
+		}
+	}
+
+	// Get absolute path of data directory
+	absDataDir, err := filepath.Abs(s.config.DataDir)
+	if err != nil {
+		return "", fmt.Errorf("invalid data directory path")
+	}
+
+	// Join with data directory and clean the path
+	fullPath := filepath.Clean(filepath.Join(s.config.DataDir, path))
+
+	// Get absolute path of the target file
+	absPath, err := filepath.Abs(fullPath)
+	if err != nil {
+		return "", fmt.Errorf("invalid path")
+	}
+
+	// Check if the path is within the data directory
+	if !strings.HasPrefix(absPath, absDataDir+string(os.PathSeparator)) {
+		return "", fmt.Errorf("path attempts to escape data directory")
+	}
+
+	// Check if the path is the data directory itself
+	if absPath == absDataDir {
+		return "", fmt.Errorf("invalid path")
+	}
+
+	// Get relative path and check for traversal attempts
+	relPath, err := filepath.Rel(s.config.DataDir, fullPath)
+	if err != nil {
+		return "", fmt.Errorf("invalid path")
+	}
+
+	// Check each path component
+	components := strings.Split(filepath.ToSlash(relPath), "/")
+	for _, comp := range components {
+		if comp == ".." || comp == "." || strings.Contains(comp, "..") {
+			return "", fmt.Errorf("path attempts to escape data directory")
+		}
+	}
+
+	return fullPath, nil
+}
 
 // New creates a new HTTP server with the given configuration
 func New(envConfig *config.EnvConfig) (*http.Server, error) {
@@ -33,10 +108,30 @@ func New(envConfig *config.EnvConfig) (*http.Server, error) {
 		Enabled:     serverConfig.Enabled,
 	}
 
-	mux := http.NewServeMux()
+	s := &Server{
+		mux:       http.NewServeMux(),
+		config:    srvConfig,
+		envConfig: envConfig,
+	}
 
+	// Register routes
+	s.routes()
+
+	server := &http.Server{
+		Addr:         fmt.Sprintf(":%d", srvConfig.Port),
+		Handler:      s.mux,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 120 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+
+	return server, nil
+}
+
+// routes sets up the server routes
+func (s *Server) routes() {
 	// Health check endpoint
-	mux.HandleFunc("/health", logRequest(func(w http.ResponseWriter, r *http.Request) {
+	s.mux.HandleFunc("/health", logRequest(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(HealthResponse{
 			Status:    "ok",
@@ -44,83 +139,63 @@ func New(envConfig *config.EnvConfig) (*http.Server, error) {
 		})
 	}))
 
-	// List files endpoint
-	mux.HandleFunc("/list", logRequest(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+	// File operations
+	s.mux.HandleFunc("/list", logRequest(s.handleListFiles))
+	s.mux.HandleFunc("/files", logRequest(s.handleFileOperation))
+	s.mux.HandleFunc("/files/bulk", logRequest(s.handleBulkFileOperation))
+	s.mux.HandleFunc("/files/backup", logRequest(s.handleFileBackup))
+	s.mux.HandleFunc("/files/restore", logRequest(s.handleFileRestore))
 
-		if !checkAuth(srvConfig, w, r) {
-			return
-		}
-
-		config.VerboseLog("Listing files in data directory")
-		config.DebugLog("Scanning directory: %s", srvConfig.DataDir)
-
-		files, err := filepath.Glob(filepath.Join(srvConfig.DataDir, "*.yaml"))
-		if err != nil {
-			config.VerboseLog("Error listing files: %v", err)
-			config.DebugLog("Glob error: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(ListResponse{
-				Success: false,
-				Error:   fmt.Sprintf("Error listing files: %v", err),
-			})
-			return
-		}
-
-		var fileInfos []YAMLFileInfo
-		for _, file := range files {
-			relFile, err := filepath.Rel(srvConfig.DataDir, file)
-			if err != nil {
-				config.DebugLog("Error getting relative path for %s: %v", file, err)
-				continue
-			}
-
-			config.DebugLog("Processing file: %s", relFile)
-
-			// Read and parse YAML with size check
-			yamlContent, err := fileutil.SafeReadFile(file)
-			if err != nil {
-				config.DebugLog("Error reading file %s: %v", file, err)
-				continue
-			}
-
-			methods := "GET"
-			if hasStdinInput(yamlContent) {
-				methods = "POST"
-			}
-
-			fileInfos = append(fileInfos, YAMLFileInfo{
-				Name:    relFile,
-				Methods: methods,
+	// Provider operations
+	s.mux.HandleFunc("/providers", logRequest(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			s.handleGetProviders(w, r)
+		case http.MethodPut:
+			s.handleUpdateProvider(w, r)
+		case http.MethodDelete:
+			s.handleDeleteProvider(w, r)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			json.NewEncoder(w).Encode(map[string]string{
+				"error": "Method not allowed",
 			})
 		}
+	}))
 
-		config.VerboseLog("Found %d YAML files", len(fileInfos))
-		config.DebugLog("File list complete: %v", fileInfos)
+	// Provider validation
+	s.mux.HandleFunc("/providers/validate", logRequest(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		s.handleValidateProvider(w, r)
+	}))
 
-		json.NewEncoder(w).Encode(ListResponse{
-			Success: true,
-			Files:   fileInfos,
-		})
+	// Environment operations
+	s.mux.HandleFunc("/env/encrypt", logRequest(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		s.handleEncryptEnv(w, r)
+	}))
+
+	s.mux.HandleFunc("/env/decrypt", logRequest(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		s.handleDecryptEnv(w, r)
 	}))
 
 	// Process endpoint
-	mux.HandleFunc("/process", logRequest(func(w http.ResponseWriter, r *http.Request) {
-		if !checkAuth(srvConfig, w, r) {
+	s.mux.HandleFunc("/process", logRequest(func(w http.ResponseWriter, r *http.Request) {
+		if !checkAuth(s.config, w, r) {
 			return
 		}
-		handleProcess(w, r, srvConfig, envConfig)
+		handleProcess(w, r, s.config, s.envConfig)
 	}))
-
-	server := &http.Server{
-		Addr:         fmt.Sprintf(":%d", srvConfig.Port),
-		Handler:      mux,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 120 * time.Second,
-		IdleTimeout:  120 * time.Second,
-	}
-
-	return server, nil
 }
 
 // Run creates and starts the HTTP server with the given configuration
