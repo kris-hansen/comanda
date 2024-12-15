@@ -1,0 +1,363 @@
+{
+  "info": {
+    "name": "Comanda API",
+    "description": "Collection for testing Comanda server API endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "bearer_token",
+      "value": "your-token-here",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Provider Management",
+      "item": [
+        {
+          "name": "List Providers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/providers",
+              "host": ["{{base_url}}"],
+              "path": ["providers"]
+            }
+          }
+        },
+        {
+          "name": "Update Provider",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"openai\",\n  \"apiKey\": \"your-api-key\",\n  \"models\": [\"gpt-4\", \"gpt-3.5-turbo\"],\n  \"enabled\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/providers",
+              "host": ["{{base_url}}"],
+              "path": ["providers"]
+            }
+          }
+        },
+        {
+          "name": "Delete Provider",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/providers/openai",
+              "host": ["{{base_url}}"],
+              "path": ["providers", "openai"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Environment Security",
+      "item": [
+        {
+          "name": "Encrypt Environment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"your-password\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/env/encrypt",
+              "host": ["{{base_url}}"],
+              "path": ["env", "encrypt"]
+            }
+          }
+        },
+        {
+          "name": "Decrypt Environment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"your-password\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/env/decrypt",
+              "host": ["{{base_url}}"],
+              "path": ["env", "decrypt"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "File Operations",
+      "item": [
+        {
+          "name": "List Files",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/list",
+              "host": ["{{base_url}}"],
+              "path": ["list"]
+            }
+          }
+        },
+        {
+          "name": "Create File",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"example.yaml\",\n  \"content\": \"your file content\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/files",
+              "host": ["{{base_url}}"],
+              "path": ["files"]
+            }
+          }
+        },
+        {
+          "name": "Update File",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"updated content\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/files?path=example.yaml",
+              "host": ["{{base_url}}"],
+              "path": ["files"],
+              "query": [
+                {
+                  "key": "path",
+                  "value": "example.yaml"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete File",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/files?path=example.yaml",
+              "host": ["{{base_url}}"],
+              "path": ["files"],
+              "query": [
+                {
+                  "key": "path",
+                  "value": "example.yaml"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Bulk Create Files",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"files\": [\n    {\n      \"path\": \"example1.yaml\",\n      \"content\": \"content 1\"\n    },\n    {\n      \"path\": \"example2.yaml\",\n      \"content\": \"content 2\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/files/bulk",
+              "host": ["{{base_url}}"],
+              "path": ["files", "bulk"]
+            }
+          }
+        },
+        {
+          "name": "Bulk Update Files",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"files\": [\n    {\n      \"path\": \"example1.yaml\",\n      \"content\": \"updated content 1\"\n    },\n    {\n      \"path\": \"example2.yaml\",\n      \"content\": \"updated content 2\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/files/bulk",
+              "host": ["{{base_url}}"],
+              "path": ["files", "bulk"]
+            }
+          }
+        },
+        {
+          "name": "Bulk Delete Files",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"files\": [\"example1.yaml\", \"example2.yaml\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/files/bulk",
+              "host": ["{{base_url}}"],
+              "path": ["files", "bulk"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Backup Operations",
+      "item": [
+        {
+          "name": "Create Backup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/files/backup",
+              "host": ["{{base_url}}"],
+              "path": ["files", "backup"]
+            }
+          }
+        },
+        {
+          "name": "Restore Backup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"backup\": \"backup-20240321-100000.zip\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/files/restore",
+              "host": ["{{base_url}}"],
+              "path": ["files", "restore"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/kris-hansen/comanda/utils/processor"
-	"gopkg.in/yaml.v3"
 	"github.com/stretchr/testify/assert"
+	"gopkg.in/yaml.v3"
 )
 
 func TestYAMLParsingParity(t *testing.T) {
@@ -51,28 +51,36 @@ summarize:
 	}
 
 	// Verify both methods produce identical results
-	assert.Equal(t, len(cliConfig.Steps), len(serverConfig.Steps), 
+	assert.Equal(t, len(cliConfig.Steps), len(serverConfig.Steps),
 		"CLI and server should parse the same number of steps")
 
-	// Compare each step in detail
-	for i := 0; i < len(cliConfig.Steps); i++ {
-		cliStep := cliConfig.Steps[i]
-		serverStep := serverConfig.Steps[i]
+	// Create maps for easier comparison since order isn't guaranteed
+	cliSteps := make(map[string]processor.Step)
+	serverSteps := make(map[string]processor.Step)
 
-		assert.Equal(t, cliStep.Name, serverStep.Name, 
-			"Step names should match for step %d", i)
-		
+	for _, step := range cliConfig.Steps {
+		cliSteps[step.Name] = step
+	}
+	for _, step := range serverConfig.Steps {
+		serverSteps[step.Name] = step
+	}
+
+	// Compare steps by name
+	for name, cliStep := range cliSteps {
+		serverStep, exists := serverSteps[name]
+		assert.True(t, exists, "Step %s should exist in both configs", name)
+
 		// Compare StepConfig fields
-		assert.Equal(t, cliStep.Config.Input, serverStep.Config.Input, 
-			"Input should match for step %s", cliStep.Name)
-		assert.Equal(t, cliStep.Config.Model, serverStep.Config.Model, 
-			"Model should match for step %s", cliStep.Name)
-		assert.Equal(t, cliStep.Config.Action, serverStep.Config.Action, 
-			"Action should match for step %s", cliStep.Name)
-		assert.Equal(t, cliStep.Config.Output, serverStep.Config.Output, 
-			"Output should match for step %s", cliStep.Name)
-		assert.Equal(t, cliStep.Config.NextAction, serverStep.Config.NextAction, 
-			"NextAction should match for step %s", cliStep.Name)
+		assert.Equal(t, cliStep.Config.Input, serverStep.Config.Input,
+			"Input should match for step %s", name)
+		assert.Equal(t, cliStep.Config.Model, serverStep.Config.Model,
+			"Model should match for step %s", name)
+		assert.Equal(t, cliStep.Config.Action, serverStep.Config.Action,
+			"Action should match for step %s", name)
+		assert.Equal(t, cliStep.Config.Output, serverStep.Config.Output,
+			"Output should match for step %s", name)
+		assert.Equal(t, cliStep.Config.NextAction, serverStep.Config.NextAction,
+			"NextAction should match for step %s", name)
 	}
 
 	// Verify both configs can be processed
@@ -96,9 +104,9 @@ analyze_text:
 	// Try parsing directly into DSLConfig (the old way that caused the bug)
 	var dslConfig processor.DSLConfig
 	err := yaml.Unmarshal(yamlContent, &dslConfig)
-	
+
 	// This should result in a DSLConfig with no steps
 	assert.NoError(t, err, "Parsing should not error")
-	assert.Empty(t, dslConfig.Steps, 
+	assert.Empty(t, dslConfig.Steps,
 		"Direct parsing into DSLConfig should result in no steps due to YAML structure mismatch")
 }

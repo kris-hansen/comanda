@@ -1,0 +1,527 @@
+openapi: 3.0.3
+info:
+  title: Comanda API
+  description: Collection for testing Comanda server API endpoints
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    Success:
+      type: object
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        message:
+          type: string
+      required:
+        - success
+
+    Error:
+      type: object
+      properties:
+        success:
+          type: boolean
+          enum: [false]
+        error:
+          type: string
+      required:
+        - success
+        - error
+
+    Provider:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Provider name (e.g., openai)
+        apiKey:
+          type: string
+          description: Provider API key
+        models:
+          type: array
+          items:
+            type: string
+          description: List of enabled models
+        enabled:
+          type: boolean
+          description: Whether the provider is enabled
+      required:
+        - name
+        - apiKey
+        - models
+        - enabled
+
+    ProviderList:
+      type: object
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        providers:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              models:
+                type: array
+                items:
+                  type: string
+              enabled:
+                type: boolean
+      required:
+        - success
+        - providers
+
+    EncryptionRequest:
+      type: object
+      properties:
+        password:
+          type: string
+          description: Password for encryption/decryption
+      required:
+        - password
+
+    FileOperation:
+      type: object
+      properties:
+        path:
+          type: string
+          description: File path
+        content:
+          type: string
+          description: File content
+      required:
+        - path
+        - content
+
+    FileMetadata:
+      type: object
+      properties:
+        name:
+          type: string
+        path:
+          type: string
+        size:
+          type: integer
+        isDir:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        modifiedAt:
+          type: string
+          format: date-time
+        methods:
+          type: string
+          description: Supported HTTP methods (GET/POST for YAML files)
+      required:
+        - name
+        - path
+        - size
+        - isDir
+        - createdAt
+        - modifiedAt
+
+    FileList:
+      type: object
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileMetadata'
+      required:
+        - success
+        - files
+
+    BulkFileOperation:
+      type: object
+      properties:
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileOperation'
+      required:
+        - files
+
+    BulkFileDelete:
+      type: object
+      properties:
+        files:
+          type: array
+          items:
+            type: string
+          description: List of file paths to delete
+      required:
+        - files
+
+    RestoreBackup:
+      type: object
+      properties:
+        backup:
+          type: string
+          description: Backup file name (e.g., backup-20240321-100000.zip)
+      required:
+        - backup
+
+security:
+  - BearerAuth: []
+
+paths:
+  /providers:
+    get:
+      summary: List Providers
+      responses:
+        '200':
+          description: List of providers retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderList'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      summary: Update Provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Provider'
+            example:
+              name: openai
+              apiKey: your-api-key
+              models: [gpt-4, gpt-3.5-turbo]
+              enabled: true
+      responses:
+        '200':
+          description: Provider updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /providers/{provider_name}:
+    delete:
+      summary: Delete Provider
+      parameters:
+        - name: provider_name
+          in: path
+          required: true
+          schema:
+            type: string
+          example: openai
+      responses:
+        '200':
+          description: Provider deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /env/encrypt:
+    post:
+      summary: Encrypt Environment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncryptionRequest'
+            example:
+              password: your-password
+      responses:
+        '200':
+          description: Environment encrypted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /env/decrypt:
+    post:
+      summary: Decrypt Environment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncryptionRequest'
+            example:
+              password: your-password
+      responses:
+        '200':
+          description: Environment decrypted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /list:
+    get:
+      summary: List Files
+      responses:
+        '200':
+          description: List of files retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileList'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /files:
+    post:
+      summary: Create File
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FileOperation'
+            example:
+              path: example.yaml
+              content: your file content
+      responses:
+        '200':
+          description: File created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      summary: Update File
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+          example: example.yaml
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                  description: Updated file content
+              required:
+                - content
+            example:
+              content: updated content
+      responses:
+        '200':
+          description: File updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Delete File
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+          example: example.yaml
+      responses:
+        '200':
+          description: File deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /files/bulk:
+    post:
+      summary: Bulk Create Files
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkFileOperation'
+            example:
+              files:
+                - path: example1.yaml
+                  content: content 1
+                - path: example2.yaml
+                  content: content 2
+      responses:
+        '200':
+          description: Files created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      summary: Bulk Update Files
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkFileOperation'
+            example:
+              files:
+                - path: example1.yaml
+                  content: updated content 1
+                - path: example2.yaml
+                  content: updated content 2
+      responses:
+        '200':
+          description: Files updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Bulk Delete Files
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkFileDelete'
+            example:
+              files: [example1.yaml, example2.yaml]
+      responses:
+        '200':
+          description: Files deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /files/backup:
+    post:
+      summary: Create Backup
+      responses:
+        '200':
+          description: Backup created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /files/restore:
+    post:
+      summary: Restore Backup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RestoreBackup'
+            example:
+              backup: backup-20240321-100000.zip
+      responses:
+        '200':
+          description: Backup restored successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
