@@ -1,0 +1,19 @@
+step_one:
+  input:
+    - examples/example_filename.txt
+  model:
+    - deepseek-chat
+  action:
+    - analyze this list of company names and identify the three most innovative-sounding ones, explaining why each sounds innovative
+  output:
+    - STDOUT
+
+step_two:
+  input:
+    - STDIN
+  model:
+    - deepseek-chat
+  action:
+    - for each company, suggest a modern tech-focused rebranding that would appeal to a younger demographic
+  output:
+    - STDOUT

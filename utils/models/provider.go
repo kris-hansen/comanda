@@ -37,6 +37,7 @@ func defaultDetectProvider(modelName string) Provider {
 		NewGoogleProvider(),    // Handles gemini- models
 		NewAnthropicProvider(), // Handles claude- models
 		NewXAIProvider(),       // Handles grok- models
+		NewDeepseekProvider(),  // Handles deepseek- models
 		NewOpenAIProvider(),    // Handles gpt- models
 		NewOllamaProvider(),    // Handles remaining models
 	}

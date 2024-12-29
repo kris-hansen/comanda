@@ -67,6 +67,14 @@ func getXAIModels() []string {
 	}
 }
 
+func getDeepseekModels() []string {
+	return []string{
+		"deepseek-chat",
+		"deepseek-coder",
+		"deepseek-vision",
+	}
+}
+
 func getGoogleModels() []string {
 	return []string{
 		"gemini-1.5-flash",
@@ -469,13 +477,13 @@ var configureCmd = &cobra.Command{
 			// Prompt for provider
 			var provider string
 			for {
-				fmt.Print("Enter provider (openai/anthropic/ollama/google/xai): ")
+				fmt.Print("Enter provider (openai/anthropic/ollama/google/xai/deepseek): ")
 				provider, _ = reader.ReadString('\n')
 				provider = strings.TrimSpace(provider)
-				if provider == "openai" || provider == "anthropic" || provider == "ollama" || provider == "google" || provider == "xai" {
+				if provider == "openai" || provider == "anthropic" || provider == "ollama" || provider == "google" || provider == "xai" || provider == "deepseek" {
 					break
 				}
-				fmt.Println("Invalid provider. Please enter 'openai', 'anthropic', 'ollama', 'google', or 'xai'")
+				fmt.Println("Invalid provider. Please enter 'openai', 'anthropic', 'ollama', 'google', 'xai', or 'deepseek'")
 			}
 
 			// Special handling for ollama provider
@@ -542,6 +550,18 @@ var configureCmd = &cobra.Command{
 					return
 				}
 				models := getXAIModels()
+				selectedModels, err = promptForModelSelection(models)
+				if err != nil {
+					fmt.Printf("Error selecting models: %v\n", err)
+					return
+				}
+
+			case "deepseek":
+				if apiKey == "" {
+					fmt.Println("Error: API key is required for Deepseek")
+					return
+				}
+				models := getDeepseekModels()
 				selectedModels, err = promptForModelSelection(models)
 				if err != nil {
 					fmt.Printf("Error selecting models: %v\n", err)

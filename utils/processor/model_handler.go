@@ -99,6 +99,8 @@ func (p *Processor) configureProviders() error {
 			providerConfig, err = p.envConfig.GetProviderConfig("google")
 		case "xai":
 			providerConfig, err = p.envConfig.GetProviderConfig("xai")
+		case "deepseek":
+			providerConfig, err = p.envConfig.GetProviderConfig("deepseek")
 		default:
 			return fmt.Errorf("unknown provider: %s", providerName)
 		}
