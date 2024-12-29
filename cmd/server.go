@@ -80,6 +80,16 @@ var showServerCmd = &cobra.Command{
 		if server.BearerToken != "" {
 			fmt.Printf("Bearer Token: %s\n", server.BearerToken)
 		}
+
+		// Display CORS configuration
+		fmt.Println("\nCORS Configuration:")
+		fmt.Printf("Enabled: %v\n", server.CORS.Enabled)
+		if server.CORS.Enabled {
+			fmt.Printf("Allowed Origins: %s\n", strings.Join(server.CORS.AllowedOrigins, ", "))
+			fmt.Printf("Allowed Methods: %s\n", strings.Join(server.CORS.AllowedMethods, ", "))
+			fmt.Printf("Allowed Headers: %s\n", strings.Join(server.CORS.AllowedHeaders, ", "))
+			fmt.Printf("Max Age: %d seconds\n", server.CORS.MaxAge)
+		}
 		fmt.Println()
 	},
 }
@@ -303,6 +313,106 @@ func configureServer(reader *bufio.Reader, envConfig *config.EnvConfig) error {
 	enableStr, _ := reader.ReadString('\n')
 	serverConfig.Enabled = strings.TrimSpace(strings.ToLower(enableStr)) == "y"
 
+	// Configure CORS settings
+	if err := configureCORS(reader, envConfig); err != nil {
+		return fmt.Errorf("error configuring CORS: %v", err)
+	}
+
+	envConfig.UpdateServerConfig(*serverConfig)
+	return nil
+}
+
+var corsCmd = &cobra.Command{
+	Use:   "cors",
+	Short: "Configure CORS settings",
+	Long:  `Configure Cross-Origin Resource Sharing (CORS) settings for the server`,
+	Run: func(cmd *cobra.Command, args []string) {
+		configPath := config.GetEnvPath()
+		envConfig, err := config.LoadEnvConfigWithPassword(configPath)
+		if err != nil {
+			fmt.Printf("Error loading configuration: %v\n", err)
+			return
+		}
+
+		reader := bufio.NewReader(os.Stdin)
+		if err := configureCORS(reader, envConfig); err != nil {
+			fmt.Printf("Error configuring CORS: %v\n", err)
+			return
+		}
+
+		if err := config.SaveEnvConfig(configPath, envConfig); err != nil {
+			fmt.Printf("Error saving configuration: %v\n", err)
+			return
+		}
+
+		fmt.Println("CORS configuration saved successfully!")
+	},
+}
+
+// configureCORS handles the interactive CORS configuration
+func configureCORS(reader *bufio.Reader, envConfig *config.EnvConfig) error {
+	serverConfig := envConfig.GetServerConfig()
+
+	// Prompt for CORS enable/disable
+	fmt.Print("Enable CORS? (y/n): ")
+	enableStr, _ := reader.ReadString('\n')
+	serverConfig.CORS.Enabled = strings.TrimSpace(strings.ToLower(enableStr)) == "y"
+
+	if serverConfig.CORS.Enabled {
+		// Prompt for allowed origins
+		fmt.Print("Enter allowed origins (comma-separated, * for all, default: *): ")
+		originsStr, _ := reader.ReadString('\n')
+		originsStr = strings.TrimSpace(originsStr)
+		if originsStr != "" && originsStr != "*" {
+			serverConfig.CORS.AllowedOrigins = strings.Split(originsStr, ",")
+			for i := range serverConfig.CORS.AllowedOrigins {
+				serverConfig.CORS.AllowedOrigins[i] = strings.TrimSpace(serverConfig.CORS.AllowedOrigins[i])
+			}
+		} else {
+			serverConfig.CORS.AllowedOrigins = []string{"*"}
+		}
+
+		// Prompt for allowed methods
+		fmt.Print("Enter allowed methods (comma-separated, default: GET,POST,PUT,DELETE,OPTIONS): ")
+		methodsStr, _ := reader.ReadString('\n')
+		methodsStr = strings.TrimSpace(methodsStr)
+		if methodsStr != "" {
+			serverConfig.CORS.AllowedMethods = strings.Split(methodsStr, ",")
+			for i := range serverConfig.CORS.AllowedMethods {
+				serverConfig.CORS.AllowedMethods[i] = strings.TrimSpace(serverConfig.CORS.AllowedMethods[i])
+			}
+		} else {
+			serverConfig.CORS.AllowedMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
+		}
+
+		// Prompt for allowed headers
+		fmt.Print("Enter allowed headers (comma-separated, default: Authorization,Content-Type): ")
+		headersStr, _ := reader.ReadString('\n')
+		headersStr = strings.TrimSpace(headersStr)
+		if headersStr != "" {
+			serverConfig.CORS.AllowedHeaders = strings.Split(headersStr, ",")
+			for i := range serverConfig.CORS.AllowedHeaders {
+				serverConfig.CORS.AllowedHeaders[i] = strings.TrimSpace(serverConfig.CORS.AllowedHeaders[i])
+			}
+		} else {
+			serverConfig.CORS.AllowedHeaders = []string{"Authorization", "Content-Type"}
+		}
+
+		// Prompt for max age
+		fmt.Print("Enter max age in seconds (default: 3600): ")
+		maxAgeStr, _ := reader.ReadString('\n')
+		maxAgeStr = strings.TrimSpace(maxAgeStr)
+		if maxAgeStr != "" {
+			maxAge, err := strconv.Atoi(maxAgeStr)
+			if err != nil {
+				return fmt.Errorf("invalid max age: %v", err)
+			}
+			serverConfig.CORS.MaxAge = maxAge
+		} else {
+			serverConfig.CORS.MaxAge = 3600
+		}
+	}
+
 	envConfig.UpdateServerConfig(*serverConfig)
 	return nil
 }
@@ -314,5 +424,6 @@ func init() {
 	serverCmd.AddCommand(updateDataDirCmd)
 	serverCmd.AddCommand(toggleAuthCmd)
 	serverCmd.AddCommand(newTokenCmd)
+	serverCmd.AddCommand(corsCmd)
 	rootCmd.AddCommand(serverCmd)
 }
