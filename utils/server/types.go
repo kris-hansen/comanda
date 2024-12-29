@@ -7,12 +7,22 @@ import (
 	"time"
 )
 
+// CORSConfig holds CORS-related configuration options
+type CORSConfig struct {
+	AllowedOrigins []string `json:"allowedOrigins"`
+	AllowedMethods []string `json:"allowedMethods"`
+	AllowedHeaders []string `json:"allowedHeaders"`
+	MaxAge         int      `json:"maxAge"`
+	Enabled        bool     `json:"enabled"`
+}
+
 // ServerConfig holds the configuration for the HTTP server
 type ServerConfig struct {
-	Port        int    `json:"port"`
-	DataDir     string `json:"dataDir"`
-	BearerToken string `json:"bearerToken,omitempty"`
-	Enabled     bool   `json:"enabled"`
+	Port        int        `json:"port"`
+	DataDir     string     `json:"dataDir"`
+	BearerToken string     `json:"bearerToken,omitempty"`
+	Enabled     bool       `json:"enabled"`
+	CORS        CORSConfig `json:"cors"`
 }
 
 // ProcessResponse represents the response for process operations

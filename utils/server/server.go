@@ -87,6 +87,66 @@ func (s *Server) validatePath(path string) (string, error) {
 	return fullPath, nil
 }
 
+// handleCORS adds CORS headers based on configuration
+func (s *Server) handleCORS(w http.ResponseWriter) {
+	if !s.config.CORS.Enabled {
+		return
+	}
+
+	// Set allowed origins
+	if len(s.config.CORS.AllowedOrigins) > 0 {
+		origin := strings.Join(s.config.CORS.AllowedOrigins, ", ")
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+	} else {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+	}
+
+	// Set allowed methods
+	if len(s.config.CORS.AllowedMethods) > 0 {
+		methods := strings.Join(s.config.CORS.AllowedMethods, ", ")
+		w.Header().Set("Access-Control-Allow-Methods", methods)
+	} else {
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+	}
+
+	// Set allowed headers
+	if len(s.config.CORS.AllowedHeaders) > 0 {
+		headers := strings.Join(s.config.CORS.AllowedHeaders, ", ")
+		w.Header().Set("Access-Control-Allow-Headers", headers)
+	} else {
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+	}
+
+	// Set max age
+	if s.config.CORS.MaxAge > 0 {
+		w.Header().Set("Access-Control-Max-Age", fmt.Sprintf("%d", s.config.CORS.MaxAge))
+	} else {
+		w.Header().Set("Access-Control-Max-Age", "3600")
+	}
+}
+
+// combinedMiddleware applies middleware in the correct order based on request method
+func (s *Server) combinedMiddleware(handler http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Always set CORS headers first
+		s.handleCORS(w)
+
+		// Handle OPTIONS requests immediately
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		// For non-OPTIONS requests, proceed with logging and auth
+		logRequest(func(w http.ResponseWriter, r *http.Request) {
+			if !checkAuth(s.config, w, r) {
+				return
+			}
+			handler(w, r)
+		})(w, r)
+	}
+}
+
 // New creates a new HTTP server with the given configuration
 func New(envConfig *config.EnvConfig) (*http.Server, error) {
 	// Get server configuration
@@ -100,12 +160,19 @@ func New(envConfig *config.EnvConfig) (*http.Server, error) {
 		return nil, fmt.Errorf("error creating data directory: %v", err)
 	}
 
-	// Convert config.ServerConfig to our internal ServerConfig
+	// Convert config.ServerConfig to our internal ServerConfig with default CORS settings
 	srvConfig := &ServerConfig{
 		Port:        serverConfig.Port,
 		DataDir:     serverConfig.DataDir,
 		BearerToken: serverConfig.BearerToken,
 		Enabled:     serverConfig.Enabled,
+		CORS: CORSConfig{
+			Enabled:        true,
+			AllowedOrigins: []string{"*"},
+			AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+			AllowedHeaders: []string{"Authorization", "Content-Type"},
+			MaxAge:         3600,
+		},
 	}
 
 	s := &Server{
@@ -130,8 +197,8 @@ func New(envConfig *config.EnvConfig) (*http.Server, error) {
 
 // routes sets up the server routes
 func (s *Server) routes() {
-	// Health check endpoint
-	s.mux.HandleFunc("/health", logRequest(func(w http.ResponseWriter, r *http.Request) {
+	// Health check endpoint - no auth required
+	s.mux.HandleFunc("/health", s.combinedMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(HealthResponse{
 			Status:    "ok",
@@ -139,15 +206,15 @@ func (s *Server) routes() {
 		})
 	}))
 
-	// File operations
-	s.mux.HandleFunc("/list", logRequest(s.handleListFiles))
-	s.mux.HandleFunc("/files", logRequest(s.handleFileOperation))
-	s.mux.HandleFunc("/files/bulk", logRequest(s.handleBulkFileOperation))
-	s.mux.HandleFunc("/files/backup", logRequest(s.handleFileBackup))
-	s.mux.HandleFunc("/files/restore", logRequest(s.handleFileRestore))
+	// File operations - require auth
+	s.mux.HandleFunc("/list", s.combinedMiddleware(s.handleListFiles))
+	s.mux.HandleFunc("/files", s.combinedMiddleware(s.handleFileOperation))
+	s.mux.HandleFunc("/files/bulk", s.combinedMiddleware(s.handleBulkFileOperation))
+	s.mux.HandleFunc("/files/backup", s.combinedMiddleware(s.handleFileBackup))
+	s.mux.HandleFunc("/files/restore", s.combinedMiddleware(s.handleFileRestore))
 
-	// Provider operations
-	s.mux.HandleFunc("/providers", logRequest(func(w http.ResponseWriter, r *http.Request) {
+	// Provider operations - require auth
+	s.mux.HandleFunc("/providers", s.combinedMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			s.handleGetProviders(w, r)
@@ -163,8 +230,8 @@ func (s *Server) routes() {
 		}
 	}))
 
-	// Provider validation
-	s.mux.HandleFunc("/providers/validate", logRequest(func(w http.ResponseWriter, r *http.Request) {
+	// Provider validation - requires auth
+	s.mux.HandleFunc("/providers/validate", s.combinedMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
@@ -172,8 +239,8 @@ func (s *Server) routes() {
 		s.handleValidateProvider(w, r)
 	}))
 
-	// Environment operations
-	s.mux.HandleFunc("/env/encrypt", logRequest(func(w http.ResponseWriter, r *http.Request) {
+	// Environment operations - require auth
+	s.mux.HandleFunc("/env/encrypt", s.combinedMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
@@ -181,7 +248,7 @@ func (s *Server) routes() {
 		s.handleEncryptEnv(w, r)
 	}))
 
-	s.mux.HandleFunc("/env/decrypt", logRequest(func(w http.ResponseWriter, r *http.Request) {
+	s.mux.HandleFunc("/env/decrypt", s.combinedMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
@@ -189,11 +256,8 @@ func (s *Server) routes() {
 		s.handleDecryptEnv(w, r)
 	}))
 
-	// Process endpoint
-	s.mux.HandleFunc("/process", logRequest(func(w http.ResponseWriter, r *http.Request) {
-		if !checkAuth(s.config, w, r) {
-			return
-		}
+	// Process endpoint - requires auth
+	s.mux.HandleFunc("/process", s.combinedMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		handleProcess(w, r, s.config, s.envConfig)
 	}))
 }

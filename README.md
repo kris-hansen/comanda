@@ -246,8 +246,26 @@ comanda server port 8080       # Set server port
 comanda server datadir ./data  # Set data directory
 comanda server auth on         # Enable authentication
 comanda server auth off        # Disable authentication
-comanda server newtoken       # Generate new bearer token
+comanda server newtoken        # Generate new bearer token
+comanda server cors            # Configure CORS settings
 ```
+
+The server provides several configuration commands:
+
+- `configure`: Interactive configuration for all server settings including port, data directory, authentication, and CORS
+- `show`: Display current server configuration including CORS settings
+- `port`: Set the server port
+- `datadir`: Set the data directory for YAML files
+- `auth`: Enable/disable authentication
+- `newtoken`: Generate a new bearer token
+- `cors`: Configure CORS settings interactively
+
+The CORS configuration allows you to:
+- Enable/disable CORS headers
+- Set allowed origins (use * for all, or specify domains)
+- Configure allowed HTTP methods
+- Set allowed headers
+- Define max age for preflight requests
 
 The server configuration is stored in your `.env` file alongside provider and model settings:
 
@@ -257,7 +275,20 @@ server:
   data_dir: "examples"  # Directory containing YAML files to process
   bearer_token: "your-generated-token"
   enabled: true  # Whether authentication is required
+  cors:
+    enabled: true  # Enable/disable CORS
+    allowed_origins: ["*"]  # List of allowed origins, ["*"] for all
+    allowed_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]  # List of allowed HTTP methods
+    allowed_headers: ["Authorization", "Content-Type"]  # List of allowed headers
+    max_age: 3600  # Max age for preflight requests in seconds
 ```
+
+The CORS configuration allows you to control Cross-Origin Resource Sharing settings:
+- `enabled`: Enable or disable CORS headers (default: true)
+- `allowed_origins`: List of origins allowed to access the API. Use `["*"]` to allow all origins, or specify domains like `["https://example.com"]`
+- `allowed_methods`: List of HTTP methods allowed for cross-origin requests
+- `allowed_headers`: List of headers allowed in requests
+- `max_age`: How long browsers should cache preflight request results
 
 To start the server:
 
