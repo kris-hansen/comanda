@@ -178,56 +178,60 @@ When configuring a model that already exists, you'll be prompted to update its m
 Example configuration output:
 
 ``` yaml
+Configuration from .env:
+
 Server Configuration:
-Port: 8080
+Port: 8088
 Data Directory: data
-Authentication Enabled: false
-
-Database Configurations:
-
-mydatabase:
-  Type: postgres
-  Host: localhost
-  Port: 5432
-  User: myuser
-  Database: mydatabase
+Authentication Enabled: true
+Bearer Token: <redacted>
 
 Configured Providers:
 
-xai:
-  - grok-beta (external)
-    Modes: text
-
-anthropic:
-  - claude-3-5-sonnet-latest (external)
-    Modes: text, file
-  - claude-3-5-haiku-latest (external)
-    Modes: text, file
-  - claude-3-5-sonnet-20241022 (external)
-    Modes: text, file
-
-google:
-  - gemini-pro (external)
-    Modes: text
-  - gemini-1.5-pro (external)
-    Modes: text, file, vision
-  - gemini-1.5-flash (external)
-    Modes: text, multi, file
-  - gemini-1.5-flash-8b (external)
-    Modes: text, vision, multi, file
-
 ollama:
-  - llama3.2 (local)
-    Modes: text
-  - llama2 (local)
+  - llama2:latest (local)
     Modes: text
 
 openai:
-  - gpt-4o-mini (external)
-    Modes: text, file
+  - gpt-4-turbo-preview (external)
+    Modes: text, vision, multi, file
+  - gpt-4-vision-preview (external)
+    Modes: vision
   - gpt-4o (external)
-    Modes: text, vision
-  - gpt-4o-2024-11-20 (external)
+    Modes: text, vision, multi, file
+  - gpt-4o-mini (external)
+    Modes: text, vision, multi, file
+  - o1-mini (external)
+    Modes: text
+  - o1-preview (external)
+    Modes: text
+
+xai:
+  - grok-beta (external)
+    Modes: text, file
+  - grok-vision-beta (external)
+    Modes: vision
+
+anthropic:
+  - claude-3-5-sonnet-20241022 (external)
+    Modes: text, vision, multi, file
+  - claude-3-5-sonnet-latest (external)
+    Modes: text, vision, multi, file
+  - claude-3-5-haiku-latest (external)
+    Modes: text, vision, multi, file
+
+deepseek:
+  - deepseek-chat (external)
+    Modes: text, vision, multi, file
+
+google:
+  - gemini-1.5-flash (external)
+    Modes: text, vision, multi, file
+  - gemini-1.5-flash-8b (external)
+    Modes: text, vision, multi, file
+  - gemini-1.5-pro (external)
+    Modes: text, vision, multi, file
+  - gemini-2.0-flash-exp (external)
     Modes: text, vision, multi, file
 ```
 
