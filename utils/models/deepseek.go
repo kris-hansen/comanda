@@ -68,13 +68,19 @@ func (d *DeepseekProvider) Configure(apiKey string) error {
 
 // createChatCompletionRequest creates a ChatCompletionRequest with the appropriate parameters
 func (d *DeepseekProvider) createChatCompletionRequest(modelName string, messages []openai.ChatCompletionMessage) openai.ChatCompletionRequest {
-	return openai.ChatCompletionRequest{
-		Model:       modelName,
-		Messages:    messages,
-		MaxTokens:   d.config.MaxTokens,
-		Temperature: float32(d.config.Temperature),
-		TopP:        float32(d.config.TopP),
+	req := openai.ChatCompletionRequest{
+		Model:    modelName,
+		Messages: messages,
 	}
+
+	// deepseek-reasoner doesn't support temperature parameter
+	if !strings.HasSuffix(modelName, "reasoner") {
+		req.MaxTokens = d.config.MaxTokens
+		req.Temperature = float32(d.config.Temperature)
+		req.TopP = float32(d.config.TopP)
+	}
+
+	return req
 }
 
 // SendPrompt sends a prompt to the specified model and returns the response

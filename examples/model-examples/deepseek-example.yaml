@@ -17,3 +17,17 @@ step_two:
     - for each company, suggest a modern tech-focused rebranding that would appeal to a younger demographic
   output:
     - STDOUT
+
+step_three:
+  input:
+    - STDIN
+  model:
+    - deepseek-reasoner
+  action: |
+    analyze the rebranding suggestions from the previous step and:
+    1. Evaluate the logical consistency of each rebranding
+    2. Identify potential market positioning conflicts
+    3. Provide a structured analysis of how each rebrand might affect customer perception
+    4. Recommend which rebrands have the highest probability of success based on current market trends
+  output:
+    - STDOUT
