@@ -72,6 +72,7 @@ func getDeepseekModels() []string {
 		"deepseek-chat",
 		"deepseek-coder",
 		"deepseek-vision",
+		"deepseek-reasoner",
 	}
 }
 
