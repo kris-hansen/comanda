@@ -302,7 +302,80 @@ comanda server
 
 The server provides the following endpoints:
 
-### 1. Process Endpoint
+### 1. File Operations
+
+#### View File Contents
+```bash
+# Get file content as plain text
+curl -H "Authorization: Bearer your-token" \
+     -H "Accept: text/plain" \
+     "http://localhost:8080/files/content?path=example.txt"
+
+# Download binary file
+curl -H "Authorization: Bearer your-token" \
+     -H "Accept: application/octet-stream" \
+     "http://localhost:8080/files/download?path=example.pdf" \
+     --output downloaded_file.pdf
+
+# Upload a file
+curl -X POST \
+     -H "Authorization: Bearer your-token" \
+     -F "file=@/path/to/local/file.txt" \
+     -F "path=destination/file.txt" \
+     "http://localhost:8080/files/upload"
+```
+
+Using JavaScript:
+```javascript
+// Get file content
+async function getFileContent(path) {
+  const response = await fetch(`http://localhost:8080/files/content?path=${encodeURIComponent(path)}`, {
+    headers: {
+      'Authorization': 'Bearer your-token',
+      'Accept': 'text/plain'
+    }
+  });
+  return await response.text();
+}
+
+// Download file
+async function downloadFile(path) {
+  const response = await fetch(`http://localhost:8080/files/download?path=${encodeURIComponent(path)}`, {
+    headers: {
+      'Authorization': 'Bearer your-token',
+      'Accept': 'application/octet-stream'
+    }
+  });
+  const blob = await response.blob();
+  // Create download link
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = path.split('/').pop(); // Use filename from path
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+}
+
+// Upload file
+async function uploadFile(file, path) {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('path', path);
+
+  const response = await fetch('http://localhost:8080/files/upload', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer your-token'
+    },
+    body: formData
+  });
+  return await response.json();
+}
+```
+
+### 2. Process Endpoint
 
 `GET /process` processes a YAML file from the configured data directory. For YAML files that use STDIN as their first input, `POST /process` is also supported.
 

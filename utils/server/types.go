@@ -64,6 +64,14 @@ type FileResponse struct {
 	File    FileInfo `json:"file,omitempty"`
 }
 
+// FileUploadResponse represents a response for file upload operations
+type FileUploadResponse struct {
+	Success bool     `json:"success"`
+	Message string   `json:"message,omitempty"`
+	Error   string   `json:"error,omitempty"`
+	File    FileInfo `json:"file,omitempty"`
+}
+
 // ListResponse represents the response for file listing
 type ListResponse struct {
 	Success bool       `json:"success"`

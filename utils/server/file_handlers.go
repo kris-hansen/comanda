@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -314,6 +315,308 @@ func (s *Server) handleDeleteFile(w http.ResponseWriter, r *http.Request, path s
 		Success: true,
 		Message: "File deleted successfully",
 	})
+}
+
+// handleGetFileContent handles retrieving file content
+func (s *Server) handleGetFileContent(w http.ResponseWriter, r *http.Request) {
+	if !checkAuth(s.config, w, r) {
+		return
+	}
+
+	// Get path from query parameters
+	filePath := r.URL.Query().Get("path")
+	if filePath == "" {
+		config.VerboseLog("Missing path parameter")
+		config.DebugLog("Content request failed: no path provided")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(FileResponse{
+			Success: false,
+			Error:   "path parameter is required",
+		})
+		return
+	}
+
+	config.DebugLog("Processing content request for file: %s", filePath)
+
+	// Validate path
+	fullPath, err := s.validatePath(filePath)
+	if err != nil {
+		config.VerboseLog("Invalid path: %v", err)
+		config.DebugLog("Path validation failed: %v", err)
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(FileResponse{
+			Success: false,
+			Error:   "Invalid file path: access denied",
+		})
+		return
+	}
+
+	config.DebugLog("Validated path: %s", fullPath)
+
+	// Check if file exists and get info
+	fileInfo, err := os.Stat(fullPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			config.VerboseLog("File not found: %s", fullPath)
+			config.DebugLog("File not found at path: %s", fullPath)
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(FileResponse{
+				Success: false,
+				Error:   "File not found",
+			})
+			return
+		}
+		config.VerboseLog("Error accessing file: %v", err)
+		config.DebugLog("File access error: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(FileResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Error accessing file: %v", err),
+		})
+		return
+	}
+
+	// Don't allow directory content retrieval
+	if fileInfo.IsDir() {
+		config.VerboseLog("Cannot retrieve content of directory: %s", fullPath)
+		config.DebugLog("Directory content request rejected: %s", fullPath)
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(FileResponse{
+			Success: false,
+			Error:   "Cannot retrieve content of a directory",
+		})
+		return
+	}
+
+	// Read file content
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		config.VerboseLog("Error reading file: %v", err)
+		config.DebugLog("File read error: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(FileResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Error reading file: %v", err),
+		})
+		return
+	}
+
+	config.DebugLog("Successfully read file content, size: %d bytes", len(content))
+
+	// Set content type header based on file extension
+	contentType := "text/plain"
+	if strings.HasSuffix(fullPath, ".json") {
+		contentType = "application/json"
+	} else if strings.HasSuffix(fullPath, ".yaml") || strings.HasSuffix(fullPath, ".yml") {
+		contentType = "application/yaml"
+	}
+	w.Header().Set("Content-Type", contentType)
+
+	// Write content directly to response
+	w.WriteHeader(http.StatusOK)
+	w.Write(content)
+}
+
+// handleFileUpload handles file uploads via multipart/form-data
+func (s *Server) handleFileUpload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(FileUploadResponse{
+			Success: false,
+			Error:   "Method not allowed",
+		})
+		return
+	}
+
+	// Parse multipart form with 32MB limit
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		config.VerboseLog("Error parsing multipart form: %v", err)
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(FileUploadResponse{
+			Success: false,
+			Error:   "Error parsing form data",
+		})
+		return
+	}
+
+	// Get file from form
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		config.VerboseLog("Error getting file from form: %v", err)
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(FileUploadResponse{
+			Success: false,
+			Error:   "No file provided",
+		})
+		return
+	}
+	defer file.Close()
+
+	// Get path from form or use filename
+	filePath := r.FormValue("path")
+	if filePath == "" {
+		filePath = header.Filename
+	}
+
+	// Validate path
+	fullPath, err := s.validatePath(filePath)
+	if err != nil {
+		config.VerboseLog("Invalid path: %v", err)
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(FileUploadResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Invalid file path: %v", err),
+		})
+		return
+	}
+
+	// Create directories if they don't exist
+	dirPath := filepath.Dir(fullPath)
+	if err := os.MkdirAll(dirPath, 0755); err != nil {
+		config.VerboseLog("Error creating directories: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(FileUploadResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Error creating directories: %v", err),
+		})
+		return
+	}
+
+	// Create destination file
+	dst, err := os.Create(fullPath)
+	if err != nil {
+		config.VerboseLog("Error creating file: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(FileUploadResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Error creating file: %v", err),
+		})
+		return
+	}
+	defer dst.Close()
+
+	// Copy file contents
+	if _, err := io.Copy(dst, file); err != nil {
+		config.VerboseLog("Error copying file: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(FileUploadResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Error saving file: %v", err),
+		})
+		return
+	}
+
+	// Get file info for response
+	fileInfo, err := s.getFileInfo(fullPath)
+	if err != nil {
+		config.VerboseLog("Error getting file info: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(FileUploadResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Error getting file info: %v", err),
+		})
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(FileUploadResponse{
+		Success: true,
+		Message: "File uploaded successfully",
+		File:    fileInfo,
+	})
+}
+
+// handleFileDownload handles file downloads
+func (s *Server) handleFileDownload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(FileResponse{
+			Success: false,
+			Error:   "Method not allowed",
+		})
+		return
+	}
+
+	// Get path from query parameters
+	filePath := r.URL.Query().Get("path")
+	if filePath == "" {
+		config.VerboseLog("Missing path parameter")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(FileResponse{
+			Success: false,
+			Error:   "path parameter is required",
+		})
+		return
+	}
+
+	// Validate path
+	fullPath, err := s.validatePath(filePath)
+	if err != nil {
+		config.VerboseLog("Invalid path: %v", err)
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(FileResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Invalid file path: %v", err),
+		})
+		return
+	}
+
+	// Check if file exists and get info
+	fileInfo, err := os.Stat(fullPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			config.VerboseLog("File not found: %s", fullPath)
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(FileResponse{
+				Success: false,
+				Error:   "File not found",
+			})
+			return
+		}
+		config.VerboseLog("Error accessing file: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(FileResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Error accessing file: %v", err),
+		})
+		return
+	}
+
+	// Don't allow directory downloads
+	if fileInfo.IsDir() {
+		config.VerboseLog("Cannot download directory: %s", fullPath)
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(FileResponse{
+			Success: false,
+			Error:   "Cannot download a directory",
+		})
+		return
+	}
+
+	// Open the file
+	file, err := os.Open(fullPath)
+	if err != nil {
+		config.VerboseLog("Error opening file: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(FileResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Error opening file: %v", err),
+		})
+		return
+	}
+	defer file.Close()
+
+	// Set headers for file download
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filepath.Base(filePath)))
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", fileInfo.Size()))
+
+	// Stream the file
+	if _, err := io.Copy(w, file); err != nil {
+		config.VerboseLog("Error streaming file: %v", err)
+		// Can't write error response here as headers are already sent
+		return
+	}
 }
 
 // getFileInfo returns detailed information about a file

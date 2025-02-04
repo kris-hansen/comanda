@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/kris-hansen/comanda/utils/config"
 	"github.com/kris-hansen/comanda/utils/models"
@@ -212,15 +211,12 @@ func (s *Server) handleUpdateProvider(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDeleteProvider handles removing a provider configuration
-func (s *Server) handleDeleteProvider(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleDeleteProvider(w http.ResponseWriter, r *http.Request, providerName string) {
 	w.Header().Set("Content-Type", "application/json")
 
 	if !checkAuth(s.config, w, r) {
 		return
 	}
-
-	// Get provider name from URL path
-	providerName := strings.TrimPrefix(r.URL.Path, "/providers/")
 
 	// Remove provider from configuration
 	if s.envConfig.Providers != nil {

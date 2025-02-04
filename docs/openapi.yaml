@@ -1,4 +1,4 @@
-openapi: 3.0.3
+openapi: 3.1.0
 info:
   title: Comanda API
   description: Collection for testing Comanda server API endpoints
@@ -519,6 +519,81 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Success'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /files/upload:
+    post:
+      summary: Upload File
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                path:
+                  type: string
+      responses:
+        '200':
+          description: File uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /files/content:
+    get:
+      summary: Get File Content
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File content retrieved successfully
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /files/download:
+    get:
+      summary: Download File
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File downloaded successfully
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
         '401':
           description: Unauthorized
           content:

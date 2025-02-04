@@ -239,6 +239,52 @@ Response:
 }
 ```
 
+#### Upload File
+```http
+POST /files/upload
+Authorization: Bearer <token>
+Content-Type: multipart/form-data
+
+Form fields:
+- file: (binary file data)
+- path: "path/to/file.ext"
+```
+
+Uploads a file using multipart/form-data format. The file will be saved at the specified path.
+
+Response:
+```json
+{
+  "success": true,
+  "message": "File uploaded successfully"
+}
+```
+
+#### Get File Content
+```http
+GET /files/content?path=example.txt
+Authorization: Bearer <token>
+Accept: text/plain
+```
+
+Retrieves the content of a file as plain text.
+
+Response:
+```text
+File content as plain text
+```
+
+#### Download File
+```http
+GET /files/download?path=example.pdf
+Authorization: Bearer <token>
+Accept: application/octet-stream
+```
+
+Downloads a file in binary format. The response will be the raw file content with appropriate content type.
+
+Response: Binary file content
+
 ## Security Features
 
 ### Authentication
@@ -313,6 +359,30 @@ curl -X POST \
      http://localhost:8080/files
 ```
 
+5. Upload File:
+```bash
+curl -X POST \
+     -H "Authorization: Bearer your-token" \
+     -F "file=@/path/to/local/file.txt" \
+     -F "path=destination/file.txt" \
+     http://localhost:8080/files/upload
+```
+
+6. Get File Content:
+```bash
+curl -H "Authorization: Bearer your-token" \
+     -H "Accept: text/plain" \
+     http://localhost:8080/files/content?path=example.txt
+```
+
+7. Download File:
+```bash
+curl -H "Authorization: Bearer your-token" \
+     -H "Accept: application/octet-stream" \
+     http://localhost:8080/files/download?path=example.pdf \
+     --output downloaded_file.pdf
+```
+
 ### Using JavaScript
 
 ```javascript
@@ -378,6 +448,44 @@ async function deleteFile(path) {
     headers
   });
   return await response.json();
+}
+
+// Upload file
+async function uploadFile(file, path) {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('path', path);
+
+  const response = await fetch(`${API_URL}/files/upload`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${TOKEN}`
+    },
+    body: formData
+  });
+  return await response.json();
+}
+
+// Get file content
+async function getFileContent(path) {
+  const response = await fetch(`${API_URL}/files/content?path=${encodeURIComponent(path)}`, {
+    headers: {
+      'Authorization': `Bearer ${TOKEN}`,
+      'Accept': 'text/plain'
+    }
+  });
+  return await response.text();
+}
+
+// Download file
+async function downloadFile(path) {
+  const response = await fetch(`${API_URL}/files/download?path=${encodeURIComponent(path)}`, {
+    headers: {
+      'Authorization': `Bearer ${TOKEN}`,
+      'Accept': 'application/octet-stream'
+    }
+  });
+  return await response.blob();
 }
 
 // Example usage

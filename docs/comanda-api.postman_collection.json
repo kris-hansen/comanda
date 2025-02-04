@@ -309,6 +309,92 @@
               "path": ["files", "bulk"]
             }
           }
+        },
+        {
+          "name": "Upload File",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/file"
+                },
+                {
+                  "key": "path",
+                  "value": "destination/file.txt",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/files/upload",
+              "host": ["{{base_url}}"],
+              "path": ["files", "upload"]
+            }
+          }
+        },
+        {
+          "name": "Get File Content",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              },
+              {
+                "key": "Accept",
+                "value": "text/plain"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/files/content?path=example.txt",
+              "host": ["{{base_url}}"],
+              "path": ["files", "content"],
+              "query": [
+                {
+                  "key": "path",
+                  "value": "example.txt"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Download File",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              },
+              {
+                "key": "Accept",
+                "value": "application/octet-stream"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/files/download?path=example.pdf",
+              "host": ["{{base_url}}"],
+              "path": ["files", "download"],
+              "query": [
+                {
+                  "key": "path",
+                  "value": "example.pdf"
+                }
+              ]
+            }
+          }
         }
       ]
     },

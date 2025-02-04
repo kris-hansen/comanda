@@ -41,49 +41,60 @@ func (s *Server) validatePath(path string) (string, error) {
 	}
 	for _, pattern := range traversalPatterns {
 		if strings.Contains(normalizedPath, pattern) {
-			return "", fmt.Errorf("path attempts to escape data directory")
+			return "", fmt.Errorf("access denied")
 		}
 	}
 
 	// Get absolute path of data directory
 	absDataDir, err := filepath.Abs(s.config.DataDir)
 	if err != nil {
+		config.DebugLog("Failed to get absolute data directory path: %v", err)
 		return "", fmt.Errorf("invalid data directory path")
 	}
+	config.DebugLog("Data directory absolute path: %s", absDataDir)
 
 	// Join with data directory and clean the path
 	fullPath := filepath.Clean(filepath.Join(s.config.DataDir, path))
+	config.DebugLog("Full path after joining with data directory: %s", fullPath)
 
 	// Get absolute path of the target file
 	absPath, err := filepath.Abs(fullPath)
 	if err != nil {
+		config.DebugLog("Failed to get absolute path for target file: %v", err)
 		return "", fmt.Errorf("invalid path")
 	}
+	config.DebugLog("Target file absolute path: %s", absPath)
 
 	// Check if the path is within the data directory
 	if !strings.HasPrefix(absPath, absDataDir+string(os.PathSeparator)) {
+		config.DebugLog("Path attempts to escape data directory: %s", absPath)
 		return "", fmt.Errorf("path attempts to escape data directory")
 	}
 
 	// Check if the path is the data directory itself
 	if absPath == absDataDir {
+		config.DebugLog("Path points to data directory itself")
 		return "", fmt.Errorf("invalid path")
 	}
 
 	// Get relative path and check for traversal attempts
 	relPath, err := filepath.Rel(s.config.DataDir, fullPath)
 	if err != nil {
+		config.DebugLog("Failed to get relative path: %v", err)
 		return "", fmt.Errorf("invalid path")
 	}
+	config.DebugLog("Relative path: %s", relPath)
 
 	// Check each path component
 	components := strings.Split(filepath.ToSlash(relPath), "/")
 	for _, comp := range components {
 		if comp == ".." || comp == "." || strings.Contains(comp, "..") {
+			config.DebugLog("Invalid path component detected: %s", comp)
 			return "", fmt.Errorf("path attempts to escape data directory")
 		}
 	}
 
+	config.DebugLog("Path validation successful: %s", fullPath)
 	return fullPath, nil
 }
 
@@ -212,6 +223,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/files/bulk", s.combinedMiddleware(s.handleBulkFileOperation))
 	s.mux.HandleFunc("/files/backup", s.combinedMiddleware(s.handleFileBackup))
 	s.mux.HandleFunc("/files/restore", s.combinedMiddleware(s.handleFileRestore))
+	s.mux.HandleFunc("/files/content", s.combinedMiddleware(s.handleGetFileContent))
+	s.mux.HandleFunc("/files/upload", s.combinedMiddleware(s.handleFileUpload))
+	s.mux.HandleFunc("/files/download", s.combinedMiddleware(s.handleFileDownload))
 
 	// Provider operations - require auth
 	s.mux.HandleFunc("/providers", s.combinedMiddleware(func(w http.ResponseWriter, r *http.Request) {
@@ -220,14 +234,34 @@ func (s *Server) routes() {
 			s.handleGetProviders(w, r)
 		case http.MethodPut:
 			s.handleUpdateProvider(w, r)
-		case http.MethodDelete:
-			s.handleDeleteProvider(w, r)
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			json.NewEncoder(w).Encode(map[string]string{
 				"error": "Method not allowed",
 			})
 		}
+	}))
+
+	// Provider delete operation with path parameter
+	s.mux.HandleFunc("/providers/", s.combinedMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			json.NewEncoder(w).Encode(map[string]string{
+				"error": "Method not allowed",
+			})
+			return
+		}
+
+		// Extract provider name from path
+		providerName := strings.TrimPrefix(r.URL.Path, "/providers/")
+		if providerName == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{
+				"error": "Provider name is required",
+			})
+			return
+		}
+		s.handleDeleteProvider(w, r, providerName)
 	}))
 
 	// Provider validation - requires auth
