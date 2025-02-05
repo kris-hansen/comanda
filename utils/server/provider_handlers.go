@@ -218,20 +218,31 @@ func (s *Server) handleDeleteProvider(w http.ResponseWriter, r *http.Request, pr
 		return
 	}
 
-	// Remove provider from configuration
-	if s.envConfig.Providers != nil {
-		delete(s.envConfig.Providers, providerName)
-	}
-
-	// Save the updated configuration
-	if err := config.SaveEnvConfig(config.GetEnvPath(), s.envConfig); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+	// Validate provider name
+	if providerName == "" {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{
-			"error": fmt.Sprintf("Error saving configuration: %v", err),
+			"error": "Provider name is required",
 		})
 		return
 	}
 
+	// Remove provider from configuration and save
+	if s.envConfig.Providers != nil {
+		delete(s.envConfig.Providers, providerName)
+
+		// Save the updated configuration
+		if err := config.SaveEnvConfig(config.GetEnvPath(), s.envConfig); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{
+				"error": fmt.Sprintf("Error saving configuration: %v", err),
+			})
+			return
+		}
+	}
+
+	// Always return success, even if provider didn't exist
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": fmt.Sprintf("Provider %s removed successfully", providerName),
 	})

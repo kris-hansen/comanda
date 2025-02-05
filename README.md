@@ -377,34 +377,47 @@ async function uploadFile(file, path) {
 
 ### 2. Process Endpoint
 
-`GET /process` processes a YAML file from the configured data directory. For YAML files that use STDIN as their first input, `POST /process` is also supported.
+`GET /process` processes a YAML file from the configured data directory. For YAML files that use STDIN as their first input, `POST /process` is also supported. Both endpoints support real-time output streaming using Server-Sent Events.
 
 #### GET Request
 ```bash
-# Without authentication
+# Regular processing (JSON response)
 curl "http://localhost:8080/process?filename=openai-example.yaml"
 
+# Streaming processing (Server-Sent Events)
+curl -H "Accept: text/event-stream" \
+     "http://localhost:8080/process?filename=openai-example.yaml&streaming=true"
+
 # With authentication (when enabled)
-curl -H "Authorization: Bearer your-token" "http://localhost:8080/process?filename=openai-example.yaml"
+curl -H "Authorization: Bearer your-token" \
+     -H "Accept: text/event-stream" \
+     "http://localhost:8080/process?filename=openai-example.yaml&streaming=true"
 ```
 
 #### POST Request (for YAML files with STDIN input)
 You can provide input either through a query parameter or JSON body:
 
 ```bash
-# Using query parameter
+# Regular processing with query parameter
 curl -X POST "http://localhost:8080/process?filename=stdin-example.yaml&input=your text here"
 
-# Using JSON body
+# Regular processing with JSON body
 curl -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"input":"your text here"}' \
-  "http://localhost:8080/process?filename=stdin-example.yaml"
+     -H "Content-Type: application/json" \
+     -d '{"input":"your text here", "streaming": false}' \
+     "http://localhost:8080/process?filename=stdin-example.yaml"
+
+# Streaming processing with JSON body
+curl -X POST \
+     -H "Content-Type: application/json" \
+     -H "Accept: text/event-stream" \
+     -d '{"input":"your text here", "streaming": true}' \
+     "http://localhost:8080/process?filename=stdin-example.yaml"
 ```
 
 Note: POST requests are only allowed for YAML files where the first step uses "STDIN" as input. The /list endpoint shows which methods (GET or GET,POST) are supported for each YAML file.
 
-Response format:
+Response format (non-streaming):
 ```json
 {
   "success": true,
@@ -413,12 +426,75 @@ Response format:
 }
 ```
 
-Error response:
+Response format (streaming):
+```
+data: Processing step 1...
+
+data: Model response: ...
+
+data: Processing step 2...
+
+data: Processing complete
+```
+
+Error response (non-streaming):
 ```json
 {
   "success": false,
   "error": "Error message here",
   "output": "Any output generated before the error"
+}
+```
+
+Using JavaScript:
+```javascript
+// Regular processing
+async function processFile(filename, input = null) {
+  const url = `http://localhost:8080/process?filename=${encodeURIComponent(filename)}`;
+  const options = {
+    method: input ? 'POST' : 'GET',
+    headers: {
+      'Authorization': 'Bearer your-token',
+      'Content-Type': 'application/json'
+    }
+  };
+  
+  if (input) {
+    options.body = JSON.stringify({ input, streaming: false });
+  }
+  
+  const response = await fetch(url, options);
+  return await response.json();
+}
+
+// Streaming processing
+async function processFileStreaming(filename, input = null) {
+  const url = `http://localhost:8080/process?filename=${encodeURIComponent(filename)}`;
+  const options = {
+    method: input ? 'POST' : 'GET',
+    headers: {
+      'Authorization': 'Bearer your-token',
+      'Content-Type': 'application/json',
+      'Accept': 'text/event-stream'
+    }
+  };
+  
+  if (input) {
+    options.body = JSON.stringify({ input, streaming: true });
+  }
+  
+  const response = await fetch(url, options);
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    
+    const text = decoder.decode(value);
+    // Handle each SSE message
+    console.log(text);
+  }
 }
 ```
 
@@ -455,14 +531,130 @@ The `methods` field indicates which HTTP methods are supported:
 `GET /health` returns the server's current status:
 
 ```bash
-curl "http://localhost:8080/health"
+curl -H "Authorization: Bearer your-token" "http://localhost:8080/health"
 ```
 
 Response format:
 ```json
 {
-  "status": "ok",
-  "timestamp": "2024-11-02T20:39:13Z"
+  "success": true,
+  "message": "Server is healthy",
+  "statusCode": 200,
+  "response": "OK"
+}
+```
+
+### 4. YAML Operations
+
+#### Upload YAML
+`POST /yaml/upload` uploads a YAML file for processing:
+
+```bash
+curl -X POST \
+     -H "Authorization: Bearer your-token" \
+     -H "Content-Type: application/json" \
+     -d '{"content": "your yaml content here"}' \
+     "http://localhost:8080/yaml/upload"
+```
+
+Response format:
+```json
+{
+  "success": true,
+  "message": "YAML file uploaded successfully"
+}
+```
+
+#### Process YAML
+`POST /yaml/process` processes a YAML file with optional real-time output streaming:
+
+```bash
+# Regular processing (JSON response)
+curl -X POST \
+     -H "Authorization: Bearer your-token" \
+     -H "Content-Type: application/json" \
+     -d '{"content": "your yaml content here", "streaming": false}' \
+     "http://localhost:8080/yaml/process"
+
+# Streaming processing (Server-Sent Events)
+curl -X POST \
+     -H "Authorization: Bearer your-token" \
+     -H "Content-Type: application/json" \
+     -H "Accept: text/event-stream" \
+     -d '{"content": "your yaml content here", "streaming": true}' \
+     "http://localhost:8080/yaml/process"
+```
+
+Response format (non-streaming):
+```json
+{
+  "success": true,
+  "yaml": "processed yaml content"
+}
+```
+
+Response format (streaming):
+```
+data: Processing step 1...
+
+data: Model response: ...
+
+data: Processing step 2...
+
+data: Processing complete
+```
+
+Using JavaScript:
+```javascript
+// Upload YAML
+async function uploadYaml(content) {
+  const response = await fetch('http://localhost:8080/yaml/upload', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer your-token',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ content })
+  });
+  return await response.json();
+}
+
+// Process YAML (non-streaming)
+async function processYaml(content) {
+  const response = await fetch('http://localhost:8080/yaml/process', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer your-token',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ content, streaming: false })
+  });
+  return await response.json();
+}
+
+// Process YAML (streaming)
+async function processYamlStreaming(content) {
+  const response = await fetch('http://localhost:8080/yaml/process', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer your-token',
+      'Content-Type': 'application/json',
+      'Accept': 'text/event-stream'
+    },
+    body: JSON.stringify({ content, streaming: true })
+  });
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    
+    const text = decoder.decode(value);
+    // Handle each SSE message
+    console.log(text);
+  }
 }
 ```
 

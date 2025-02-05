@@ -22,6 +22,7 @@ type Processor struct {
 	lastOutput string
 	spinner    *Spinner
 	variables  map[string]string // Store variables from STDIN
+	progress   ProgressWriter    // Progress writer for streaming updates
 }
 
 // isTestMode checks if the code is running in test mode
@@ -51,6 +52,12 @@ func NewProcessor(config *DSLConfig, envConfig *config.EnvConfig, verbose bool) 
 	return p
 }
 
+// SetProgressWriter sets the progress writer for streaming updates
+func (p *Processor) SetProgressWriter(w ProgressWriter) {
+	p.progress = w
+	p.spinner.SetProgressWriter(w)
+}
+
 // SetLastOutput sets the last output value, useful for initializing with STDIN data
 func (p *Processor) SetLastOutput(output string) {
 	p.lastOutput = output
@@ -65,6 +72,26 @@ func (p *Processor) LastOutput() string {
 func (p *Processor) debugf(format string, args ...interface{}) {
 	if p.verbose {
 		fmt.Printf("[DEBUG][DSL] "+format+"\n", args...)
+	}
+}
+
+// emitProgress sends a progress update if a progress writer is configured
+func (p *Processor) emitProgress(msg string) {
+	if p.progress != nil {
+		p.progress.WriteProgress(ProgressUpdate{
+			Type:    ProgressStep,
+			Message: msg,
+		})
+	}
+}
+
+// emitError sends an error update if a progress writer is configured
+func (p *Processor) emitError(err error) {
+	if p.progress != nil {
+		p.progress.WriteProgress(ProgressUpdate{
+			Type:  ProgressError,
+			Error: err,
+		})
 	}
 }
 
@@ -122,9 +149,12 @@ func (p *Processor) validateStepConfig(stepName string, config StepConfig) error
 // Process executes the DSL processing pipeline
 func (p *Processor) Process() error {
 	p.debugf("Starting DSL processing")
+	p.emitProgress("Starting DSL processing")
 
 	if len(p.config.Steps) == 0 {
-		return fmt.Errorf("no steps defined in DSL configuration")
+		err := fmt.Errorf("no steps defined in DSL configuration")
+		p.emitError(err)
+		return err
 	}
 
 	// First validate all steps before processing
@@ -132,6 +162,7 @@ func (p *Processor) Process() error {
 	for _, step := range p.config.Steps {
 		if err := p.validateStepConfig(step.Name, step.Config); err != nil {
 			p.spinner.Stop()
+			p.emitError(err)
 			fmt.Printf("Error: %v\n", err)
 			return err
 		}
@@ -141,6 +172,7 @@ func (p *Processor) Process() error {
 	// Process steps in order
 	for stepIndex, step := range p.config.Steps {
 		stepMsg := fmt.Sprintf("Processing step %d/%d: %s", stepIndex+1, len(p.config.Steps), step.Name)
+		p.emitProgress(stepMsg)
 		p.spinner.Start(stepMsg)
 		p.debugf("Processing step: %s", step.Name)
 
@@ -154,12 +186,14 @@ func (p *Processor) Process() error {
 				p.spinner.Start("Processing database input")
 				if err := p.handleDatabaseInput(v); err != nil {
 					p.spinner.Stop()
+					p.emitError(err)
 					return fmt.Errorf("failed to process database input: %w", err)
 				}
 				// Create a temporary file with the database output
 				tmpFile, err := os.CreateTemp("", "comanda-db-*.txt")
 				if err != nil {
 					p.spinner.Stop()
+					p.emitError(err)
 					return fmt.Errorf("failed to create temp file for database output: %w", err)
 				}
 				tmpPath := tmpFile.Name()
@@ -168,6 +202,7 @@ func (p *Processor) Process() error {
 				if _, err := tmpFile.WriteString(p.lastOutput); err != nil {
 					tmpFile.Close()
 					p.spinner.Stop()
+					p.emitError(err)
 					return fmt.Errorf("failed to write database output to temp file: %w", err)
 				}
 				tmpFile.Close()
@@ -181,6 +216,7 @@ func (p *Processor) Process() error {
 				p.spinner.Start(fmt.Sprintf("Scraping content from %s", url))
 				if err := p.handler.ProcessScrape(url, v); err != nil {
 					p.spinner.Stop()
+					p.emitError(err)
 					return fmt.Errorf("failed to process scraping input: %w", err)
 				}
 				inputs = []string{url}
@@ -207,6 +243,7 @@ func (p *Processor) Process() error {
 				if p.lastOutput == "" {
 					p.spinner.Stop()
 					err := fmt.Errorf("STDIN specified but no previous output available")
+					p.emitError(err)
 					fmt.Printf("Error in step '%s': %v\n", step.Name, err)
 					return err
 				}
@@ -222,6 +259,7 @@ func (p *Processor) Process() error {
 				tmpFile, err := os.CreateTemp("", "comanda-stdin-*.txt")
 				if err != nil {
 					p.spinner.Stop()
+					p.emitError(err)
 					err = fmt.Errorf("failed to create temp file for STDIN: %w", err)
 					fmt.Printf("Error in step '%s': %v\n", step.Name, err)
 					return err
@@ -232,6 +270,7 @@ func (p *Processor) Process() error {
 				if _, err := tmpFile.WriteString(p.lastOutput); err != nil {
 					tmpFile.Close()
 					p.spinner.Stop()
+					p.emitError(err)
 					err = fmt.Errorf("failed to write to temp file: %w", err)
 					fmt.Printf("Error in step '%s': %v\n", step.Name, err)
 					return err
@@ -250,6 +289,7 @@ func (p *Processor) Process() error {
 			p.debugf("Processing inputs for step %s...", step.Name)
 			if err := p.processInputs(inputs); err != nil {
 				p.spinner.Stop()
+				p.emitError(err)
 				err = fmt.Errorf("input processing error in step %s: %w", step.Name, err)
 				fmt.Printf("Error: %v\n", err)
 				return err
@@ -263,6 +303,7 @@ func (p *Processor) Process() error {
 			p.spinner.Start("Validating model configuration")
 			if err := p.validateModel(modelNames, inputs); err != nil {
 				p.spinner.Stop()
+				p.emitError(err)
 				err = fmt.Errorf("model validation error in step %s: %w", step.Name, err)
 				fmt.Printf("Error: %v\n", err)
 				return err
@@ -273,6 +314,7 @@ func (p *Processor) Process() error {
 			p.spinner.Start("Configuring model providers")
 			if err := p.configureProviders(); err != nil {
 				p.spinner.Stop()
+				p.emitError(err)
 				err = fmt.Errorf("provider configuration error in step %s: %w", step.Name, err)
 				fmt.Printf("Error: %v\n", err)
 				return err
@@ -290,6 +332,7 @@ func (p *Processor) Process() error {
 		response, err := p.processActions(modelNames, substitutedActions)
 		if err != nil {
 			p.spinner.Stop()
+			p.emitError(err)
 			err = fmt.Errorf("action processing error in step %s: %w", step.Name, err)
 			fmt.Printf("Error: %v\n", err)
 			return err
@@ -309,6 +352,7 @@ func (p *Processor) Process() error {
 			if _, hasDB := v["database"]; hasDB {
 				if err := p.handleDatabaseOutput(response, v); err != nil {
 					p.spinner.Stop()
+					p.emitError(err)
 					err = fmt.Errorf("database output error in step %s: %w", step.Name, err)
 					fmt.Printf("Error: %v\n", err)
 					return err
@@ -322,6 +366,7 @@ func (p *Processor) Process() error {
 			outputs := p.NormalizeStringSlice(step.Config.Output)
 			if err := p.handleOutput(modelNames[0], response, outputs); err != nil {
 				p.spinner.Stop()
+				p.emitError(err)
 				err = fmt.Errorf("output handling error in step %s: %w", step.Name, err)
 				fmt.Printf("Error: %v\n", err)
 				return err
@@ -335,6 +380,7 @@ func (p *Processor) Process() error {
 	}
 
 	p.debugf("DSL processing completed successfully")
+	p.emitProgress("DSL processing completed successfully")
 	return nil
 }
 

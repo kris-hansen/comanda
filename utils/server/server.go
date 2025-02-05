@@ -229,6 +229,7 @@ func (s *Server) routes() {
 
 	// Provider operations - require auth
 	s.mux.HandleFunc("/providers", s.combinedMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		switch r.Method {
 		case http.MethodGet:
 			s.handleGetProviders(w, r)
@@ -242,18 +243,14 @@ func (s *Server) routes() {
 		}
 	}))
 
-	// Provider delete operation with path parameter
+	// Provider operations with path parameter
 	s.mux.HandleFunc("/providers/", s.combinedMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodDelete {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			json.NewEncoder(w).Encode(map[string]string{
-				"error": "Method not allowed",
-			})
-			return
-		}
+		w.Header().Set("Content-Type", "application/json")
 
 		// Extract provider name from path
 		providerName := strings.TrimPrefix(r.URL.Path, "/providers/")
+
+		// Handle empty provider name
 		if providerName == "" {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]string{
@@ -261,7 +258,22 @@ func (s *Server) routes() {
 			})
 			return
 		}
-		s.handleDeleteProvider(w, r, providerName)
+
+		// Handle different HTTP methods
+		switch r.Method {
+		case http.MethodDelete:
+			s.handleDeleteProvider(w, r, providerName)
+		case http.MethodGet, http.MethodPut, http.MethodPatch, http.MethodPost:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			json.NewEncoder(w).Encode(map[string]string{
+				"error": "Method not allowed",
+			})
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			json.NewEncoder(w).Encode(map[string]string{
+				"error": "Method not allowed",
+			})
+		}
 	}))
 
 	// Provider validation - requires auth
@@ -289,6 +301,10 @@ func (s *Server) routes() {
 		}
 		s.handleDecryptEnv(w, r)
 	}))
+
+	// YAML operations - require auth
+	s.mux.HandleFunc("/yaml/upload", s.combinedMiddleware(s.handleYAMLUpload))
+	s.mux.HandleFunc("/yaml/process", s.combinedMiddleware(s.handleYAMLProcess))
 
 	// Process endpoint - requires auth
 	s.mux.HandleFunc("/process", s.combinedMiddleware(func(w http.ResponseWriter, r *http.Request) {

@@ -15,6 +15,7 @@ type Spinner struct {
 	mu       sync.Mutex
 	stopped  bool
 	disabled bool // Used for testing environments
+	progress ProgressWriter
 }
 
 func NewSpinner() *Spinner {
@@ -22,6 +23,12 @@ func NewSpinner() *Spinner {
 		chars: []string{"|", "/", "-", "\\"},
 		stop:  make(chan struct{}),
 	}
+}
+
+func (s *Spinner) SetProgressWriter(w ProgressWriter) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.progress = w
 }
 
 // Disable prevents the spinner from showing any output
@@ -44,6 +51,14 @@ func (s *Spinner) Start(message string) {
 	s.message = message
 	s.mu.Unlock()
 
+	// Send initial progress update
+	if s.progress != nil {
+		s.progress.WriteProgress(ProgressUpdate{
+			Type:    ProgressSpinner,
+			Message: message,
+		})
+	}
+
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
@@ -51,15 +66,31 @@ func (s *Spinner) Start(message string) {
 			select {
 			case <-s.stop:
 				s.mu.Lock()
+				msg := fmt.Sprintf("%s... Done!", s.message)
 				if !s.disabled {
-					fmt.Printf("\r%s... Done!     \n", s.message)
+					fmt.Printf("\r%s     \n", msg)
+				}
+				// Send completion update
+				if s.progress != nil {
+					s.progress.WriteProgress(ProgressUpdate{
+						Type:    ProgressComplete,
+						Message: msg,
+					})
 				}
 				s.mu.Unlock()
 				return
 			default:
 				s.mu.Lock()
 				if !s.disabled {
-					fmt.Printf("\r%s... %s", s.message, s.chars[s.index])
+					spinMsg := fmt.Sprintf("%s... %s", s.message, s.chars[s.index])
+					fmt.Printf("\r%s", spinMsg)
+					// Send spinner update
+					if s.progress != nil {
+						s.progress.WriteProgress(ProgressUpdate{
+							Type:    ProgressSpinner,
+							Message: spinMsg,
+						})
+					}
 					s.index = (s.index + 1) % len(s.chars)
 				}
 				s.mu.Unlock()

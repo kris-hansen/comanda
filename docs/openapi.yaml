@@ -178,6 +178,16 @@ components:
       required:
         - backup
 
+    ProcessRequest:
+      type: object
+      properties:
+        input:
+          type: string
+          description: Input for YAML processing (required for POST requests)
+        streaming:
+          type: boolean
+          description: Enable real-time output streaming using Server-Sent Events
+
 security:
   - BearerAuth: []
 
@@ -600,3 +610,97 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+
+  /health:
+    get:
+      summary: Server Health Check
+      responses:
+        '200':
+          description: Server health status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  statusCode:
+                    type: integer
+                  response:
+                    type: string
+                required:
+                  - success
+                  - message
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /process:
+    post:
+      summary: Process YAML File by Path
+      description: |
+        Process a YAML file by path with required input and optional real-time output streaming.
+        YAML processing is only available via POST requests.
+        When streaming is enabled, the response will be in Server-Sent Events format.
+        Note: GET method is no longer supported - all processing must be done via POST.
+      parameters:
+        - name: filename
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Path to the YAML file to process
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcessRequest'
+            example:
+              input: "your input here"
+              streaming: false  # Set to true for Server-Sent Events streaming
+      responses:
+        '200':
+          description: |
+            When streaming is false:
+              Returns processed YAML content as JSON
+            When streaming is true:
+              Returns Server-Sent Events stream with real-time processing output
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  output:
+                    type: string
+                required:
+                  - success
+                  - output
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-Sent Events stream of processing output
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '405':
+          description: Method not allowed (only POST is supported)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                success: false
+                error: "YAML processing is only available via POST requests. Please use POST with your YAML content."

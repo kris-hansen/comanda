@@ -444,6 +444,237 @@
           }
         }
       ]
+    },
+    {
+      "name": "Server Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "YAML Operations",
+      "item": [
+        {
+          "name": "Upload YAML",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"your yaml content here\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/yaml/upload",
+              "host": ["{{base_url}}"],
+              "path": ["yaml", "upload"]
+            }
+          }
+        },
+        {
+          "name": "Process YAML",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"your yaml content here\",\n  \"streaming\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/yaml/process",
+              "host": ["{{base_url}}"],
+              "path": ["yaml", "process"]
+            }
+          }
+        },
+        {
+          "name": "Process YAML (Streaming)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"your yaml content here\",\n  \"streaming\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/yaml/process",
+              "host": ["{{base_url}}"],
+              "path": ["yaml", "process"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Process Operations",
+      "item": [
+        {
+          "name": "Process YAML File",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/process?filename=example.yaml",
+              "host": ["{{base_url}}"],
+              "path": ["process"],
+              "query": [
+                {
+                  "key": "filename",
+                  "value": "example.yaml"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Process YAML File (Streaming)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              },
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/process?filename=example.yaml&streaming=true",
+              "host": ["{{base_url}}"],
+              "path": ["process"],
+              "query": [
+                {
+                  "key": "filename",
+                  "value": "example.yaml"
+                },
+                {
+                  "key": "streaming",
+                  "value": "true"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Process YAML File with Input",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"input\": \"your input here\",\n  \"streaming\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/process?filename=example.yaml",
+              "host": ["{{base_url}}"],
+              "path": ["process"],
+              "query": [
+                {
+                  "key": "filename",
+                  "value": "example.yaml"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Process YAML File with Input (Streaming)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"input\": \"your input here\",\n  \"streaming\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/process?filename=example.yaml",
+              "host": ["{{base_url}}"],
+              "path": ["process"],
+              "query": [
+                {
+                  "key": "filename",
+                  "value": "example.yaml"
+                }
+              ]
+            }
+          }
+        }
+      ]
     }
   ]
 }

@@ -1,6 +1,8 @@
 package server
 
 import (
+	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -146,6 +148,13 @@ type EnvironmentResponse struct {
 	Error   string `json:"error,omitempty"`
 }
 
+// YAMLRequest represents a request for YAML operations
+type YAMLRequest struct {
+	Content   string `json:"content"`
+	Input     string `json:"input"`
+	Streaming bool   `json:"streaming"`
+}
+
 // responseWriter wraps http.ResponseWriter to capture the status code
 type responseWriter struct {
 	http.ResponseWriter
@@ -176,4 +185,73 @@ func (w *filteringWriter) Write(p []byte) (n int, err error) {
 		return w.debug.Write(p)
 	}
 	return w.output.Write(p)
+}
+
+// sseWriter is a custom writer that formats output as Server-Sent Events
+type sseWriter struct {
+	w http.ResponseWriter
+	f http.Flusher
+}
+
+func (sw *sseWriter) Write(p []byte) (n int, err error) {
+	return sw.SendData(string(p))
+}
+
+func (sw *sseWriter) SendData(data string) (n int, err error) {
+	event := fmt.Sprintf("event: data\ndata: %s\n\n", data)
+	n, err = sw.w.Write([]byte(event))
+	if err == nil {
+		sw.f.Flush()
+	}
+	return
+}
+
+func (sw *sseWriter) SendProgress(msg string) (n int, err error) {
+	event := fmt.Sprintf("event: progress\ndata: %s\n\n", msg)
+	n, err = sw.w.Write([]byte(event))
+	if err == nil {
+		sw.f.Flush()
+	}
+	return
+}
+
+func (sw *sseWriter) SendSpinner(msg string) (n int, err error) {
+	event := fmt.Sprintf("event: spinner\ndata: %s\n\n", msg)
+	n, err = sw.w.Write([]byte(event))
+	if err == nil {
+		sw.f.Flush()
+	}
+	return
+}
+
+func (sw *sseWriter) SendComplete(msg string) (n int, err error) {
+	event := fmt.Sprintf("event: complete\ndata: %s\n\n", msg)
+	n, err = sw.w.Write([]byte(event))
+	if err == nil {
+		sw.f.Flush()
+	}
+	return
+}
+
+func (sw *sseWriter) SendError(err error) (n int, error error) {
+	data := map[string]interface{}{
+		"success": false,
+		"error":   err.Error(),
+	}
+	jsonData, _ := json.Marshal(data)
+	event := fmt.Sprintf("event: error\ndata: %s\n\n", string(jsonData))
+	n, error = sw.w.Write([]byte(event))
+	if error == nil {
+		sw.f.Flush()
+	}
+	return
+}
+
+func (sw *sseWriter) SendHeartbeat() (n int, err error) {
+	event := ": heartbeat\n\n"
+	n, err = sw.w.Write([]byte(event))
+	if err == nil {
+		sw.f.Flush()
+	}
+	return
 }
