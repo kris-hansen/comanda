@@ -395,7 +395,15 @@ func configureCORS(reader *bufio.Reader, envConfig *config.EnvConfig) error {
 				serverConfig.CORS.AllowedHeaders[i] = strings.TrimSpace(serverConfig.CORS.AllowedHeaders[i])
 			}
 		} else {
-			serverConfig.CORS.AllowedHeaders = []string{"Authorization", "Content-Type"}
+			serverConfig.CORS.AllowedHeaders = []string{
+				"Authorization",
+				"Content-Type",
+				"Cache-Control",
+				"Last-Event-ID",
+				"X-Accel-Buffering",
+				"X-Requested-With",
+				"Accept",
+			}
 		}
 
 		// Prompt for max age

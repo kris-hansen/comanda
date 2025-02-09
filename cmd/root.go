@@ -14,8 +14,8 @@ var debug bool
 
 var rootCmd = &cobra.Command{
 	Use:   "comanda",
-	Short: "A DSL processor for handling model interactions",
-	Long: `comanda is a command line tool that processes DSL configurations 
+	Short: "A workflow processor for handling model interactions",
+	Long: `comanda is a command line tool that processes workflow configurations
 for model interactions and executes the specified actions.`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		config.Verbose = verbose

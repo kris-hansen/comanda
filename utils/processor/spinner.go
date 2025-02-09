@@ -54,7 +54,7 @@ func (s *Spinner) Start(message string) {
 	// Send initial progress update
 	if s.progress != nil {
 		s.progress.WriteProgress(ProgressUpdate{
-			Type:    ProgressSpinner,
+			Type:    ProgressStep,
 			Message: message,
 		})
 	}
@@ -73,7 +73,7 @@ func (s *Spinner) Start(message string) {
 				// Send completion update
 				if s.progress != nil {
 					s.progress.WriteProgress(ProgressUpdate{
-						Type:    ProgressComplete,
+						Type:    ProgressStep,
 						Message: msg,
 					})
 				}
@@ -84,13 +84,7 @@ func (s *Spinner) Start(message string) {
 				if !s.disabled {
 					spinMsg := fmt.Sprintf("%s... %s", s.message, s.chars[s.index])
 					fmt.Printf("\r%s", spinMsg)
-					// Send spinner update
-					if s.progress != nil {
-						s.progress.WriteProgress(ProgressUpdate{
-							Type:    ProgressSpinner,
-							Message: spinMsg,
-						})
-					}
+					// Don't send spinner updates through progress writer
 					s.index = (s.index + 1) % len(s.chars)
 				}
 				s.mu.Unlock()

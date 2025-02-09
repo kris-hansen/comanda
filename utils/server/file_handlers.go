@@ -716,6 +716,9 @@ func (s *Server) handleYAMLProcess(w http.ResponseWriter, r *http.Request) {
 		// Create SSE writer
 		sseWriter := &sseWriter{w: w, f: flusher}
 
+		// Send initial progress message
+		sseWriter.SendProgress("Starting workflow processing")
+
 		// Create progress channel and writer
 		progressChan := make(chan processor.ProgressUpdate)
 		progressWriter := processor.NewChannelProgressWriter(progressChan)
@@ -743,7 +746,7 @@ func (s *Server) handleYAMLProcess(w http.ResponseWriter, r *http.Request) {
 				if err != nil {
 					sseWriter.SendError(err)
 				} else {
-					sseWriter.SendComplete("Processing complete")
+					sseWriter.SendProgress("Workflow processing completed successfully")
 				}
 				return
 			case update := <-progressChan:
@@ -751,12 +754,7 @@ func (s *Server) handleYAMLProcess(w http.ResponseWriter, r *http.Request) {
 				case processor.ProgressSpinner:
 					sseWriter.SendSpinner(update.Message)
 				case processor.ProgressStep:
-					// Map specific progress messages to complete events
-					if update.Message == "DSL processing completed successfully" {
-						sseWriter.SendComplete(update.Message)
-					} else {
-						sseWriter.SendProgress(update.Message)
-					}
+					sseWriter.SendProgress(update.Message)
 				case processor.ProgressComplete:
 					sseWriter.SendComplete(update.Message)
 				case processor.ProgressError:

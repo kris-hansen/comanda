@@ -99,53 +99,104 @@ func (s *Server) validatePath(path string) (string, error) {
 }
 
 // handleCORS adds CORS headers based on configuration
-func (s *Server) handleCORS(w http.ResponseWriter) {
+func (s *Server) handleCORS(w http.ResponseWriter, r *http.Request) {
+	config.DebugLog("[CORS] CORS Configuration: %+v", s.config.CORS)
+
 	if !s.config.CORS.Enabled {
+		config.DebugLog("[CORS] CORS is disabled")
 		return
 	}
+
+	requestOrigin := r.Header.Get("Origin")
+	config.DebugLog("[CORS] Incoming request origin: %s", requestOrigin)
 
 	// Set allowed origins
 	if len(s.config.CORS.AllowedOrigins) > 0 {
 		origin := strings.Join(s.config.CORS.AllowedOrigins, ", ")
+		config.DebugLog("[CORS] Setting Access-Control-Allow-Origin: %s", origin)
 		w.Header().Set("Access-Control-Allow-Origin", origin)
 	} else {
+		config.DebugLog("[CORS] Setting Access-Control-Allow-Origin: *")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 	}
 
 	// Set allowed methods
 	if len(s.config.CORS.AllowedMethods) > 0 {
 		methods := strings.Join(s.config.CORS.AllowedMethods, ", ")
+		config.DebugLog("[CORS] Setting Access-Control-Allow-Methods: %s", methods)
 		w.Header().Set("Access-Control-Allow-Methods", methods)
 	} else {
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		defaultMethods := "GET, POST, PUT, DELETE, OPTIONS"
+		config.DebugLog("[CORS] Setting default Access-Control-Allow-Methods: %s", defaultMethods)
+		w.Header().Set("Access-Control-Allow-Methods", defaultMethods)
 	}
 
 	// Set allowed headers
 	if len(s.config.CORS.AllowedHeaders) > 0 {
 		headers := strings.Join(s.config.CORS.AllowedHeaders, ", ")
+		config.DebugLog("[CORS] Setting Access-Control-Allow-Headers: %s", headers)
 		w.Header().Set("Access-Control-Allow-Headers", headers)
 	} else {
-		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+		defaultHeaders := "Authorization, Content-Type"
+		config.DebugLog("[CORS] Setting default Access-Control-Allow-Headers: %s", defaultHeaders)
+		w.Header().Set("Access-Control-Allow-Headers", defaultHeaders)
 	}
 
 	// Set max age
 	if s.config.CORS.MaxAge > 0 {
-		w.Header().Set("Access-Control-Max-Age", fmt.Sprintf("%d", s.config.CORS.MaxAge))
+		maxAge := fmt.Sprintf("%d", s.config.CORS.MaxAge)
+		config.DebugLog("[CORS] Setting Access-Control-Max-Age: %s", maxAge)
+		w.Header().Set("Access-Control-Max-Age", maxAge)
 	} else {
+		config.DebugLog("[CORS] Setting default Access-Control-Max-Age: 3600")
 		w.Header().Set("Access-Control-Max-Age", "3600")
+	}
+
+	// Log all response headers for debugging
+	config.DebugLog("[CORS] Final response headers:")
+	for k, v := range w.Header() {
+		config.DebugLog("[CORS] %s: %v", k, v)
 	}
 }
 
 // combinedMiddleware applies middleware in the correct order based on request method
 func (s *Server) combinedMiddleware(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Create enhanced response writer that supports flushing
+		rw := &responseWriter{
+			ResponseWriter: w,
+			statusCode:     http.StatusOK,
+		}
+
 		// Always set CORS headers first
-		s.handleCORS(w)
+		config.DebugLog("[CORS] Request details: Method=%s, URL=%s", r.Method, r.URL.String())
+		config.DebugLog("[CORS] Request headers:")
+		for k, v := range r.Header {
+			config.DebugLog("[CORS] %s: %v", k, v)
+		}
+		s.handleCORS(rw, r)
 
 		// Handle OPTIONS requests immediately
 		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
+			rw.WriteHeader(http.StatusOK)
 			return
+		}
+
+		// For streaming requests, ensure we have flushing capability
+		if r.Header.Get("Accept") == "text/event-stream" || r.URL.Query().Get("streaming") == "true" {
+			if flusher, ok := w.(http.Flusher); ok {
+				config.DebugLog("Flusher capability confirmed for streaming request")
+				// Create a new flushingResponseWriter that wraps the original ResponseWriter
+				rw = &responseWriter{
+					ResponseWriter: &flushingResponseWriter{
+						ResponseWriter: w,
+						flusher:        flusher,
+					},
+					statusCode: http.StatusOK,
+				}
+			} else {
+				config.DebugLog("Flusher not supported for streaming request, type: %T", w)
+			}
 		}
 
 		// For non-OPTIONS requests, proceed with logging and auth
@@ -154,7 +205,7 @@ func (s *Server) combinedMiddleware(handler http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 			handler(w, r)
-		})(w, r)
+		})(rw, r)
 	}
 }
 
@@ -181,8 +232,16 @@ func New(envConfig *config.EnvConfig) (*http.Server, error) {
 			Enabled:        true,
 			AllowedOrigins: []string{"*"},
 			AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-			AllowedHeaders: []string{"Authorization", "Content-Type"},
-			MaxAge:         3600,
+			AllowedHeaders: []string{
+				"Authorization",
+				"Content-Type",
+				"Cache-Control",
+				"Last-Event-ID",
+				"X-Accel-Buffering",
+				"X-Requested-With",
+				"Accept",
+			},
+			MaxAge: 3600,
 		},
 	}
 
@@ -329,7 +388,7 @@ func Run(envConfig *config.EnvConfig) error {
 	if serverConfig.Enabled {
 		fmt.Println("Authentication is enabled. Bearer token required.")
 		fmt.Printf("Example usage: curl -H 'Authorization: Bearer %s' 'http://localhost:%d/process?filename=examples/openai-example.yaml'\n",
-			serverConfig.BearerToken, serverConfig.Port)
+			maskToken(serverConfig.BearerToken), serverConfig.Port)
 	} else {
 		fmt.Printf("Example usage: curl 'http://localhost:%d/process?filename=examples/openai-example.yaml'\n", serverConfig.Port)
 	}

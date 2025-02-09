@@ -186,7 +186,90 @@ components:
           description: Input for YAML processing (required for POST requests)
         streaming:
           type: boolean
-          description: Enable real-time output streaming using Server-Sent Events
+          description: |
+            Enable real-time output streaming using Server-Sent Events (SSE).
+            When true, the response will be in text/event-stream format with the following event types:
+            - data: Regular output data
+            - progress: Progress updates
+            - spinner: Spinner/loading status updates
+            - complete: Processing completion message
+            - error: Error messages
+            - heartbeat: Connection keep-alive signals
+      required:
+        - input
+
+    StepInfo:
+      type: object
+      description: Information about a processing step
+      properties:
+        name:
+          type: string
+          description: Name of the step
+        model:
+          type: string
+          description: Model being used
+        action:
+          type: string
+          description: Action being performed
+      required:
+        - name
+        - model
+        - action
+
+    ProgressData:
+      type: object
+      description: Progress update data structure
+      properties:
+        message:
+          type: string
+          description: Progress message
+        step:
+          $ref: '#/components/schemas/StepInfo'
+          description: Step information (if available)
+      required:
+        - message
+
+    SSEEvent:
+      type: object
+      description: Server-Sent Event structure
+      properties:
+        event:
+          type: string
+          enum: [data, progress, complete, error, heartbeat]
+          description: Type of SSE event
+        data:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/ProgressData'
+          description: Event payload (string for simple events, object for progress updates)
+      required:
+        - event
+        - data
+      examples:
+        progress:
+          value:
+            event: progress
+            data:
+              message: "Processing step 1/1: o1-mini"
+              step:
+                name: "o1-mini"
+                model: "o1-mini"
+                action: "You are a quantum observer..."
+        complete:
+          value:
+            event: complete
+            data:
+              message: "Workflow processing completed successfully"
+              step:
+                name: "o1-mini"
+                model: "o1-mini"
+                action: "You are a quantum observer..."
+        error:
+          value:
+            event: error
+            data: {"error": "Model failed to respond"}
+        heartbeat:
+          value: ": heartbeat"
 
 security:
   - BearerAuth: []
@@ -646,7 +729,38 @@ paths:
       description: |
         Process a YAML file by path with required input and optional real-time output streaming.
         YAML processing is only available via POST requests.
-        When streaming is enabled, the response will be in Server-Sent Events format.
+        
+        When streaming is enabled (streaming=true):
+        - Response will be in Server-Sent Events (SSE) format
+        - Client must set Accept: text/event-stream header
+        - Server will send various event types:
+          * data: Regular output data
+          * progress: Processing progress updates
+          * spinner: Loading/status indicators
+          * complete: Final completion message
+          * error: Error information
+          * heartbeat: Keep-alive signals (every 15s)
+        
+        Example SSE events:
+        ```
+        event: progress
+        data: Loading model...
+
+        event: spinner
+        data: Processing input...
+
+        event: data
+        data: Generated content here...
+
+        event: complete
+        data: Processing completed successfully
+
+        event: error
+        data: {"error": "Model failed to respond"}
+
+        : heartbeat
+        ```
+        
         Note: GET method is no longer supported - all processing must be done via POST.
       parameters:
         - name: filename
@@ -663,7 +777,7 @@ paths:
               $ref: '#/components/schemas/ProcessRequest'
             example:
               input: "your input here"
-              streaming: false  # Set to true for Server-Sent Events streaming
+              streaming: true  # Enable SSE streaming
       responses:
         '200':
           description: |
@@ -687,8 +801,36 @@ paths:
                   - output
             text/event-stream:
               schema:
-                type: string
-                description: Server-Sent Events stream of processing output
+                $ref: '#/components/schemas/SSEEvent'
+              examples:
+                progress:
+                  value: |
+                    event: progress
+                    data: Loading model...
+
+                spinner:
+                  value: |
+                    event: spinner
+                    data: Processing input...
+
+                data:
+                  value: |
+                    event: data
+                    data: Generated content here...
+
+                complete:
+                  value: |
+                    event: complete
+                    data: Processing completed successfully
+
+                error:
+                  value: |
+                    event: error
+                    data: {"error": "Model failed to respond"}
+
+                heartbeat:
+                  value: |
+                    : heartbeat
         '401':
           description: Unauthorized
           content:

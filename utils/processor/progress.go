@@ -10,11 +10,19 @@ const (
 	ProgressError
 )
 
+// StepInfo contains detailed information about a processing step
+type StepInfo struct {
+	Name   string
+	Model  string
+	Action string
+}
+
 // ProgressUpdate represents a progress update from the processor
 type ProgressUpdate struct {
 	Type    ProgressType
 	Message string
 	Error   error
+	Step    *StepInfo // Optional step information
 }
 
 // ProgressWriter is an interface for handling progress updates

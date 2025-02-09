@@ -76,11 +76,12 @@ func (p *Processor) debugf(format string, args ...interface{}) {
 }
 
 // emitProgress sends a progress update if a progress writer is configured
-func (p *Processor) emitProgress(msg string) {
+func (p *Processor) emitProgress(msg string, step *StepInfo) {
 	if p.progress != nil {
 		p.progress.WriteProgress(ProgressUpdate{
 			Type:    ProgressStep,
 			Message: msg,
+			Step:    step,
 		})
 	}
 }
@@ -148,47 +149,89 @@ func (p *Processor) validateStepConfig(stepName string, config StepConfig) error
 
 // Process executes the DSL processing pipeline
 func (p *Processor) Process() error {
-	p.debugf("Starting DSL processing")
-	p.emitProgress("Starting DSL processing")
-
 	if len(p.config.Steps) == 0 {
 		err := fmt.Errorf("no steps defined in DSL configuration")
+		p.debugf("Validation error: %v", err)
 		p.emitError(err)
-		return err
+		return fmt.Errorf("validation failed: %w", err)
 	}
+
+	p.debugf("Initial validation passed: found %d steps", len(p.config.Steps))
 
 	// First validate all steps before processing
 	p.spinner.Start("Validating DSL configuration")
+	p.debugf("Starting step validation for %d steps", len(p.config.Steps))
+	p.debugf("Step details:")
+	for i, step := range p.config.Steps {
+		p.debugf("Step %d: name=%s model=%v action=%v", i+1, step.Name, step.Config.Model, step.Config.Action)
+	}
+
+	// Validate model names before proceeding
+	p.debugf("Beginning model validation phase")
 	for _, step := range p.config.Steps {
+		modelNames := p.NormalizeStringSlice(step.Config.Model)
+		p.debugf("Normalized model names for step %s: %v", step.Name, modelNames)
+		if err := p.validateModel(modelNames, []string{"STDIN"}); err != nil {
+			p.debugf("Model validation failed for step %s: %v", step.Name, err)
+			return fmt.Errorf("model validation failed for step %s: %w", step.Name, err)
+		}
+		p.debugf("Model validation passed for step %s", step.Name)
+	}
+	p.debugf("Model validation phase completed successfully")
+	for i, step := range p.config.Steps {
+		p.debugf("Validating step %d/%d: %s", i+1, len(p.config.Steps), step.Name)
+		p.debugf("Step config: input=%v model=%v action=%v output=%v", step.Config.Input, step.Config.Model, step.Config.Action, step.Config.Output)
+
 		if err := p.validateStepConfig(step.Name, step.Config); err != nil {
 			p.spinner.Stop()
-			p.emitError(err)
-			fmt.Printf("Error: %v\n", err)
-			return err
+			errMsg := fmt.Sprintf("Validation failed for step '%s': %v", step.Name, err)
+			p.debugf("Step validation error: %s", errMsg)
+			p.emitError(fmt.Errorf(errMsg))
+			return fmt.Errorf("validation error: %w", err)
 		}
+		p.debugf("Successfully validated step: %s", step.Name)
 	}
 	p.spinner.Stop()
+	p.debugf("All steps validated successfully")
 
-	// Process steps in order
+	// Process steps in order with detailed logging
+	defer func() {
+		if r := recover(); r != nil {
+			p.debugf("Panic during step processing: %v", r)
+			p.emitError(fmt.Errorf("internal error: %v", r))
+		}
+	}()
+
 	for stepIndex, step := range p.config.Steps {
+		stepInfo := &StepInfo{
+			Name:   step.Name,
+			Model:  fmt.Sprintf("%v", step.Config.Model),
+			Action: fmt.Sprintf("%v", step.Config.Action),
+		}
 		stepMsg := fmt.Sprintf("Processing step %d/%d: %s", stepIndex+1, len(p.config.Steps), step.Name)
-		p.emitProgress(stepMsg)
+		p.emitProgress(stepMsg, stepInfo)
 		p.spinner.Start(stepMsg)
-		p.debugf("Processing step: %s", step.Name)
+		p.debugf("Starting step processing: index=%d name=%s", stepIndex, step.Name)
+		p.debugf("Step details: input=%v model=%v action=%v output=%v", step.Config.Input, step.Config.Model, step.Config.Action, step.Config.Output)
 
-		// Handle input based on type
+		// Handle input based on type with error context
 		var inputs []string
+		p.debugf("Processing input configuration for step: %s", step.Name)
 		switch v := step.Config.Input.(type) {
 		case map[string]interface{}:
 			// Check for database input
 			if _, hasDB := v["database"]; hasDB {
 				p.spinner.Stop()
 				p.spinner.Start("Processing database input")
+				p.debugf("Processing database input for step: %s", step.Name)
 				if err := p.handleDatabaseInput(v); err != nil {
 					p.spinner.Stop()
-					p.emitError(err)
-					return fmt.Errorf("failed to process database input: %w", err)
+					errMsg := fmt.Sprintf("Database input processing failed for step '%s': %v", step.Name, err)
+					p.debugf("Database error: %s", errMsg)
+					p.emitError(fmt.Errorf(errMsg))
+					return fmt.Errorf("database input error: %w", err)
 				}
+				p.debugf("Successfully processed database input")
 				// Create a temporary file with the database output
 				tmpFile, err := os.CreateTemp("", "comanda-db-*.txt")
 				if err != nil {
@@ -240,12 +283,10 @@ func (p *Processor) Process() error {
 		if len(inputs) == 1 {
 			input := inputs[0]
 			if strings.HasPrefix(input, "STDIN") {
+				// Initialize empty input if none provided
 				if p.lastOutput == "" {
-					p.spinner.Stop()
-					err := fmt.Errorf("STDIN specified but no previous output available")
-					p.emitError(err)
-					fmt.Printf("Error in step '%s': %v\n", step.Name, err)
-					return err
+					p.lastOutput = ""
+					p.debugf("No previous output available, using empty input")
 				}
 
 				// Check for variable assignment
@@ -299,44 +340,59 @@ func (p *Processor) Process() error {
 
 		// Skip model validation and provider configuration if model is NA
 		if !(len(modelNames) == 1 && modelNames[0] == "NA") {
-			// Validate model for this step
+			// Validate model for this step with detailed logging
 			p.spinner.Start("Validating model configuration")
+			p.debugf("Validating models for step '%s': models=%v inputs=%v", step.Name, modelNames, inputs)
 			if err := p.validateModel(modelNames, inputs); err != nil {
 				p.spinner.Stop()
-				p.emitError(err)
-				err = fmt.Errorf("model validation error in step %s: %w", step.Name, err)
-				fmt.Printf("Error: %v\n", err)
-				return err
+				errMsg := fmt.Sprintf("Model validation failed for step '%s': %v (models=%v)", step.Name, err, modelNames)
+				p.debugf("Model validation error: %s", errMsg)
+				p.emitError(fmt.Errorf(errMsg))
+				return fmt.Errorf("model validation error: %w", err)
 			}
+			p.debugf("Model validation successful for step: %s", step.Name)
 			p.spinner.Stop()
 
-			// Configure providers if needed
+			// Configure providers with detailed logging
 			p.spinner.Start("Configuring model providers")
+			p.debugf("Configuring providers for step '%s'", step.Name)
 			if err := p.configureProviders(); err != nil {
 				p.spinner.Stop()
-				p.emitError(err)
-				err = fmt.Errorf("provider configuration error in step %s: %w", step.Name, err)
-				fmt.Printf("Error: %v\n", err)
-				return err
+				errMsg := fmt.Sprintf("Provider configuration failed for step '%s': %v", step.Name, err)
+				p.debugf("Provider configuration error: %s", errMsg)
+				p.emitError(fmt.Errorf(errMsg))
+				return fmt.Errorf("provider configuration error: %w", err)
 			}
+			p.debugf("Provider configuration successful for step: %s", step.Name)
 			p.spinner.Stop()
 		}
 
-		// Process actions for this step
+		// Process actions with detailed logging
 		p.spinner.Start("Processing actions")
+		p.debugf("Processing actions for step '%s'", step.Name)
+
 		// Substitute variables in actions
 		substitutedActions := make([]string, len(actions))
 		for i, action := range actions {
-			substitutedActions[i] = p.substituteVariables(action)
+			original := action
+			substituted := p.substituteVariables(action)
+			substitutedActions[i] = substituted
+			if original != substituted {
+				p.debugf("Variable substitution: original='%s' substituted='%s'", original, substituted)
+			}
 		}
+
+		p.debugf("Executing actions: models=%v actions=%v", modelNames, substitutedActions)
 		response, err := p.processActions(modelNames, substitutedActions)
 		if err != nil {
 			p.spinner.Stop()
-			p.emitError(err)
-			err = fmt.Errorf("action processing error in step %s: %w", step.Name, err)
-			fmt.Printf("Error: %v\n", err)
-			return err
+			errMsg := fmt.Sprintf("Action processing failed for step '%s': %v (models=%v actions=%v)",
+				step.Name, err, modelNames, substitutedActions)
+			p.debugf("Action processing error: %s", errMsg)
+			p.emitError(fmt.Errorf(errMsg))
+			return fmt.Errorf("action processing error: %w", err)
 		}
+		p.debugf("Successfully processed actions for step: %s", step.Name)
 		p.spinner.Stop()
 
 		// Store the response for potential use as STDIN in next step
@@ -350,13 +406,16 @@ func (p *Processor) Process() error {
 		switch v := step.Config.Output.(type) {
 		case map[string]interface{}:
 			if _, hasDB := v["database"]; hasDB {
+				p.debugf("Processing database output for step '%s'", step.Name)
 				if err := p.handleDatabaseOutput(response, v); err != nil {
 					p.spinner.Stop()
-					p.emitError(err)
-					err = fmt.Errorf("database output error in step %s: %w", step.Name, err)
-					fmt.Printf("Error: %v\n", err)
-					return err
+					errMsg := fmt.Sprintf("Database output processing failed for step '%s': %v (config=%v)",
+						step.Name, err, v)
+					p.debugf("Database output error: %s", errMsg)
+					p.emitError(fmt.Errorf(errMsg))
+					return fmt.Errorf("database output error: %w", err)
 				}
+				p.debugf("Successfully processed database output for step: %s", step.Name)
 				handled = true
 			}
 		}
@@ -364,13 +423,17 @@ func (p *Processor) Process() error {
 		// Handle regular output if not already handled
 		if !handled {
 			outputs := p.NormalizeStringSlice(step.Config.Output)
+			p.debugf("Processing regular output for step '%s': model=%s outputs=%v",
+				step.Name, modelNames[0], outputs)
 			if err := p.handleOutput(modelNames[0], response, outputs); err != nil {
 				p.spinner.Stop()
-				p.emitError(err)
-				err = fmt.Errorf("output handling error in step %s: %w", step.Name, err)
-				fmt.Printf("Error: %v\n", err)
-				return err
+				errMsg := fmt.Sprintf("Output processing failed for step '%s': %v (model=%s outputs=%v)",
+					step.Name, err, modelNames[0], outputs)
+				p.debugf("Output processing error: %s", errMsg)
+				p.emitError(fmt.Errorf(errMsg))
+				return fmt.Errorf("output handling error: %w", err)
 			}
+			p.debugf("Successfully processed output for step: %s", step.Name)
 		}
 
 		p.spinner.Stop()
@@ -380,7 +443,6 @@ func (p *Processor) Process() error {
 	}
 
 	p.debugf("DSL processing completed successfully")
-	p.emitProgress("DSL processing completed successfully")
 	return nil
 }
 

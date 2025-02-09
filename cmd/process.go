@@ -17,8 +17,8 @@ import (
 
 var processCmd = &cobra.Command{
 	Use:   "process [files...]",
-	Short: "Process YAML DSL configuration files",
-	Long:  `Process one or more DSL configuration files and execute the specified actions.`,
+	Short: "Process YAML workflow files",
+	Long:  `Process one or more workflow files and execute the specified actions.`,
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		// Get environment file path
@@ -59,7 +59,7 @@ var processCmd = &cobra.Command{
 		}
 
 		for _, file := range args {
-			fmt.Printf("\nProcessing DSL file: %s\n", file)
+			fmt.Printf("\nProcessing workflow file: %s\n", file)
 
 			// Read YAML file
 			if verbose {
@@ -131,7 +131,7 @@ var processCmd = &cobra.Command{
 
 			// Run processor
 			if err := proc.Process(); err != nil {
-				log.Printf("Error processing DSL file %s: %v\n", file, err)
+				log.Printf("Error processing workflow file %s: %v\n", file, err)
 				continue
 			}
 		}

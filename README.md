@@ -4,13 +4,13 @@
 
 ![Demo](comanda-demo.gif)
 
-COMandA is a command-line tool that enables the composition of Large Language Model (LLM) operations using a YAML-based Domain Specific Language (DSL). It simplifies the process of creating and managing agentic workflows composed of downloads, files, text, images, documents, multiple providers and multiple models.
+Comanda is a command-line tool that enables the composition of Large Language Model (LLM) operations using a YAML-based workflow. It simplifies the process of creating and managing agentic workflows.
 
 Think of each step in a YAML file as the equivalent of a Lego block. You can chain these blocks together to create more complex structures which can help solve problems.
 
-Create YAML 'recipes' and use `comanda process` to execute the recipe file.
+Create YAML workflow 'recipes' and use `comanda process` to execute the recipe file.
 
-COMandA allows you to use the best provider and model for each step and compose information pipelines that combine the stregths of different LLMs. It supports multiple LLM providers (OpenAI, Anthropic, Google, X.AI, Ollama) and provides extensible DSL capabilities for defining complex information workflows.
+Comanda allows you to use the best provider and model for each step and compose workflows that combine the stregths of different LLMs. It supports multiple LLM providers (Anthropic, Deepseek, Google, Local models via Ollama, OpenAI, and X.AI) and offers the ability to chain these models together by passing outputs from one step to inputs in the next step.
 
 ## Features
 
@@ -20,7 +20,7 @@ COMandA allows you to use the best provider and model for each step and compose 
 - 🖼️ Support for image analysis with vision models (screenshots and common image formats)
 - 🌐 Direct URL input support for web content analysis
 - 🕷️ Advanced web scraping capabilities with configurable options
-- 🛠️ Extensible DSL for defining complex workflows
+- 🛠️ Extensible YAML configuration for defining workflows
 - ⚡ Efficient processing of LLM chains
 - 🔒 HTTP server mode: use it as a multi-LLM workflow wrapper
 - 🔐 Secure configuration encryption for protecting API keys and secrets
@@ -62,10 +62,10 @@ COMandA uses an environment file to store provider configurations and API keys. 
 ```bash
 # Use a specific env file
 export COMANDA_ENV=/path/to/your/env/file
-comanda process your-dsl-file.yaml
+comanda process your-workflow-file.yaml
 
 # Or specify it inline
-COMANDA_ENV=/path/to/your/env/file comanda process your-dsl-file.yaml
+COMANDA_ENV=/path/to/your/env/file comanda process your-workflow-file.yaml
 ```
 
 ### Configuration Encryption
@@ -91,7 +91,7 @@ Confirm encryption password: ********
 Configuration encrypted successfully!
 
 # When running commands, you'll be prompted for the password
-comanda process your-dsl-file.yaml
+comanda process your-workflow-file.yaml
 Enter decryption password: ********
 ```
 
@@ -692,7 +692,7 @@ Images are automatically optimized for processing:
 - PNG compression is applied to reduce token usage while maintaining quality
 - These optimizations help prevent rate limit errors and ensure efficient processing
 
-The screenshot feature allows you to capture the current screen state for analysis. When you specify `screenshot` as the input in your DSL file, COMandA will automatically capture the entire screen and pass it to the specified model for analysis. This is particularly useful for UI analysis, bug reports, or any scenario where you need to analyze the current screen state.
+The screenshot feature allows you to capture the current screen state for analysis. When you specify `screenshot` as the input in your Workflow file, COMandA will automatically capture the entire screen and pass it to the specified model for analysis. This is particularly useful for UI analysis, bug reports, or any scenario where you need to analyze the current screen state.
 
 For URL inputs, COMandA automatically:
 
@@ -702,7 +702,7 @@ For URL inputs, COMandA automatically:
 - Stores content in temporary files with appropriate extensions
 - Cleans up temporary files after processing
 
-### Creating DSL Files
+### Creating YAML Workflow Files
 
 Create a YAML file defining your chain of operations:
 
@@ -740,16 +740,16 @@ analyze:
 
 ### Running Commands
 
-Run your DSL file:
+Run your YAML workflow file:
 
 ```bash
-comanda process your-dsl-file.yaml
+comanda process your-workflow-file.yaml
 ```
 
 For example:
 
 ```bash
-Processing DSL file: examples/openai-example.yaml
+Processing Workflow file: examples/openai-example.yaml
 
 Configuration:
 
@@ -797,7 +797,7 @@ Certainly! Here are some snappy taglines for each of the company names that coul
 
 ## Database Operations
 
-COMandA supports database operations as input and output in the YAML DSL. Currently, PostgreSQL is supported.
+Comanda supports database operations as input and output in the YAML workflow. Currently, PostgreSQL is supported.
 
 ### Database Configuration
 
@@ -894,7 +894,7 @@ If you use COMandA in your research or academic work, please cite it as follows:
   year         = {2024},
   publisher    = {GitHub},
   url          = {https://github.com/kris-hansen/comanda},
-  description  = {A command-line tool for composing Large Language Model operations using a YAML-based DSL}
+  description  = {A command-line tool for composing Large Language Model operations using YAML-based workflows}
 }
 ```
 

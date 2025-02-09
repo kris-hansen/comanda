@@ -117,20 +117,21 @@ func (r *sseRecorder) parseEvents() {
 				// For error events, we want to capture the error message
 				if currentEventType == "progress" || currentEventType == "complete" || currentEventType == "error" {
 					data := strings.TrimSpace(currentEvent.String())
-					// Try to parse as JSON first
-					var jsonData map[string]interface{}
-					if err := json.Unmarshal([]byte(data), &jsonData); err == nil {
-						// If it's JSON and has an error field, use that
-						if errMsg, ok := jsonData["error"].(string); ok {
-							r.events = append(r.events, errMsg)
-						}
+					// Handle both JSON and plain text formats
+					if data == "Starting workflow processing" || data == "Workflow processing completed successfully" || strings.HasPrefix(data, "Error reading YAML file") || strings.HasPrefix(data, "Error parsing YAML") {
+						r.events = append(r.events, data)
 					} else {
-						// If not JSON, handle as plain text
-						// Filter out debug messages and responses
-						if !strings.HasPrefix(data, "[DEBUG]") && !strings.HasPrefix(data, "Response from") && !strings.HasPrefix(data, "mock response") {
-							// Only capture specific events we're looking for
-							if data == "Starting DSL processing" || data == "DSL processing completed successfully" || strings.HasPrefix(data, "Error reading YAML file") || strings.HasPrefix(data, "Error parsing YAML") {
-								r.events = append(r.events, data)
+						// Try to parse as JSON
+						var jsonData map[string]interface{}
+						if err := json.Unmarshal([]byte(data), &jsonData); err == nil {
+							// If it's JSON and has an error field, use that
+							if errMsg, ok := jsonData["error"].(string); ok {
+								r.events = append(r.events, errMsg)
+							} else if msg, ok := jsonData["message"].(string); ok {
+								// For progress events, extract the message field
+								if msg == "Starting workflow processing" || msg == "Workflow processing completed successfully" || strings.HasPrefix(msg, "Error reading YAML file") || strings.HasPrefix(msg, "Error parsing YAML") {
+									r.events = append(r.events, msg)
+								}
 							}
 						}
 					}
@@ -150,20 +151,21 @@ func (r *sseRecorder) parseEvents() {
 	if currentEvent.Len() > 0 && currentEventType != "" {
 		if currentEventType == "progress" || currentEventType == "complete" || currentEventType == "error" {
 			data := strings.TrimSpace(currentEvent.String())
-			// Try to parse as JSON first
-			var jsonData map[string]interface{}
-			if err := json.Unmarshal([]byte(data), &jsonData); err == nil {
-				// If it's JSON and has an error field, use that
-				if errMsg, ok := jsonData["error"].(string); ok {
-					r.events = append(r.events, errMsg)
-				}
+			// Handle both JSON and plain text formats
+			if data == "Starting workflow processing" || data == "Workflow processing completed successfully" || strings.HasPrefix(data, "Error reading YAML file") || strings.HasPrefix(data, "Error parsing YAML") {
+				r.events = append(r.events, data)
 			} else {
-				// If not JSON, handle as plain text
-				// Filter out debug messages and responses
-				if !strings.HasPrefix(data, "[DEBUG]") && !strings.HasPrefix(data, "Response from") && !strings.HasPrefix(data, "mock response") {
-					// Only capture specific events we're looking for
-					if data == "Starting DSL processing" || data == "DSL processing completed successfully" || strings.HasPrefix(data, "Error reading YAML file") || strings.HasPrefix(data, "Error parsing YAML") {
-						r.events = append(r.events, data)
+				// Try to parse as JSON
+				var jsonData map[string]interface{}
+				if err := json.Unmarshal([]byte(data), &jsonData); err == nil {
+					// If it's JSON and has an error field, use that
+					if errMsg, ok := jsonData["error"].(string); ok {
+						r.events = append(r.events, errMsg)
+					} else if msg, ok := jsonData["message"].(string); ok {
+						// For progress events, extract the message field
+						if msg == "Starting workflow processing" || msg == "Workflow processing completed successfully" || strings.HasPrefix(msg, "Error reading YAML file") || strings.HasPrefix(msg, "Error parsing YAML") {
+							r.events = append(r.events, msg)
+						}
 					}
 				}
 			}
@@ -346,8 +348,8 @@ step_one:
 			streaming: true,
 			method:    http.MethodPost,
 			expectedEvents: []string{
-				"Starting DSL processing",
-				"DSL processing completed successfully",
+				"Starting workflow processing",
+				"Workflow processing completed successfully",
 			},
 		},
 		{
@@ -373,11 +375,14 @@ step_one:
 			expectedError: "YAML processing is only available via POST requests. Please use POST with your YAML content.",
 		},
 		{
-			name:          "Error case - missing input in POST",
-			filename:      "stdin.yaml",
-			streaming:     true,
-			method:        http.MethodPost,
-			expectedError: "POST request requires 'input'",
+			name:      "Valid POST request without input",
+			filename:  "stdin.yaml",
+			streaming: true,
+			method:    http.MethodPost,
+			expectedEvents: []string{
+				"Starting workflow processing",
+				"Workflow processing completed successfully",
+			},
 		},
 		{
 			name:          "Error case - DELETE method not allowed",
@@ -502,11 +507,12 @@ func TestHandleYAMLProcessStreaming(t *testing.T) {
 		name           string
 		yamlContent    string
 		streaming      bool
+		input          string
 		expectedEvents []string
 		expectedError  string
 	}{
 		{
-			name: "Simple streaming process",
+			name: "Simple streaming process with input",
 			yamlContent: `
 step_one:
   model: gpt-4o
@@ -514,9 +520,25 @@ step_one:
   action: "Analyze this text"
   output: STDOUT`,
 			streaming: true,
+			input:     "test input",
 			expectedEvents: []string{
-				"Starting DSL processing",
-				"DSL processing completed successfully",
+				"Starting workflow processing",
+				"Workflow processing completed successfully",
+			},
+		},
+		{
+			name: "Simple streaming process without input",
+			yamlContent: `
+step_one:
+  model: gpt-4o
+  input: STDIN
+  action: "Analyze this text"
+  output: STDOUT`,
+			streaming: true,
+			input:     "",
+			expectedEvents: []string{
+				"Starting workflow processing",
+				"Workflow processing completed successfully",
 			},
 		},
 		{
@@ -547,7 +569,7 @@ step_one:
 			}{
 				Content:   tt.yamlContent,
 				Streaming: tt.streaming,
-				Input:     "test input",
+				Input:     tt.input,
 			}
 			body, _ := json.Marshal(reqBody)
 

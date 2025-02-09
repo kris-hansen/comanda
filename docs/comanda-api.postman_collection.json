@@ -468,148 +468,11 @@
       ]
     },
     {
-      "name": "YAML Operations",
-      "item": [
-        {
-          "name": "Upload YAML",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearer_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"content\": \"your yaml content here\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/yaml/upload",
-              "host": ["{{base_url}}"],
-              "path": ["yaml", "upload"]
-            }
-          }
-        },
-        {
-          "name": "Process YAML",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearer_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"content\": \"your yaml content here\",\n  \"streaming\": false\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/yaml/process",
-              "host": ["{{base_url}}"],
-              "path": ["yaml", "process"]
-            }
-          }
-        },
-        {
-          "name": "Process YAML (Streaming)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearer_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Accept",
-                "value": "text/event-stream"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"content\": \"your yaml content here\",\n  \"streaming\": true\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/yaml/process",
-              "host": ["{{base_url}}"],
-              "path": ["yaml", "process"]
-            }
-          }
-        }
-      ]
-    },
-    {
       "name": "Process Operations",
       "item": [
         {
           "name": "Process YAML File",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearer_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/process?filename=example.yaml",
-              "host": ["{{base_url}}"],
-              "path": ["process"],
-              "query": [
-                {
-                  "key": "filename",
-                  "value": "example.yaml"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Process YAML File (Streaming)",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{bearer_token}}"
-              },
-              {
-                "key": "Accept",
-                "value": "text/event-stream"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/process?filename=example.yaml&streaming=true",
-              "host": ["{{base_url}}"],
-              "path": ["process"],
-              "query": [
-                {
-                  "key": "filename",
-                  "value": "example.yaml"
-                },
-                {
-                  "key": "streaming",
-                  "value": "true"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Process YAML File with Input",
+          "description": "Process a YAML file with input and receive JSON response",
           "request": {
             "method": "POST",
             "header": [
@@ -640,7 +503,8 @@
           }
         },
         {
-          "name": "Process YAML File with Input (Streaming)",
+          "name": "Process YAML File (Streaming)",
+          "description": "Process a YAML file with input and receive Server-Sent Events stream. The response will include various event types:\n\n- data: Regular output data\n- progress: Processing progress updates with step information\n- complete: Final completion message\n- error: Error information\n- heartbeat: Keep-alive signals (every 15s)\n\nExample events:\n```\nevent: progress\ndata: {\n  \"message\": \"Processing step 1/1: o1-mini\",\n  \"step\": {\n    \"name\": \"o1-mini\",\n    \"model\": \"o1-mini\",\n    \"action\": \"You are a quantum observer...\"\n  }\n}\n\nevent: data\ndata: Generated content here...\n\nevent: complete\ndata: {\n  \"message\": \"DSL processing completed successfully\",\n  \"step\": {\n    \"name\": \"o1-mini\",\n    \"model\": \"o1-mini\",\n    \"action\": \"You are a quantum observer...\"\n  }\n}\n\nevent: error\ndata: {\"error\": \"Model failed to respond\"}\n\n: heartbeat\n```",
           "request": {
             "method": "POST",
             "header": [
@@ -654,7 +518,8 @@
               },
               {
                 "key": "Accept",
-                "value": "text/event-stream"
+                "value": "text/event-stream",
+                "description": "Required for SSE streaming"
               }
             ],
             "body": {

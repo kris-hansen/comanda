@@ -48,8 +48,8 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerC
 				})
 				return
 			}
-			sseWriter := &sseWriter{w: w, f: flusher}
-			sseWriter.SendError(fmt.Errorf("YAML processing is only available via POST requests. Please use POST with your YAML content."))
+			sw := &sseWriter{w: w, f: flusher}
+			sw.SendError(fmt.Errorf("YAML processing is only available via POST requests. Please use POST with your YAML content."))
 		} else {
 			json.NewEncoder(w).Encode(ProcessResponse{
 				Success: false,
@@ -75,8 +75,8 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerC
 				})
 				return
 			}
-			sseWriter := &sseWriter{w: w, f: flusher}
-			sseWriter.SendError(fmt.Errorf("filename parameter is required"))
+			sw := &sseWriter{w: w, f: flusher}
+			sw.SendError(fmt.Errorf("filename parameter is required"))
 		} else {
 			json.NewEncoder(w).Encode(ProcessResponse{
 				Success: false,
@@ -114,8 +114,8 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerC
 				})
 				return
 			}
-			sseWriter := &sseWriter{w: w, f: flusher}
-			sseWriter.SendError(fmt.Errorf("Invalid file path"))
+			sw := &sseWriter{w: w, f: flusher}
+			sw.SendError(fmt.Errorf("Invalid file path"))
 		} else {
 			json.NewEncoder(w).Encode(ProcessResponse{
 				Success: false,
@@ -140,8 +140,8 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerC
 				})
 				return
 			}
-			sseWriter := &sseWriter{w: w, f: flusher}
-			sseWriter.SendError(fmt.Errorf("Invalid file path: attempted directory traversal"))
+			sw := &sseWriter{w: w, f: flusher}
+			sw.SendError(fmt.Errorf("Invalid file path: attempted directory traversal"))
 		} else {
 			json.NewEncoder(w).Encode(ProcessResponse{
 				Success: false,
@@ -167,8 +167,8 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerC
 				})
 				return
 			}
-			sseWriter := &sseWriter{w: w, f: flusher}
-			sseWriter.SendError(fmt.Errorf("Invalid file path: access denied"))
+			sw := &sseWriter{w: w, f: flusher}
+			sw.SendError(fmt.Errorf("Invalid file path: access denied"))
 		} else {
 			json.NewEncoder(w).Encode(ProcessResponse{
 				Success: false,
@@ -178,11 +178,11 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerC
 		return
 	}
 
-	// Read YAML file with size check
+	// Read and validate YAML file
 	yamlContent, err := fileutil.SafeReadFile(finalPath)
 	if err != nil {
 		config.VerboseLog("Error reading file: %v", err)
-		config.DebugLog("File read error: %v", err)
+		config.DebugLog("File read error: path=%s error=%v", finalPath, err)
 		if streaming {
 			w.Header().Set("Content-Type", "text/event-stream")
 			w.Header().Set("Cache-Control", "no-cache")
@@ -197,8 +197,8 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerC
 				})
 				return
 			}
-			sseWriter := &sseWriter{w: w, f: flusher}
-			sseWriter.SendError(fmt.Errorf("Error reading YAML file: %v", err))
+			sw := &sseWriter{w: w, f: flusher}
+			sw.SendError(fmt.Errorf("Error reading YAML file: %v", err))
 		} else {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
@@ -210,11 +210,14 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerC
 		return
 	}
 
+	// Log YAML content details before parsing
+	config.DebugLog("Processing YAML content: length=%d bytes", len(yamlContent))
+
 	// First unmarshal into a map to preserve step names (same as CLI)
 	var rawConfig map[string]processor.StepConfig
 	if err := yaml.Unmarshal(yamlContent, &rawConfig); err != nil {
 		config.VerboseLog("Error parsing YAML: %v", err)
-		config.DebugLog("YAML parse error: %v", err)
+		config.DebugLog("YAML parse error: content_preview='%s' error=%v", truncateString(string(yamlContent), 200), err)
 		w.WriteHeader(http.StatusBadRequest)
 		if streaming {
 			flusher, ok := w.(http.Flusher)
@@ -226,8 +229,8 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerC
 				})
 				return
 			}
-			sseWriter := &sseWriter{w: w, f: flusher}
-			sseWriter.SendError(fmt.Errorf("Error parsing YAML file: %v", err))
+			sw := &sseWriter{w: w, f: flusher}
+			sw.SendError(fmt.Errorf("Error parsing YAML file: %v", err))
 		} else {
 			json.NewEncoder(w).Encode(ProcessResponse{
 				Success: false,
@@ -239,20 +242,24 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerC
 
 	// Convert map to ordered Steps slice (same as CLI)
 	var dslConfig processor.DSLConfig
-	for name, config := range rawConfig {
+	config.DebugLog("Converting YAML to DSL config: step_count=%d", len(rawConfig))
+	for name, stepConfig := range rawConfig {
+		config.DebugLog("Processing step: name=%s model=%v action=%v", name, stepConfig.Model, stepConfig.Action)
 		dslConfig.Steps = append(dslConfig.Steps, processor.Step{
 			Name:   name,
-			Config: config,
+			Config: stepConfig,
 		})
 	}
 
-	// Create processor instance with validation enabled
+	// Create and configure processor
+	config.DebugLog("Creating processor instance with validation enabled")
 	proc := processor.NewProcessor(&dslConfig, envConfig, true)
+	config.DebugLog("Processor created successfully with config: steps=%d", len(dslConfig.Steps))
 
-	// Handle POST input
+	// Handle POST input with detailed logging
 	var stdinInput string
 
-	config.DebugLog("Processing POST request input")
+	config.DebugLog("Processing POST request input: content_type=%s", r.Header.Get("Content-Type"))
 
 	// First check query parameter
 	stdinInput = r.URL.Query().Get("input")
@@ -270,35 +277,16 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerC
 		config.DebugLog("Extracted input from JSON body")
 	}
 
-	if stdinInput == "" {
-		config.VerboseLog("Missing input for POST request")
-		config.DebugLog("POST request failed: no input provided")
-		w.WriteHeader(http.StatusBadRequest)
-		if streaming {
-			flusher, ok := w.(http.Flusher)
-			if !ok {
-				w.WriteHeader(http.StatusInternalServerError)
-				json.NewEncoder(w).Encode(ProcessResponse{
-					Success: false,
-					Error:   "Streaming is not supported",
-				})
-				return
-			}
-			sseWriter := &sseWriter{w: w, f: flusher}
-			sseWriter.SendError(fmt.Errorf("POST request requires 'input' query parameter or JSON body with 'input' field"))
-		} else {
-			json.NewEncoder(w).Encode(ProcessResponse{
-				Success: false,
-				Error:   "POST request requires 'input' query parameter or JSON body with 'input' field",
-			})
-		}
-		return
+	// Always initialize the processor with input (empty string if none provided)
+	if stdinInput != "" {
+		config.VerboseLog("Processing STDIN input")
+		config.DebugLog("Input length: %d bytes", len(stdinInput))
+	} else {
+		config.VerboseLog("No input provided - proceeding with empty input")
+		config.DebugLog("Processing without input")
+		stdinInput = ""
 	}
-
-	config.VerboseLog("Processing STDIN input")
-	config.DebugLog("Input length: %d bytes", len(stdinInput))
-
-	// Set the STDIN input as the processor's last output
+	// Set the input (empty or not) as the processor's last output
 	proc.SetLastOutput(stdinInput)
 
 	// Check Accept header for streaming
@@ -307,41 +295,82 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerC
 	}
 
 	if streaming {
+		config.DebugLog("Initializing SSE streaming mode")
+
 		// Set up SSE streaming
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
+		config.DebugLog("SSE headers set")
 
+		// Flusher capability is already checked in middleware
 		flusher, ok := w.(http.Flusher)
 		if !ok {
-			w.Header().Set("Content-Type", "application/json")
+			config.DebugLog("Streaming requested but flusher not available, type: %T", w)
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(ProcessResponse{
 				Success: false,
-				Error:   "Streaming is not supported",
+				Error:   "Streaming is not supported by this server configuration",
 			})
 			return
 		}
+		config.DebugLog("Setting up streaming with confirmed flusher support")
+		flusher.Flush() // Ensure headers are sent immediately
 
-		// Create SSE writer
-		sseWriter := &sseWriter{w: w, f: flusher}
+		var sw *sseWriter
+		var progressChan chan processor.ProgressUpdate
+
+		// Create SSE writer with confirmed flusher support
+		sw = &sseWriter{w: w, f: flusher}
+		config.DebugLog("SSE writer created")
 
 		// Create progress channel and writer
-		progressChan := make(chan processor.ProgressUpdate)
+		progressChan = make(chan processor.ProgressUpdate)
 		progressWriter := processor.NewChannelProgressWriter(progressChan)
+		config.DebugLog("Progress channel created: buffer=%d, capacity=%d", len(progressChan), cap(progressChan))
 
 		// Set up processor with progress writer
 		proc.SetProgressWriter(progressWriter)
+		config.DebugLog("Progress writer configured on processor")
 
 		// Create context with timeout
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 		defer cancel()
 
-		// Run the processor in a goroutine
+		// Add panic recovery for processor initialization
+		defer func() {
+			if r := recover(); r != nil {
+				config.DebugLog("Panic during processor setup: %v", r)
+				if sw != nil {
+					sw.SendError(fmt.Errorf("internal server error: processor initialization failed"))
+				}
+				return
+			}
+		}()
+
+		// Send initial progress message
+		if sw != nil {
+			sw.SendProgress("Starting workflow processing")
+		}
+
+		// Run the processor in a goroutine with error context
 		processDone := make(chan error)
 		go func() {
-			processDone <- proc.Process()
+			defer func() {
+				if r := recover(); r != nil {
+					config.DebugLog("Panic in processor goroutine: %v", r)
+					processDone <- fmt.Errorf("processor panic: %v", r)
+				}
+			}()
+
+			config.DebugLog("Starting processor goroutine for streaming")
+			if err := proc.Process(); err != nil {
+				config.DebugLog("Processor error in streaming mode: %v", err)
+				processDone <- fmt.Errorf("processing error: %w", err)
+			} else {
+				processDone <- nil
+			}
 		}()
 
 		// Start heartbeat ticker
@@ -349,39 +378,71 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerC
 		defer heartbeat.Stop()
 
 		// Handle events
+		config.DebugLog("Starting event processing loop")
 		for {
 			select {
 			case <-ctx.Done():
-				sseWriter.SendError(fmt.Errorf("processing timed out after 5 minutes"))
+				config.DebugLog("Context timeout reached after 5 minutes")
+				if sw != nil {
+					sw.SendError(fmt.Errorf("processing timed out after 5 minutes"))
+				}
 				return
 			case <-r.Context().Done():
-				// Client disconnected
+				config.DebugLog("Client connection closed: %v", r.Context().Err())
 				return
 			case err := <-processDone:
 				if err != nil {
-					sseWriter.SendError(err)
+					errMsg := fmt.Sprintf("Processing failed: %v", err)
+					config.DebugLog("Streaming error: %s", errMsg)
+					if sw != nil {
+						sw.SendError(fmt.Errorf(errMsg))
+					}
 				} else {
-					sseWriter.SendComplete("Processing complete")
+					config.DebugLog("Processing completed successfully")
+					if sw != nil {
+						sw.SendProgress("Workflow processing completed successfully")
+					}
 				}
 				return
 			case update := <-progressChan:
+				config.DebugLog("Received progress update: type=%v message='%s'", update.Type, update.Message)
+				if sw == nil {
+					config.DebugLog("Warning: SSE writer is nil while receiving progress update")
+					continue
+				}
 				switch update.Type {
-				case processor.ProgressSpinner:
-					sseWriter.SendSpinner(update.Message)
 				case processor.ProgressStep:
-					// Map specific progress messages to complete events
-					if update.Message == "DSL processing completed successfully" {
-						sseWriter.SendComplete(update.Message)
+					// For initial and completion messages, send as plain text
+					if update.Message == "Starting workflow processing" || update.Message == "Workflow processing completed successfully" {
+						sw.SendProgress(update.Message)
 					} else {
-						sseWriter.SendProgress(update.Message)
+						// For other messages, create structured progress data
+						progressData := map[string]interface{}{
+							"message": update.Message,
+						}
+						if update.Step != nil {
+							progressData["step"] = map[string]string{
+								"name":   update.Step.Name,
+								"model":  update.Step.Model,
+								"action": update.Step.Action,
+							}
+						}
+						sw.SendProgress(progressData)
 					}
 				case processor.ProgressComplete:
-					sseWriter.SendComplete(update.Message)
+					config.DebugLog("Received completion event: %s", update.Message)
+					sw.SendComplete(update.Message)
 				case processor.ProgressError:
-					sseWriter.SendError(update.Error)
+					config.DebugLog("Received error event: %v", update.Error)
+					sw.SendError(update.Error)
+				default:
+					config.DebugLog("Warning: Unknown progress update type: %v", update.Type)
 				}
 			case <-heartbeat.C:
-				sseWriter.SendHeartbeat()
+				config.DebugLog("Sending heartbeat")
+				if sw != nil {
+					sw.SendHeartbeat()
+				}
 			}
 		}
 	}
@@ -397,7 +458,7 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerC
 	originalLogOutput := log.Writer()
 	log.SetOutput(filterWriter)
 
-	config.DebugLog("Starting DSL processing")
+	config.DebugLog("Starting workflow processing")
 
 	err = proc.Process()
 
@@ -416,35 +477,22 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerC
 	finalOutput := proc.LastOutput()
 
 	if err != nil {
-		config.VerboseLog("Error processing DSL: %v", err)
-		config.DebugLog("DSL processing error: %v", err)
+		config.VerboseLog("Error processing workflow: %v", err)
+		config.DebugLog("Workflow processing error: %v", err)
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		if streaming {
-			flusher, ok := w.(http.Flusher)
-			if !ok {
-				w.WriteHeader(http.StatusInternalServerError)
-				json.NewEncoder(w).Encode(ProcessResponse{
-					Success: false,
-					Error:   "Streaming is not supported",
-				})
-				return
-			}
-			sseWriter := &sseWriter{w: w, f: flusher}
-			sseWriter.SendError(fmt.Errorf("Error processing DSL file: %v", err))
-		} else {
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(ProcessResponse{
-				Success: false,
-				Error:   fmt.Sprintf("Error processing DSL file: %v", err),
-				Output:  finalOutput,
-			})
-		}
+		json.NewEncoder(w).Encode(ProcessResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Error processing workflow file: %v", err),
+			Output:  finalOutput,
+		})
 		return
 	}
 
 	config.VerboseLog("Successfully processed file: %s", filename)
-	config.DebugLog("DSL processing complete. Output length: %d bytes", len(finalOutput))
+	config.DebugLog("Workflow processing complete. Output length: %d bytes", len(finalOutput))
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(ProcessResponse{
 		Success: true,

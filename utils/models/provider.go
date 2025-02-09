@@ -1,5 +1,9 @@
 package models
 
+import (
+	"log"
+)
+
 // ModelConfig represents configuration options for model calls
 type ModelConfig struct {
 	Temperature         float64
@@ -32,6 +36,8 @@ var DetectProvider DetectProviderFunc = defaultDetectProvider
 
 // defaultDetectProvider is the default implementation of DetectProvider
 func defaultDetectProvider(modelName string) Provider {
+	log.Printf("[DEBUG][Provider] Attempting to detect provider for model: %s", modelName)
+
 	// Order providers from most specific to most general
 	providers := []Provider{
 		NewGoogleProvider(),    // Handles gemini- models
@@ -43,9 +49,12 @@ func defaultDetectProvider(modelName string) Provider {
 	}
 
 	for _, provider := range providers {
+		log.Printf("[DEBUG][Provider] Checking if %s supports model %s", provider.Name(), modelName)
 		if provider.SupportsModel(modelName) {
+			log.Printf("[DEBUG][Provider] Found provider %s for model %s", provider.Name(), modelName)
 			return provider
 		}
 	}
+	log.Printf("[DEBUG][Provider] No provider found for model %s", modelName)
 	return nil
 }
