@@ -233,6 +233,14 @@ google:
     Modes: text, vision, multi, file
   - gemini-2.0-flash-exp (external)
     Modes: text, vision, multi, file
+  - gemini-2.0-flash-001 (external)
+    Modes: text, vision, multi, file
+  - gemini-2.0-pro-exp-02-05 (external)
+    Modes: text, vision, multi, file
+  - gemini-2.0-flash-lite-preview-02-05 (external)
+    Modes: text, vision, multi, file
+  - gemini-2.0-flash-thinking-exp-01-21 (external)
+    Modes: text, vision, multi, file
 ```
 
 ### Server Configuration
