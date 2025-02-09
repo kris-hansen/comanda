@@ -4,13 +4,13 @@
 
 ![Demo](comanda-demo.gif)
 
-COMandA is a command-line tool that enables the composition of Large Language Model (LLM) operations using a YAML-based Domain Specific Language (DSL). It simplifies the process of creating and managing agentic workflows composed of downloads, files, text, images, documents, multiple providers and multiple models.
+Comanda is a command-line tool that enables the composition of Large Language Model (LLM) operations using a YAML-based workflow. It simplifies the process of creating and managing agentic workflows.
 
 Think of each step in a YAML file as the equivalent of a Lego block. You can chain these blocks together to create more complex structures which can help solve problems.
 
-Create YAML 'recipes' and use `comanda process` to execute the recipe file.
+Create YAML workflow 'recipes' and use `comanda process` to execute the recipe file.
 
-COMandA allows you to use the best provider and model for each step and compose information pipelines that combine the stregths of different LLMs. It supports multiple LLM providers (OpenAI, Anthropic, Google, X.AI, Ollama) and provides extensible DSL capabilities for defining complex information workflows.
+Comanda allows you to use the best provider and model for each step and compose workflows that combine the stregths of different LLMs. It supports multiple LLM providers (Anthropic, Deepseek, Google, Local models via Ollama, OpenAI, and X.AI) and offers the ability to chain these models together by passing outputs from one step to inputs in the next step.
 
 ## Features
 
@@ -20,7 +20,7 @@ COMandA allows you to use the best provider and model for each step and compose 
 - 🖼️ Support for image analysis with vision models (screenshots and common image formats)
 - 🌐 Direct URL input support for web content analysis
 - 🕷️ Advanced web scraping capabilities with configurable options
-- 🛠️ Extensible DSL for defining complex workflows
+- 🛠️ Extensible YAML configuration for defining workflows
 - ⚡ Efficient processing of LLM chains
 - 🔒 HTTP server mode: use it as a multi-LLM workflow wrapper
 - 🔐 Secure configuration encryption for protecting API keys and secrets
@@ -62,10 +62,10 @@ COMandA uses an environment file to store provider configurations and API keys. 
 ```bash
 # Use a specific env file
 export COMANDA_ENV=/path/to/your/env/file
-comanda process your-dsl-file.yaml
+comanda process your-workflow-file.yaml
 
 # Or specify it inline
-COMANDA_ENV=/path/to/your/env/file comanda process your-dsl-file.yaml
+COMANDA_ENV=/path/to/your/env/file comanda process your-workflow-file.yaml
 ```
 
 ### Configuration Encryption
@@ -91,7 +91,7 @@ Confirm encryption password: ********
 Configuration encrypted successfully!
 
 # When running commands, you'll be prompted for the password
-comanda process your-dsl-file.yaml
+comanda process your-workflow-file.yaml
 Enter decryption password: ********
 ```
 
@@ -233,6 +233,14 @@ google:
     Modes: text, vision, multi, file
   - gemini-2.0-flash-exp (external)
     Modes: text, vision, multi, file
+  - gemini-2.0-flash-001 (external)
+    Modes: text, vision, multi, file
+  - gemini-2.0-pro-exp-02-05 (external)
+    Modes: text, vision, multi, file
+  - gemini-2.0-flash-lite-preview-02-05 (external)
+    Modes: text, vision, multi, file
+  - gemini-2.0-flash-thinking-exp-01-21 (external)
+    Modes: text, vision, multi, file
 ```
 
 ### Server Configuration
@@ -302,36 +310,122 @@ comanda server
 
 The server provides the following endpoints:
 
-### 1. Process Endpoint
+### 1. File Operations
 
-`GET /process` processes a YAML file from the configured data directory. For YAML files that use STDIN as their first input, `POST /process` is also supported.
+#### View File Contents
+```bash
+# Get file content as plain text
+curl -H "Authorization: Bearer your-token" \
+     -H "Accept: text/plain" \
+     "http://localhost:8080/files/content?path=example.txt"
+
+# Download binary file
+curl -H "Authorization: Bearer your-token" \
+     -H "Accept: application/octet-stream" \
+     "http://localhost:8080/files/download?path=example.pdf" \
+     --output downloaded_file.pdf
+
+# Upload a file
+curl -X POST \
+     -H "Authorization: Bearer your-token" \
+     -F "file=@/path/to/local/file.txt" \
+     -F "path=destination/file.txt" \
+     "http://localhost:8080/files/upload"
+```
+
+Using JavaScript:
+```javascript
+// Get file content
+async function getFileContent(path) {
+  const response = await fetch(`http://localhost:8080/files/content?path=${encodeURIComponent(path)}`, {
+    headers: {
+      'Authorization': 'Bearer your-token',
+      'Accept': 'text/plain'
+    }
+  });
+  return await response.text();
+}
+
+// Download file
+async function downloadFile(path) {
+  const response = await fetch(`http://localhost:8080/files/download?path=${encodeURIComponent(path)}`, {
+    headers: {
+      'Authorization': 'Bearer your-token',
+      'Accept': 'application/octet-stream'
+    }
+  });
+  const blob = await response.blob();
+  // Create download link
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = path.split('/').pop(); // Use filename from path
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+}
+
+// Upload file
+async function uploadFile(file, path) {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('path', path);
+
+  const response = await fetch('http://localhost:8080/files/upload', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer your-token'
+    },
+    body: formData
+  });
+  return await response.json();
+}
+```
+
+### 2. Process Endpoint
+
+`GET /process` processes a YAML file from the configured data directory. For YAML files that use STDIN as their first input, `POST /process` is also supported. Both endpoints support real-time output streaming using Server-Sent Events.
 
 #### GET Request
 ```bash
-# Without authentication
+# Regular processing (JSON response)
 curl "http://localhost:8080/process?filename=openai-example.yaml"
 
+# Streaming processing (Server-Sent Events)
+curl -H "Accept: text/event-stream" \
+     "http://localhost:8080/process?filename=openai-example.yaml&streaming=true"
+
 # With authentication (when enabled)
-curl -H "Authorization: Bearer your-token" "http://localhost:8080/process?filename=openai-example.yaml"
+curl -H "Authorization: Bearer your-token" \
+     -H "Accept: text/event-stream" \
+     "http://localhost:8080/process?filename=openai-example.yaml&streaming=true"
 ```
 
 #### POST Request (for YAML files with STDIN input)
 You can provide input either through a query parameter or JSON body:
 
 ```bash
-# Using query parameter
+# Regular processing with query parameter
 curl -X POST "http://localhost:8080/process?filename=stdin-example.yaml&input=your text here"
 
-# Using JSON body
+# Regular processing with JSON body
 curl -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"input":"your text here"}' \
-  "http://localhost:8080/process?filename=stdin-example.yaml"
+     -H "Content-Type: application/json" \
+     -d '{"input":"your text here", "streaming": false}' \
+     "http://localhost:8080/process?filename=stdin-example.yaml"
+
+# Streaming processing with JSON body
+curl -X POST \
+     -H "Content-Type: application/json" \
+     -H "Accept: text/event-stream" \
+     -d '{"input":"your text here", "streaming": true}' \
+     "http://localhost:8080/process?filename=stdin-example.yaml"
 ```
 
 Note: POST requests are only allowed for YAML files where the first step uses "STDIN" as input. The /list endpoint shows which methods (GET or GET,POST) are supported for each YAML file.
 
-Response format:
+Response format (non-streaming):
 ```json
 {
   "success": true,
@@ -340,12 +434,75 @@ Response format:
 }
 ```
 
-Error response:
+Response format (streaming):
+```
+data: Processing step 1...
+
+data: Model response: ...
+
+data: Processing step 2...
+
+data: Processing complete
+```
+
+Error response (non-streaming):
 ```json
 {
   "success": false,
   "error": "Error message here",
   "output": "Any output generated before the error"
+}
+```
+
+Using JavaScript:
+```javascript
+// Regular processing
+async function processFile(filename, input = null) {
+  const url = `http://localhost:8080/process?filename=${encodeURIComponent(filename)}`;
+  const options = {
+    method: input ? 'POST' : 'GET',
+    headers: {
+      'Authorization': 'Bearer your-token',
+      'Content-Type': 'application/json'
+    }
+  };
+  
+  if (input) {
+    options.body = JSON.stringify({ input, streaming: false });
+  }
+  
+  const response = await fetch(url, options);
+  return await response.json();
+}
+
+// Streaming processing
+async function processFileStreaming(filename, input = null) {
+  const url = `http://localhost:8080/process?filename=${encodeURIComponent(filename)}`;
+  const options = {
+    method: input ? 'POST' : 'GET',
+    headers: {
+      'Authorization': 'Bearer your-token',
+      'Content-Type': 'application/json',
+      'Accept': 'text/event-stream'
+    }
+  };
+  
+  if (input) {
+    options.body = JSON.stringify({ input, streaming: true });
+  }
+  
+  const response = await fetch(url, options);
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    
+    const text = decoder.decode(value);
+    // Handle each SSE message
+    console.log(text);
+  }
 }
 ```
 
@@ -382,14 +539,130 @@ The `methods` field indicates which HTTP methods are supported:
 `GET /health` returns the server's current status:
 
 ```bash
-curl "http://localhost:8080/health"
+curl -H "Authorization: Bearer your-token" "http://localhost:8080/health"
 ```
 
 Response format:
 ```json
 {
-  "status": "ok",
-  "timestamp": "2024-11-02T20:39:13Z"
+  "success": true,
+  "message": "Server is healthy",
+  "statusCode": 200,
+  "response": "OK"
+}
+```
+
+### 4. YAML Operations
+
+#### Upload YAML
+`POST /yaml/upload` uploads a YAML file for processing:
+
+```bash
+curl -X POST \
+     -H "Authorization: Bearer your-token" \
+     -H "Content-Type: application/json" \
+     -d '{"content": "your yaml content here"}' \
+     "http://localhost:8080/yaml/upload"
+```
+
+Response format:
+```json
+{
+  "success": true,
+  "message": "YAML file uploaded successfully"
+}
+```
+
+#### Process YAML
+`POST /yaml/process` processes a YAML file with optional real-time output streaming:
+
+```bash
+# Regular processing (JSON response)
+curl -X POST \
+     -H "Authorization: Bearer your-token" \
+     -H "Content-Type: application/json" \
+     -d '{"content": "your yaml content here", "streaming": false}' \
+     "http://localhost:8080/yaml/process"
+
+# Streaming processing (Server-Sent Events)
+curl -X POST \
+     -H "Authorization: Bearer your-token" \
+     -H "Content-Type: application/json" \
+     -H "Accept: text/event-stream" \
+     -d '{"content": "your yaml content here", "streaming": true}' \
+     "http://localhost:8080/yaml/process"
+```
+
+Response format (non-streaming):
+```json
+{
+  "success": true,
+  "yaml": "processed yaml content"
+}
+```
+
+Response format (streaming):
+```
+data: Processing step 1...
+
+data: Model response: ...
+
+data: Processing step 2...
+
+data: Processing complete
+```
+
+Using JavaScript:
+```javascript
+// Upload YAML
+async function uploadYaml(content) {
+  const response = await fetch('http://localhost:8080/yaml/upload', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer your-token',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ content })
+  });
+  return await response.json();
+}
+
+// Process YAML (non-streaming)
+async function processYaml(content) {
+  const response = await fetch('http://localhost:8080/yaml/process', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer your-token',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ content, streaming: false })
+  });
+  return await response.json();
+}
+
+// Process YAML (streaming)
+async function processYamlStreaming(content) {
+  const response = await fetch('http://localhost:8080/yaml/process', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer your-token',
+      'Content-Type': 'application/json',
+      'Accept': 'text/event-stream'
+    },
+    body: JSON.stringify({ content, streaming: true })
+  });
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    
+    const text = decoder.decode(value);
+    // Handle each SSE message
+    console.log(text);
+  }
 }
 ```
 
@@ -427,7 +700,7 @@ Images are automatically optimized for processing:
 - PNG compression is applied to reduce token usage while maintaining quality
 - These optimizations help prevent rate limit errors and ensure efficient processing
 
-The screenshot feature allows you to capture the current screen state for analysis. When you specify `screenshot` as the input in your DSL file, COMandA will automatically capture the entire screen and pass it to the specified model for analysis. This is particularly useful for UI analysis, bug reports, or any scenario where you need to analyze the current screen state.
+The screenshot feature allows you to capture the current screen state for analysis. When you specify `screenshot` as the input in your Workflow file, COMandA will automatically capture the entire screen and pass it to the specified model for analysis. This is particularly useful for UI analysis, bug reports, or any scenario where you need to analyze the current screen state.
 
 For URL inputs, COMandA automatically:
 
@@ -437,7 +710,7 @@ For URL inputs, COMandA automatically:
 - Stores content in temporary files with appropriate extensions
 - Cleans up temporary files after processing
 
-### Creating DSL Files
+### Creating YAML Workflow Files
 
 Create a YAML file defining your chain of operations:
 
@@ -475,16 +748,16 @@ analyze:
 
 ### Running Commands
 
-Run your DSL file:
+Run your YAML workflow file:
 
 ```bash
-comanda process your-dsl-file.yaml
+comanda process your-workflow-file.yaml
 ```
 
 For example:
 
 ```bash
-Processing DSL file: examples/openai-example.yaml
+Processing Workflow file: examples/openai-example.yaml
 
 Configuration:
 
@@ -532,7 +805,7 @@ Certainly! Here are some snappy taglines for each of the company names that coul
 
 ## Database Operations
 
-COMandA supports database operations as input and output in the YAML DSL. Currently, PostgreSQL is supported.
+Comanda supports database operations as input and output in the YAML workflow. Currently, PostgreSQL is supported.
 
 ### Database Configuration
 
@@ -629,7 +902,7 @@ If you use COMandA in your research or academic work, please cite it as follows:
   year         = {2024},
   publisher    = {GitHub},
   url          = {https://github.com/kris-hansen/comanda},
-  description  = {A command-line tool for composing Large Language Model operations using a YAML-based DSL}
+  description  = {A command-line tool for composing Large Language Model operations using YAML-based workflows}
 }
 ```
 

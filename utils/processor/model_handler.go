@@ -21,25 +21,37 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 
 	p.debugf("Validating %d model(s)", len(modelNames))
 	for _, modelName := range modelNames {
-		p.debugf("Detecting provider for model: %s", modelName)
+		p.debugf("Starting validation for model: %s", modelName)
+		p.debugf("Attempting provider detection for model: %s", modelName)
 		provider := models.DetectProvider(modelName)
+		p.debugf("Provider detection result for %s: found=%v", modelName, provider != nil)
 		if provider == nil {
-			return fmt.Errorf("unsupported model: %s", modelName)
+			errMsg := fmt.Sprintf("unsupported model: %s (no provider found)", modelName)
+			p.debugf("Validation failed: %s", errMsg)
+			return fmt.Errorf(errMsg)
 		}
 
 		// Check if the provider actually supports this model
+		p.debugf("Checking if provider %s supports model %s", provider.Name(), modelName)
 		if !provider.SupportsModel(modelName) {
-			return fmt.Errorf("unsupported model: %s", modelName)
+			errMsg := fmt.Sprintf("unsupported model: %s (provider %s does not support it)", modelName, provider.Name())
+			p.debugf("Validation failed: %s", errMsg)
+			return fmt.Errorf(errMsg)
 		}
+		p.debugf("Provider %s confirmed support for model %s", provider.Name(), modelName)
 
 		// Get provider name
 		providerName := provider.Name()
 
 		// Get model configuration from environment
+		p.debugf("Getting model configuration for %s from provider %s", modelName, providerName)
 		modelConfig, err := p.envConfig.GetModelConfig(providerName, modelName)
 		if err != nil {
-			return fmt.Errorf("failed to get model configuration: %w", err)
+			errMsg := fmt.Sprintf("failed to get model configuration for %s: %v", modelName, err)
+			p.debugf("Configuration error: %s", errMsg)
+			return fmt.Errorf(errMsg)
 		}
+		p.debugf("Successfully retrieved model configuration for %s", modelName)
 
 		// Check if model has required capabilities based on input types
 		for _, input := range inputs {

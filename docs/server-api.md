@@ -239,6 +239,188 @@ Response:
 }
 ```
 
+#### Upload File
+```http
+POST /files/upload
+Authorization: Bearer <token>
+Content-Type: multipart/form-data
+
+Form fields:
+- file: (binary file data)
+- path: "path/to/file.ext"
+```
+
+Uploads a file using multipart/form-data format. The file will be saved at the specified path.
+
+Response:
+```json
+{
+  "success": true,
+  "message": "File uploaded successfully"
+}
+```
+
+#### Get File Content
+```http
+GET /files/content?path=example.txt
+Authorization: Bearer <token>
+Accept: text/plain
+```
+
+Retrieves the content of a file as plain text.
+
+Response:
+```text
+File content as plain text
+```
+
+#### Download File
+```http
+GET /files/download?path=example.pdf
+Authorization: Bearer <token>
+Accept: application/octet-stream
+```
+
+Downloads a file in binary format. The response will be the raw file content with appropriate content type.
+
+Response: Binary file content
+
+### Health Check
+
+#### Get Server Health
+```http
+GET /health
+Authorization: Bearer <token>
+```
+
+Returns the current health status of the server.
+
+Response:
+```json
+{
+  "success": true,
+  "message": "Server is healthy",
+  "statusCode": 200,
+  "response": "OK"
+}
+```
+
+### YAML Operations
+
+#### Upload YAML
+```http
+POST /yaml/upload
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "content": "your yaml content here"
+}
+```
+
+Uploads a YAML file for processing.
+
+Response:
+```json
+{
+  "success": true,
+  "message": "YAML file uploaded successfully"
+}
+```
+
+#### Process YAML
+```http
+POST /yaml/process
+Authorization: Bearer <token>
+Content-Type: application/json
+
+# Regular processing (JSON response)
+{
+  "content": "your yaml content here",
+  "streaming": false
+}
+
+# Streaming processing (Server-Sent Events)
+{
+  "content": "your yaml content here",
+  "streaming": true
+}
+```
+
+For streaming requests, also include:
+```http
+Accept: text/event-stream
+```
+
+Regular processing response:
+```json
+{
+  "success": true,
+  "yaml": "processed yaml content"
+}
+```
+
+Streaming response (Server-Sent Events):
+```
+data: Processing step 1...
+
+data: Model response: ...
+
+data: Processing step 2...
+
+data: Processing complete
+```
+
+### Process Endpoint
+
+The process endpoint handles YAML file processing via POST requests only, supporting both regular and streaming responses.
+
+#### Process File (POST)
+```http
+POST /process?filename=example.yaml
+Authorization: Bearer <token>
+Content-Type: application/json
+
+# Process a YAML file with input
+POST /process?filename=example.yaml
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "input": "your input here",
+  "streaming": false  # Set to true for Server-Sent Events streaming
+}
+
+# For streaming responses, include:
+Accept: text/event-stream
+
+# Response formats:
+
+# Regular JSON response (streaming: false):
+{
+  "success": true,
+  "message": "Successfully processed example.yaml",
+  "output": "Response from gpt-4o-mini:\n..."
+}
+
+# Server-Sent Events response (streaming: true):
+data: Processing step 1...
+
+data: Model response: ...
+
+data: Processing step 2...
+
+data: Processing complete
+
+# Error response (method not allowed):
+{
+  "success": false,
+  "error": "YAML processing is only available via POST requests. Please use POST with your YAML content."
+}
+```
+
+Note: All YAML processing must be done via POST requests. The endpoint no longer supports GET requests for processing.
+
 ## Security Features
 
 ### Authentication
@@ -280,13 +462,37 @@ Common status codes:
 
 ### Using curl
 
-1. List Providers:
+1. Process YAML with streaming:
+```bash
+# Process YAML content with streaming
+curl -X POST \
+     -H "Authorization: Bearer your-token" \
+     -H "Content-Type: application/json" \
+     -H "Accept: text/event-stream" \
+     -d '{"content":"your yaml content", "streaming": true}' \
+     http://localhost:8080/yaml/process
+
+# Process file with streaming
+curl -H "Authorization: Bearer your-token" \
+     -H "Accept: text/event-stream" \
+     "http://localhost:8080/process?filename=example.yaml&streaming=true"
+
+# Process file with input and streaming
+curl -X POST \
+     -H "Authorization: Bearer your-token" \
+     -H "Content-Type: application/json" \
+     -H "Accept: text/event-stream" \
+     -d '{"input":"your input here", "streaming": true}' \
+     "http://localhost:8080/process?filename=example.yaml"
+```
+
+2. List Providers:
 ```bash
 curl -H "Authorization: Bearer your-token" \
      http://localhost:8080/providers
 ```
 
-2. Update Provider:
+3. Update Provider:
 ```bash
 curl -X PUT \
      -H "Authorization: Bearer your-token" \
@@ -295,7 +501,7 @@ curl -X PUT \
      http://localhost:8080/providers
 ```
 
-3. Encrypt Environment:
+4. Encrypt Environment:
 ```bash
 curl -X POST \
      -H "Authorization: Bearer your-token" \
@@ -304,13 +510,37 @@ curl -X POST \
      http://localhost:8080/env/encrypt
 ```
 
-4. Create File:
+5. Create File:
 ```bash
 curl -X POST \
      -H "Authorization: Bearer your-token" \
      -H "Content-Type: application/json" \
      -d '{"path":"example.yaml","content":"your content"}' \
      http://localhost:8080/files
+```
+
+6. Upload File:
+```bash
+curl -X POST \
+     -H "Authorization: Bearer your-token" \
+     -F "file=@/path/to/local/file.txt" \
+     -F "path=destination/file.txt" \
+     http://localhost:8080/files/upload
+```
+
+7. Get File Content:
+```bash
+curl -H "Authorization: Bearer your-token" \
+     -H "Accept: text/plain" \
+     http://localhost:8080/files/content?path=example.txt
+```
+
+8. Download File:
+```bash
+curl -H "Authorization: Bearer your-token" \
+     -H "Accept: application/octet-stream" \
+     http://localhost:8080/files/download?path=example.pdf \
+     --output downloaded_file.pdf
 ```
 
 ### Using JavaScript
@@ -324,6 +554,59 @@ const headers = {
   'Authorization': `Bearer ${TOKEN}`,
   'Content-Type': 'application/json'
 };
+
+// Process YAML with streaming
+async function processYAMLStreaming(content) {
+  const response = await fetch(`${API_URL}/yaml/process`, {
+    method: 'POST',
+    headers: {
+      ...headers,
+      'Accept': 'text/event-stream'
+    },
+    body: JSON.stringify({ content, streaming: true })
+  });
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    
+    const text = decoder.decode(value);
+    // Handle each SSE message
+    console.log(text);
+  }
+}
+
+// Process file with streaming
+async function processFileStreaming(filename, input = null) {
+  const url = `${API_URL}/process?filename=${encodeURIComponent(filename)}${input ? '' : '&streaming=true'}`;
+  const options = {
+    method: input ? 'POST' : 'GET',
+    headers: {
+      ...headers,
+      'Accept': 'text/event-stream'
+    }
+  };
+  
+  if (input) {
+    options.body = JSON.stringify({ input, streaming: true });
+  }
+  
+  const response = await fetch(url, options);
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    
+    const text = decoder.decode(value);
+    // Handle each SSE message
+    console.log(text);
+  }
+}
 
 // List providers
 async function listProviders() {
@@ -380,9 +663,58 @@ async function deleteFile(path) {
   return await response.json();
 }
 
+// Upload file
+async function uploadFile(file, path) {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('path', path);
+
+  const response = await fetch(`${API_URL}/files/upload`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${TOKEN}`
+    },
+    body: formData
+  });
+  return await response.json();
+}
+
+// Get file content
+async function getFileContent(path) {
+  const response = await fetch(`${API_URL}/files/content?path=${encodeURIComponent(path)}`, {
+    headers: {
+      'Authorization': `Bearer ${TOKEN}`,
+      'Accept': 'text/plain'
+    }
+  });
+  return await response.text();
+}
+
+// Download file
+async function downloadFile(path) {
+  const response = await fetch(`${API_URL}/files/download?path=${encodeURIComponent(path)}`, {
+    headers: {
+      'Authorization': `Bearer ${TOKEN}`,
+      'Accept': 'application/octet-stream'
+    }
+  });
+  return await response.blob();
+}
+
 // Example usage
 async function example() {
   try {
+    // Process YAML with streaming
+    await processYAMLStreaming(`
+      step_one:
+        model: gpt-4o
+        input: "Hello"
+        output: STDOUT
+    `);
+
+    // Process file with streaming
+    await processFileStreaming('example.yaml', 'optional input here');
+
     // List providers
     const providers = await listProviders();
     console.log('Providers:', providers);
@@ -431,3 +763,9 @@ async function example() {
    - Validate API keys before saving
    - Keep track of enabled/disabled providers
    - Monitor model availability
+
+6. Streaming:
+   - Use streaming for long-running operations
+   - Handle SSE events appropriately
+   - Implement proper error handling for stream disconnections
+   - Consider fallback to non-streaming for older browsers

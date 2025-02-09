@@ -1,4 +1,4 @@
-openapi: 3.0.3
+openapi: 3.1.0
 info:
   title: Comanda API
   description: Collection for testing Comanda server API endpoints
@@ -177,6 +177,99 @@ components:
           description: Backup file name (e.g., backup-20240321-100000.zip)
       required:
         - backup
+
+    ProcessRequest:
+      type: object
+      properties:
+        input:
+          type: string
+          description: Input for YAML processing (required for POST requests)
+        streaming:
+          type: boolean
+          description: |
+            Enable real-time output streaming using Server-Sent Events (SSE).
+            When true, the response will be in text/event-stream format with the following event types:
+            - data: Regular output data
+            - progress: Progress updates
+            - spinner: Spinner/loading status updates
+            - complete: Processing completion message
+            - error: Error messages
+            - heartbeat: Connection keep-alive signals
+      required:
+        - input
+
+    StepInfo:
+      type: object
+      description: Information about a processing step
+      properties:
+        name:
+          type: string
+          description: Name of the step
+        model:
+          type: string
+          description: Model being used
+        action:
+          type: string
+          description: Action being performed
+      required:
+        - name
+        - model
+        - action
+
+    ProgressData:
+      type: object
+      description: Progress update data structure
+      properties:
+        message:
+          type: string
+          description: Progress message
+        step:
+          $ref: '#/components/schemas/StepInfo'
+          description: Step information (if available)
+      required:
+        - message
+
+    SSEEvent:
+      type: object
+      description: Server-Sent Event structure
+      properties:
+        event:
+          type: string
+          enum: [data, progress, complete, error, heartbeat]
+          description: Type of SSE event
+        data:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/ProgressData'
+          description: Event payload (string for simple events, object for progress updates)
+      required:
+        - event
+        - data
+      examples:
+        progress:
+          value:
+            event: progress
+            data:
+              message: "Processing step 1/1: o1-mini"
+              step:
+                name: "o1-mini"
+                model: "o1-mini"
+                action: "You are a quantum observer..."
+        complete:
+          value:
+            event: complete
+            data:
+              message: "Workflow processing completed successfully"
+              step:
+                name: "o1-mini"
+                model: "o1-mini"
+                action: "You are a quantum observer..."
+        error:
+          value:
+            event: error
+            data: {"error": "Model failed to respond"}
+        heartbeat:
+          value: ": heartbeat"
 
 security:
   - BearerAuth: []
@@ -525,3 +618,231 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+
+  /files/upload:
+    post:
+      summary: Upload File
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                path:
+                  type: string
+      responses:
+        '200':
+          description: File uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /files/content:
+    get:
+      summary: Get File Content
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File content retrieved successfully
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /files/download:
+    get:
+      summary: Download File
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File downloaded successfully
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /health:
+    get:
+      summary: Server Health Check
+      responses:
+        '200':
+          description: Server health status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  statusCode:
+                    type: integer
+                  response:
+                    type: string
+                required:
+                  - success
+                  - message
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /process:
+    post:
+      summary: Process YAML File by Path
+      description: |
+        Process a YAML file by path with required input and optional real-time output streaming.
+        YAML processing is only available via POST requests.
+        
+        When streaming is enabled (streaming=true):
+        - Response will be in Server-Sent Events (SSE) format
+        - Client must set Accept: text/event-stream header
+        - Server will send various event types:
+          * data: Regular output data
+          * progress: Processing progress updates
+          * spinner: Loading/status indicators
+          * complete: Final completion message
+          * error: Error information
+          * heartbeat: Keep-alive signals (every 15s)
+        
+        Example SSE events:
+        ```
+        event: progress
+        data: Loading model...
+
+        event: spinner
+        data: Processing input...
+
+        event: data
+        data: Generated content here...
+
+        event: complete
+        data: Processing completed successfully
+
+        event: error
+        data: {"error": "Model failed to respond"}
+
+        : heartbeat
+        ```
+        
+        Note: GET method is no longer supported - all processing must be done via POST.
+      parameters:
+        - name: filename
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Path to the YAML file to process
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcessRequest'
+            example:
+              input: "your input here"
+              streaming: true  # Enable SSE streaming
+      responses:
+        '200':
+          description: |
+            When streaming is false:
+              Returns processed YAML content as JSON
+            When streaming is true:
+              Returns Server-Sent Events stream with real-time processing output
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  output:
+                    type: string
+                required:
+                  - success
+                  - output
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/SSEEvent'
+              examples:
+                progress:
+                  value: |
+                    event: progress
+                    data: Loading model...
+
+                spinner:
+                  value: |
+                    event: spinner
+                    data: Processing input...
+
+                data:
+                  value: |
+                    event: data
+                    data: Generated content here...
+
+                complete:
+                  value: |
+                    event: complete
+                    data: Processing completed successfully
+
+                error:
+                  value: |
+                    event: error
+                    data: {"error": "Model failed to respond"}
+
+                heartbeat:
+                  value: |
+                    : heartbeat
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '405':
+          description: Method not allowed (only POST is supported)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                success: false
+                error: "YAML processing is only available via POST requests. Please use POST with your YAML content."

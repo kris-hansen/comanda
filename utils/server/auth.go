@@ -31,7 +31,7 @@ func checkAuth(serverConfig *ServerConfig, w http.ResponseWriter, r *http.Reques
 	parts := strings.Split(authHeader, " ")
 	if len(parts) != 2 || parts[0] != "Bearer" {
 		config.VerboseLog("Invalid authorization header format")
-		config.DebugLog("Auth failed: malformed Authorization header: %s", authHeader)
+		config.DebugLog("Auth failed: malformed Authorization header: %s", maskToken(authHeader))
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(ProcessResponse{
 			Success: false,

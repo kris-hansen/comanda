@@ -50,30 +50,40 @@ func (o *OllamaProvider) debugf(format string, args ...interface{}) {
 func (o *OllamaProvider) SupportsModel(modelName string) bool {
 	o.debugf("Checking if model is supported: %s", modelName)
 
-	// Ollama typically supports models like:
-	// - llama2
-	// - codellama
-	// - mistral
-	// - neural-chat
-	// But should not support models with known prefixes from other providers
+	// Ollama supports specific model families
 	modelName = strings.ToLower(modelName)
+	o.debugf("Checking model name: %s", modelName)
 
-	// Don't support models from other providers
-	knownOtherPrefixes := []string{
-		"gpt-",    // OpenAI
-		"claude-", // Anthropic
-		"gemini-", // Google
+	// List of known Ollama model prefixes
+	ollamaPrefixes := []string{
+		"llama2",
+		"codellama",
+		"mistral",
+		"neural-chat",
+		"dolphin",
+		"orca",
+		"vicuna",
+		"nous",
+		"wizard",
+		"stable",
+		"phi",
+		"openchat",
+		"solar",
+		"yi",
+		"qwen",
+		"mixtral",
 	}
 
-	for _, prefix := range knownOtherPrefixes {
+	// Check if model starts with any known Ollama prefix
+	for _, prefix := range ollamaPrefixes {
 		if strings.HasPrefix(modelName, prefix) {
-			o.debugf("Model %s belongs to another provider (prefix: %s)", modelName, prefix)
-			return false
+			o.debugf("Model %s is supported by Ollama (matches prefix: %s)", modelName, prefix)
+			return true
 		}
 	}
 
-	o.debugf("Model %s may be supported by Ollama", modelName)
-	return true
+	o.debugf("Model %s is not supported by Ollama (no matching prefix)", modelName)
+	return false
 }
 
 // Configure sets up the provider (no API key needed for Ollama)
@@ -98,16 +108,20 @@ func (o *OllamaProvider) SendPrompt(modelName string, prompt string) (string, er
 		return "", fmt.Errorf("error marshaling request: %v", err)
 	}
 
+	o.debugf("Sending request to Ollama API: %s", string(jsonData))
 	resp, err := http.Post("http://localhost:11434/api/generate", "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
-		return "", fmt.Errorf("error calling Ollama API: %v", err)
+		o.debugf("Error calling Ollama API: %v", err)
+		return "", fmt.Errorf("error calling Ollama API: %v (is Ollama running?)", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
+		o.debugf("Ollama API returned non-200 status: %d, body: %s", resp.StatusCode, string(bodyBytes))
 		return "", fmt.Errorf("Ollama API error (status %d): %s", resp.StatusCode, string(bodyBytes))
 	}
+	o.debugf("Ollama API request successful, reading response")
 
 	// Read and accumulate all responses
 	var fullResponse strings.Builder
@@ -118,8 +132,10 @@ func (o *OllamaProvider) SendPrompt(modelName string, prompt string) (string, er
 			if err == io.EOF {
 				break
 			}
+			o.debugf("Error decoding response: %v", err)
 			return "", fmt.Errorf("error decoding response: %v", err)
 		}
+		o.debugf("Received response chunk: done=%v length=%d", ollamaResp.Done, len(ollamaResp.Response))
 		fullResponse.WriteString(ollamaResp.Response)
 		if ollamaResp.Done {
 			break

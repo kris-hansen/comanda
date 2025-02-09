@@ -1,0 +1,74 @@
+# This example demonstrates the capabilities of Google's advanced Gemini models
+# Each step showcases different model strengths and use cases
+
+step_one:
+  input:
+    - examples/document-processing/sample.pdf
+  model:
+    - gemini-2.0-pro-exp-02-05  # Pro model for complex document analysis
+  action: |
+    Analyze this document and create a detailed summary focusing on:
+    1. Key arguments and their supporting evidence
+    2. Main conclusions
+    3. Any gaps in the reasoning or areas that need more support
+  output:
+    - analysis.txt
+
+step_two:
+  input:
+    - analysis.txt
+  model:
+    - gemini-2.0-flash-001  # Fast, efficient model for focused tasks
+  action: |
+    Create a bullet-point list of actionable recommendations based on the analysis.
+    Focus on practical, implementable steps.
+  output:
+    - recommendations.txt
+
+step_three:
+  input:
+    - recommendations.txt
+  model:
+    - gemini-2.0-flash-thinking-exp-01-21  # Specialized model for analytical thinking
+  action: |
+    For each recommendation:
+    1. Evaluate potential challenges in implementation
+    2. Suggest mitigation strategies
+    3. Estimate resource requirements (time, cost, personnel)
+  output:
+    - implementation_plan.txt
+
+step_four:
+  input:
+    - implementation_plan.txt
+  model:
+    - gemini-2.0-flash-lite-preview-02-05  # Lightweight model for quick summaries
+  action: |
+    Create a concise executive summary (max 250 words) that highlights:
+    - Top 3 recommendations
+    - Expected impact
+    - Critical success factors
+  output:
+    - executive_summary.txt
+
+# Model Characteristics:
+#
+# gemini-2.0-pro-exp-02-05:
+# - Best for complex analysis and reasoning
+# - Handles multi-page documents effectively
+# - Strong at identifying patterns and connections
+#
+# gemini-2.0-flash-001:
+# - Optimized for quick, focused responses
+# - Excellent for structured output generation
+# - Lower latency than Pro models
+#
+# gemini-2.0-flash-thinking-exp-01-21:
+# - Specialized for analytical and strategic thinking
+# - Strong at evaluation and assessment tasks
+# - Particularly good at identifying risks and opportunities
+#
+# gemini-2.0-flash-lite-preview-02-05:
+# - Designed for lightweight, efficient processing
+# - Perfect for summarization and distillation
+# - Optimal for real-time applications
