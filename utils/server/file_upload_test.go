@@ -26,7 +26,7 @@ func TestHandleFileUpload(t *testing.T) {
 	// Create server instance
 	server := &Server{
 		mux: http.NewServeMux(),
-		config: &ServerConfig{
+		config: &config.ServerConfig{
 			DataDir:     tempDir,
 			BearerToken: "test-token",
 			Enabled:     true,

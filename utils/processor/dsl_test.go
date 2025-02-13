@@ -6,10 +6,18 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/kris-hansen/comanda/utils/config"
 )
 
+func createTestServerConfig() *config.ServerConfig {
+	return &config.ServerConfig{
+		Enabled: true,
+	}
+}
+
 func TestNormalizeStringSlice(t *testing.T) {
-	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), false)
+	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), createTestServerConfig(), false)
 
 	tests := []struct {
 		name     string
@@ -63,7 +71,7 @@ func TestNewProcessor(t *testing.T) {
 	envConfig := createTestEnvConfig()
 	verbose := true
 
-	processor := NewProcessor(config, envConfig, verbose)
+	processor := NewProcessor(config, envConfig, createTestServerConfig(), verbose)
 
 	if processor == nil {
 		t.Error("NewProcessor() returned nil")
@@ -95,7 +103,7 @@ func TestNewProcessor(t *testing.T) {
 }
 
 func TestValidateStepConfig(t *testing.T) {
-	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), false)
+	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), createTestServerConfig(), false)
 
 	tests := []struct {
 		name          string
@@ -286,7 +294,7 @@ func TestProcess(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			processor := NewProcessor(&tt.config, createTestEnvConfig(), false)
+			processor := NewProcessor(&tt.config, createTestEnvConfig(), createTestServerConfig(), false)
 			err := processor.Process()
 
 			if tt.expectError && err == nil {
@@ -316,7 +324,7 @@ func TestDebugf(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), tt.verbose)
+			processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), createTestServerConfig(), tt.verbose)
 			// Note: This test only verifies that debugf doesn't panic
 			// In a real scenario, you might want to capture stdout and verify the output
 			processor.debugf("test message %s", "arg")
@@ -325,7 +333,7 @@ func TestDebugf(t *testing.T) {
 }
 
 func TestIsURL(t *testing.T) {
-	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), false)
+	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), createTestServerConfig(), false)
 
 	tests := []struct {
 		name     string
@@ -375,7 +383,7 @@ func TestIsURL(t *testing.T) {
 }
 
 func TestFetchURL(t *testing.T) {
-	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), false)
+	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), createTestServerConfig(), false)
 
 	// Create test server
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

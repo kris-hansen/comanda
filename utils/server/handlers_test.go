@@ -248,11 +248,32 @@ summarize:
 			"NextAction should match for step %s", name)
 	}
 
+	// Create test server config
+	testServerConfig := &config.ServerConfig{
+		BearerToken: "test-token",
+		Enabled:     true,
+	}
+
+	// Create test environment config with OpenAI provider
+	testEnvConfig := &config.EnvConfig{
+		Providers: map[string]*config.Provider{
+			"openai": {
+				APIKey: "test-key",
+				Models: []config.Model{
+					{
+						Name:  "gpt-4o",
+						Modes: []config.ModelMode{config.TextMode},
+					},
+				},
+			},
+		},
+	}
+
 	// Verify both configs can be processed
-	cliProc := processor.NewProcessor(&cliConfig, nil, true)
+	cliProc := processor.NewProcessor(&cliConfig, testEnvConfig, testServerConfig, true)
 	assert.NotNil(t, cliProc, "CLI processor should be created successfully")
 
-	serverProc := processor.NewProcessor(&serverConfig, nil, true)
+	serverProc := processor.NewProcessor(&serverConfig, testEnvConfig, testServerConfig, true)
 	assert.NotNil(t, serverProc, "Server processor should be created successfully")
 }
 
@@ -324,7 +345,7 @@ step_one:
 
 	// Create server instance
 	server := &Server{
-		config: &ServerConfig{
+		config: &config.ServerConfig{
 			DataDir:     tempDir,
 			BearerToken: "test-token",
 			Enabled:     true,
@@ -496,7 +517,7 @@ func TestHandleYAMLProcessStreaming(t *testing.T) {
 
 	// Create server instance
 	server := &Server{
-		config: &ServerConfig{
+		config: &config.ServerConfig{
 			BearerToken: "test-token",
 			Enabled:     true,
 		},

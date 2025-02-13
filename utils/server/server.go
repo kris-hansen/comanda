@@ -15,7 +15,7 @@ import (
 // Server represents the HTTP server
 type Server struct {
 	mux       *http.ServeMux
-	config    *ServerConfig
+	config    *config.ServerConfig
 	envConfig *config.EnvConfig
 }
 
@@ -222,32 +222,9 @@ func New(envConfig *config.EnvConfig) (*http.Server, error) {
 		return nil, fmt.Errorf("error creating data directory: %v", err)
 	}
 
-	// Convert config.ServerConfig to our internal ServerConfig with default CORS settings
-	srvConfig := &ServerConfig{
-		Port:        serverConfig.Port,
-		DataDir:     serverConfig.DataDir,
-		BearerToken: serverConfig.BearerToken,
-		Enabled:     serverConfig.Enabled,
-		CORS: CORSConfig{
-			Enabled:        true,
-			AllowedOrigins: []string{"*"},
-			AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-			AllowedHeaders: []string{
-				"Authorization",
-				"Content-Type",
-				"Cache-Control",
-				"Last-Event-ID",
-				"X-Accel-Buffering",
-				"X-Requested-With",
-				"Accept",
-			},
-			MaxAge: 3600,
-		},
-	}
-
 	s := &Server{
 		mux:       http.NewServeMux(),
-		config:    srvConfig,
+		config:    serverConfig,
 		envConfig: envConfig,
 	}
 
@@ -255,7 +232,7 @@ func New(envConfig *config.EnvConfig) (*http.Server, error) {
 	s.routes()
 
 	server := &http.Server{
-		Addr:         fmt.Sprintf(":%d", srvConfig.Port),
+		Addr:         fmt.Sprintf(":%d", serverConfig.Port),
 		Handler:      s.mux,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 120 * time.Second,

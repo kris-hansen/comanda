@@ -683,7 +683,7 @@ func (s *Server) handleYAMLProcess(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create processor instance with validation enabled
-	proc := processor.NewProcessor(&dslConfig, s.envConfig, true)
+	proc := processor.NewProcessor(&dslConfig, s.envConfig, s.config, true)
 
 	// Set input if provided
 	if req.Input != "" {

@@ -22,7 +22,7 @@ func TestHandleBulkFileOperations(t *testing.T) {
 
 	// Create server instance
 	server := &Server{
-		config: &ServerConfig{
+		config: &config.ServerConfig{
 			DataDir:     tempDir,
 			BearerToken: "test-token",
 			Enabled:     true,

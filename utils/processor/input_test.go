@@ -69,7 +69,7 @@ func TestProcessInputs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), false)
+			processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), createTestServerConfig(), false)
 
 			err := processor.processInputs(tt.inputs)
 			if (err != nil) != tt.expectErr {
@@ -94,7 +94,7 @@ func TestGetProcessedInputs(t *testing.T) {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), false)
+	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), createTestServerConfig(), false)
 
 	// Process a test file
 	err := processor.processInputs([]string{testFile})

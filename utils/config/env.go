@@ -56,24 +56,6 @@ type Provider struct {
 	Models []Model `yaml:"models"`
 }
 
-// CORSConfig represents CORS configuration options
-type CORSConfig struct {
-	Enabled        bool     `yaml:"enabled"`
-	AllowedOrigins []string `yaml:"allowed_origins,omitempty"`
-	AllowedMethods []string `yaml:"allowed_methods,omitempty"`
-	AllowedHeaders []string `yaml:"allowed_headers,omitempty"`
-	MaxAge         int      `yaml:"max_age,omitempty"`
-}
-
-// ServerConfig represents the server configuration
-type ServerConfig struct {
-	Port        int        `yaml:"port"`
-	BearerToken string     `yaml:"bearer_token,omitempty"`
-	Enabled     bool       `yaml:"enabled"`
-	DataDir     string     `yaml:"data_dir"`
-	CORS        CORSConfig `yaml:"cors"`
-}
-
 // EnvConfig represents the complete environment configuration
 type EnvConfig struct {
 	Providers map[string]*Provider      `yaml:"providers"` // Changed to store pointers to Provider
@@ -359,7 +341,7 @@ func (c *EnvConfig) GetServerConfig() *ServerConfig {
 			Port:    8080,
 			Enabled: false,
 			DataDir: "data",
-			CORS: CORSConfig{
+			CORS: CORS{
 				Enabled:        true,
 				AllowedOrigins: []string{"*"},
 				AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
@@ -372,15 +354,15 @@ func (c *EnvConfig) GetServerConfig() *ServerConfig {
 }
 
 // UpdateServerConfig updates the server configuration
-func (c *EnvConfig) UpdateServerConfig(config ServerConfig) {
+func (c *EnvConfig) UpdateServerConfig(serverConfig ServerConfig) {
 	if c.Server == nil {
 		c.Server = &ServerConfig{}
 	}
-	c.Server.Port = config.Port
-	c.Server.BearerToken = config.BearerToken
-	c.Server.Enabled = config.Enabled
-	c.Server.DataDir = config.DataDir
-	c.Server.CORS = config.CORS
+	c.Server.Port = serverConfig.Port
+	c.Server.BearerToken = serverConfig.BearerToken
+	c.Server.Enabled = serverConfig.Enabled
+	c.Server.DataDir = serverConfig.DataDir
+	c.Server.CORS = serverConfig.CORS
 }
 
 // GetProviderConfig retrieves configuration for a specific provider

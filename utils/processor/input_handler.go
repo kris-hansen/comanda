@@ -205,17 +205,39 @@ func (p *Processor) isOutputInOtherSteps(path string) bool {
 
 // processRegularInput handles regular file and directory inputs
 func (p *Processor) processRegularInput(inputPath string) error {
+	// If the input is not an absolute path and doesn't contain directory separators,
+	// try to find it in the DataDir first
+	var filePath string
+	if !filepath.IsAbs(inputPath) && filepath.Base(inputPath) == inputPath {
+		// Input is just a filename, try DataDir first
+		dataDirPath := filepath.Join(p.serverConfig.DataDir, inputPath)
+		p.debugf("Checking DataDir path: %s", dataDirPath)
+
+		if _, err := os.Stat(dataDirPath); err == nil {
+			filePath = dataDirPath
+			p.debugf("Found file in DataDir: %s", filePath)
+		} else {
+			// If not found in DataDir, use the original path
+			filePath = inputPath
+			p.debugf("File not found in DataDir, using original path: %s", filePath)
+		}
+	} else {
+		// Input contains path separators or is absolute, use as is
+		filePath = inputPath
+		p.debugf("Using provided path: %s", filePath)
+	}
+
 	// Check if the path exists
-	if _, err := os.Stat(inputPath); err != nil {
+	if _, err := os.Stat(filePath); err != nil {
 		if os.IsNotExist(err) {
 			// Only try glob if the path contains glob characters
-			if containsGlobChar(inputPath) {
-				matches, err := filepath.Glob(inputPath)
+			if containsGlobChar(filePath) {
+				matches, err := filepath.Glob(filePath)
 				if err != nil {
-					return fmt.Errorf("error processing glob pattern %s: %w", inputPath, err)
+					return fmt.Errorf("error processing glob pattern %s: %w", filePath, err)
 				}
 				if len(matches) == 0 {
-					return fmt.Errorf("no files found matching pattern: %s", inputPath)
+					return fmt.Errorf("no files found matching pattern: %s", filePath)
 				}
 				for _, match := range matches {
 					if err := p.processFile(match); err != nil {
@@ -226,17 +248,21 @@ func (p *Processor) processRegularInput(inputPath string) error {
 			}
 
 			// Check if the file is an output in any other step
-			if p.isOutputInOtherSteps(inputPath) {
-				p.debugf("File %s does not exist yet but will be created as output in another step", inputPath)
+			if p.isOutputInOtherSteps(filePath) {
+				p.debugf("File %s does not exist yet but will be created as output in another step", filePath)
 				return nil
 			}
 
-			return fmt.Errorf("path does not exist and is not an output of any step: %s", inputPath)
+			// If we tried DataDir and failed, include that in the error message
+			if filePath != inputPath {
+				return fmt.Errorf("file not found in DataDir (%s) or at path '%s'", p.serverConfig.DataDir, inputPath)
+			}
+			return fmt.Errorf("path does not exist and is not an output of any step: %s", filePath)
 		}
-		return fmt.Errorf("error accessing path %s: %w", inputPath, err)
+		return fmt.Errorf("error accessing path %s: %w", filePath, err)
 	}
 
-	return p.processFile(inputPath)
+	return p.processFile(filePath)
 }
 
 // processFile handles a single file input

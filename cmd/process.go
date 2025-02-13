@@ -104,7 +104,11 @@ var processCmd = &cobra.Command{
 			if verbose {
 				fmt.Printf("[DEBUG] Creating processor for %s\n", file)
 			}
-			proc := processor.NewProcessor(&dslConfig, envConfig, verbose)
+			// Create basic server config for CLI processing
+			serverConfig := &config.ServerConfig{
+				Enabled: true,
+			}
+			proc := processor.NewProcessor(&dslConfig, envConfig, serverConfig, verbose)
 
 			// If we have STDIN data, set it as initial output
 			if stdinData != "" {
