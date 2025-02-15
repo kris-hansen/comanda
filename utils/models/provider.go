@@ -49,7 +49,7 @@ func defaultDetectProvider(modelName string) Provider {
 	}
 
 	for _, provider := range providers {
-		log.Printf("[DEBUG][Provider] Checking if %s supports model %s", provider.Name(), modelName)
+		//log.Printf("[DEBUG][Provider] Checking if %s supports model %s", provider.Name(), modelName)
 		if provider.SupportsModel(modelName) {
 			log.Printf("[DEBUG][Provider] Found provider %s for model %s", provider.Name(), modelName)
 			return provider
