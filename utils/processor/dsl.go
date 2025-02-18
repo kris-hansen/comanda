@@ -262,7 +262,6 @@ func (p *Processor) Process() error {
 					p.emitError(err)
 					return fmt.Errorf("failed to process scraping input: %w", err)
 				}
-				inputs = []string{url}
 				p.spinner.Stop()
 			} else {
 				inputs = p.NormalizeStringSlice(step.Config.Input)

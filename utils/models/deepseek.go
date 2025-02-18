@@ -45,7 +45,17 @@ func (d *DeepseekProvider) SupportsModel(modelName string) bool {
 	d.debugf("Checking if model is supported: %s", modelName)
 	modelName = strings.ToLower(modelName)
 
-	// Accept any model name that starts with deepseek-
+	// Special case for deepseek-r1: only support if API key is configured
+	if strings.HasPrefix(modelName, "deepseek-r1") {
+		if d.apiKey == "" {
+			d.debugf("Deepseek API key not configured; not claiming support for model %s", modelName)
+			return false
+		}
+		d.debugf("Deepseek API key configured; supporting model %s", modelName)
+		return true
+	}
+
+	// Accept any other model name that starts with deepseek-
 	if strings.HasPrefix(modelName, "deepseek-") {
 		d.debugf("Model %s is supported", modelName)
 		return true

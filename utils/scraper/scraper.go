@@ -1,6 +1,9 @@
 package scraper
 
 import (
+	"log"
+	"strings"
+
 	"github.com/gocolly/colly/v2"
 )
 
@@ -16,7 +19,8 @@ type ScrapedData struct {
 
 // Scraper provides web scraping functionality
 type Scraper struct {
-	collector *colly.Collector
+	collector      *colly.Collector
+	allowedDomains []string
 }
 
 // NewScraper creates a new scraper instance with default configuration
@@ -24,6 +28,7 @@ func NewScraper() *Scraper {
 	c := colly.NewCollector(
 		colly.AllowURLRevisit(),
 		colly.UserAgent("Mozilla/5.0 (compatible; Comanda/1.0; +http://github.com/kris-hansen/comanda)"),
+		colly.AllowedDomains(), // Empty list means all domains are allowed
 	)
 
 	return &Scraper{
@@ -82,5 +87,33 @@ func (s *Scraper) SetCustomHeaders(headers map[string]string) {
 
 // AllowedDomains sets the allowed domains for scraping
 func (s *Scraper) AllowedDomains(domains ...string) {
-	s.collector.AllowedDomains = domains
+	s.allowedDomains = domains
+	s.collector.OnRequest(func(r *colly.Request) {
+		// If allowed domains list is not empty, check the request's host
+		if len(s.allowedDomains) > 0 {
+			host := r.URL.Host
+			allowed := false
+			for _, domain := range s.allowedDomains {
+				// Check for an exact match or for the allowed domain as a suffix (to allow subdomains)
+				if host == domain || strings.HasSuffix(host, "."+domain) {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				log.Printf("[SCRAPER] Request aborted due to disallowed domain: %s\n", host)
+				// Wrap the abort call to recover from any potential panic
+				func() {
+					defer func() {
+						if err := recover(); err != nil {
+							log.Printf("[SCRAPER] Error aborting request for disallowed domain %s: %v", host, err)
+						}
+					}()
+					r.Abort()
+				}()
+				return
+			}
+		}
+	})
+	log.Printf("[SCRAPER] Set allowed domains to: %v\n", domains)
 }

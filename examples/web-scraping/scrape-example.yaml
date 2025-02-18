@@ -1,15 +1,16 @@
 scrape_webpage:
-    input: https://example.com
-    model: gpt-4o-mini
+    input:
+        url: https://github.com
+        scrape_config:
+            allowed_domains:
+                - github.com
+            headers:
+                Accept: text/html,application/xhtml+xml
+                Accept-Language: en-US,en;q=0.9
+            extract:
+                - title
+                - text
+                - links
+    model: deepseek-r1:1.5b
     action: Analyze the scraped content and provide insights
     output: STDOUT
-    scrape_config:
-        allowed_domains:
-            - example.com
-        headers:
-            Accept: text/html,application/xhtml+xml
-            Accept-Language: en-US,en;q=0.9
-        extract:
-            - title
-            - text
-            - links

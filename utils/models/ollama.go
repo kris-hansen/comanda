@@ -72,6 +72,7 @@ func (o *OllamaProvider) SupportsModel(modelName string) bool {
 		"yi",
 		"qwen",
 		"mixtral",
+		"deepseek-r1",
 	}
 
 	// Check if model starts with any known Ollama prefix
