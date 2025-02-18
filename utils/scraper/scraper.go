@@ -1,7 +1,7 @@
 package scraper
 
 import (
-	"fmt"
+	"log"
 	"strings"
 
 	"github.com/gocolly/colly/v2"
@@ -101,11 +101,19 @@ func (s *Scraper) AllowedDomains(domains ...string) {
 				}
 			}
 			if !allowed {
-				fmt.Printf("[SCRAPER] Request aborted due to disallowed domain: %s\n", host)
-				r.Abort()
+				log.Printf("[SCRAPER] Request aborted due to disallowed domain: %s\n", host)
+				// Wrap the abort call to recover from any potential panic
+				func() {
+					defer func() {
+						if err := recover(); err != nil {
+							log.Printf("[SCRAPER] Error aborting request for disallowed domain %s: %v", host, err)
+						}
+					}()
+					r.Abort()
+				}()
 				return
 			}
 		}
 	})
-	fmt.Printf("[SCRAPER] Set allowed domains to: %v\n", domains)
+	log.Printf("[SCRAPER] Set allowed domains to: %v\n", domains)
 }
