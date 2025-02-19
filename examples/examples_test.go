@@ -134,10 +134,18 @@ func validateStep(t *testing.T, filename, stepName string, stepNode *yaml.Node, 
 		if _, required := requiredFields[key]; required {
 			requiredFields[key] = true
 
-			// Value can be either a scalar or sequence
-			if value.Kind != yaml.ScalarNode && value.Kind != yaml.SequenceNode {
-				t.Errorf("Step %s in %s: field '%s' must be either a string or array", stepName, filename, key)
-				continue
+			if key == "input" {
+				// Allow scalar, sequence, or mapping for 'input'
+				if value.Kind != yaml.ScalarNode && value.Kind != yaml.SequenceNode && value.Kind != yaml.MappingNode {
+					t.Errorf("Step %s in %s: field '%s' must be either a string, array, or mapping", stepName, filename, key)
+					continue
+				}
+			} else {
+				// For other fields, allow only scalar or sequence
+				if value.Kind != yaml.ScalarNode && value.Kind != yaml.SequenceNode {
+					t.Errorf("Step %s in %s: field '%s' must be either a string or array", stepName, filename, key)
+					continue
+				}
 			}
 
 			// For sequence nodes, ensure they're not empty
@@ -152,14 +160,18 @@ func validateStep(t *testing.T, filename, stepName string, stepNode *yaml.Node, 
 				continue
 			}
 
-			// Validate input files exist if they're local files
+			// Validate input paths if key is 'input'
 			if key == "input" {
 				if value.Kind == yaml.ScalarNode {
 					validateInputPath(t, filename, stepName, value.Value, outputFiles)
-				} else {
+				} else if value.Kind == yaml.SequenceNode {
 					for _, item := range value.Content {
 						validateInputPath(t, filename, stepName, item.Value, outputFiles)
 					}
+				} else if value.Kind == yaml.MappingNode {
+					// For mapping nodes, validate as a web scraping input
+					validateWebScrapeInput(t, filename, stepName, value)
+					// Validation for database inputs will need to go here
 				}
 			}
 		}
@@ -226,6 +238,26 @@ func validateSingleInputPath(t *testing.T, filename, stepName, input string, out
 
 	if !fileExists {
 		t.Errorf("Step %s in %s references non-existent input file: %s", stepName, filename, input)
+	}
+}
+
+func validateWebScrapeInput(t *testing.T, filename, stepName string, node *yaml.Node) {
+	var hasURL, hasScrapeConfig bool
+	// Iterate over mapping key/value pairs
+	for i := 0; i < len(node.Content); i += 2 {
+		key := node.Content[i].Value
+		if key == "url" {
+			hasURL = true
+		}
+		if key == "scrape_config" {
+			hasScrapeConfig = true
+		}
+	}
+	if !hasURL {
+		t.Errorf("Step %s in %s: web scraping input mapping missing required key 'url'", stepName, filename)
+	}
+	if !hasScrapeConfig {
+		t.Errorf("Step %s in %s: web scraping input mapping missing required key 'scrape_config'", stepName, filename)
 	}
 }
 
