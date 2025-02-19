@@ -21,10 +21,16 @@ func TestHandleCreateFile(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
+	// Get absolute path for DataDir
+	absDataDir, err := filepath.Abs(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// Create server instance
 	server := &Server{
-		config: &ServerConfig{
-			DataDir:     tempDir,
+		config: &config.ServerConfig{
+			DataDir:     absDataDir,
 			BearerToken: "test-token",
 			Enabled:     true,
 		},
@@ -37,6 +43,7 @@ func TestHandleCreateFile(t *testing.T) {
 		request        FileRequest
 		expectedStatus int
 		expectedError  string
+		expectedPath   string
 	}{
 		{
 			name: "Valid file creation",
@@ -95,6 +102,23 @@ func TestHandleCreateFile(t *testing.T) {
 			request: FileRequest{
 				Path:    "",
 				Content: "test content",
+			},
+			expectedStatus: http.StatusOK,
+			expectedPath:   "file.txt", // Should create file.txt in DataDir root
+		},
+		{
+			name: "Deep nested directory",
+			request: FileRequest{
+				Path:    "very/deep/nested/path/test.txt",
+				Content: "nested content",
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name: "File in DataDir root",
+			request: FileRequest{
+				Path:    "root-file.txt",
+				Content: "root content",
 			},
 			expectedStatus: http.StatusOK,
 		},
@@ -164,6 +188,31 @@ func TestHandleCreateFile(t *testing.T) {
 					t.Errorf("Expected content '%s', got '%s'", tt.request.Content, string(content))
 				}
 
+				// Verify file is within DataDir
+				rel, err := filepath.Rel(tempDir, filePath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if strings.Contains(rel, "..") {
+					t.Errorf("File was created outside DataDir: %s", filePath)
+				}
+
+				// For empty path, verify file.txt is created in DataDir root
+				if tt.request.Path == "" {
+					expectedLocation := filepath.Join(tempDir, "file.txt")
+					if filePath != expectedLocation {
+						t.Errorf("Expected file at %s, got %s", expectedLocation, filePath)
+					}
+				}
+
+				// For nested paths, verify directory structure was created
+				if strings.Contains(tt.request.Path, "/") {
+					dir := filepath.Dir(filePath)
+					if _, err := os.Stat(dir); err != nil {
+						t.Errorf("Directory structure was not created properly: %v", err)
+					}
+				}
+
 				// Verify file info in response
 				expectedPath := tt.request.Path
 				if expectedPath == "" {
@@ -221,6 +270,146 @@ func TestHandleCreateFile(t *testing.T) {
 	})
 }
 
+func TestHandleGetFileContent(t *testing.T) {
+	// Create a temporary directory for testing
+	tempDir, err := os.MkdirTemp("", "comanda-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Get absolute path for DataDir
+	absDataDir, err := filepath.Abs(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create server instance
+	server := &Server{
+		config: &config.ServerConfig{
+			DataDir:     absDataDir,
+			BearerToken: "test-token",
+			Enabled:     true,
+		},
+		envConfig: &config.EnvConfig{},
+	}
+
+	// Create test files in DataDir
+	files := map[string]string{
+		"test.txt":           "test content",
+		"subdir/nested.txt":  "nested content",
+		"deep/path/file.txt": "deep content",
+	}
+
+	for path, content := range files {
+		fullPath := filepath.Join(tempDir, path)
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Create a file outside DataDir for testing access restrictions
+	outsideFile := filepath.Join(filepath.Dir(tempDir), "outside.txt")
+	if err := os.WriteFile(outsideFile, []byte("outside content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(outsideFile)
+
+	tests := []struct {
+		name           string
+		path           string
+		expectedStatus int
+		expectedError  string
+		expectedBody   string
+	}{
+		{
+			name:           "Get file from root of DataDir",
+			path:           "test.txt",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "test content",
+		},
+		{
+			name:           "Get file from subdirectory",
+			path:           "subdir/nested.txt",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "nested content",
+		},
+		{
+			name:           "Get file from deep path",
+			path:           "deep/path/file.txt",
+			expectedStatus: http.StatusOK,
+			expectedBody:   "deep content",
+		},
+		{
+			name:           "Path traversal attempt",
+			path:           "../outside.txt",
+			expectedStatus: http.StatusForbidden,
+			expectedError:  "Invalid file path: access denied",
+		},
+		{
+			name:           "Nested path traversal attempt",
+			path:           "subdir/../../outside.txt",
+			expectedStatus: http.StatusForbidden,
+			expectedError:  "Invalid file path: access denied",
+		},
+		{
+			name:           "Absolute path attempt",
+			path:           outsideFile,
+			expectedStatus: http.StatusForbidden,
+			expectedError:  "Invalid file path: access denied",
+		},
+		{
+			name:           "Nonexistent file",
+			path:           "nonexistent.txt",
+			expectedStatus: http.StatusNotFound,
+			expectedError:  "File not found",
+		},
+		{
+			name:           "Empty path",
+			path:           "",
+			expectedStatus: http.StatusBadRequest,
+			expectedError:  "path parameter is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create test request
+			req := httptest.NewRequest("GET", "/files/content?path="+tt.path, nil)
+			req.Header.Set("Authorization", "Bearer test-token")
+			w := httptest.NewRecorder()
+
+			// Call handler
+			server.handleGetFileContent(w, req)
+
+			// Check status code
+			if w.Code != tt.expectedStatus {
+				t.Errorf("Expected status code %d, got %d", tt.expectedStatus, w.Code)
+			}
+
+			// For error cases, check error message
+			if tt.expectedError != "" {
+				var response FileResponse
+				if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+					t.Fatal(err)
+				}
+				if response.Error != tt.expectedError {
+					t.Errorf("Expected error '%s', got '%s'", tt.expectedError, response.Error)
+				}
+			} else {
+				// For success cases, check file content
+				content := w.Body.String()
+				if content != tt.expectedBody {
+					t.Errorf("Expected content '%s', got '%s'", tt.expectedBody, content)
+				}
+			}
+		})
+	}
+}
+
 func TestHandleDeleteFile(t *testing.T) {
 	// Create a temporary directory for testing
 	tempDir, err := os.MkdirTemp("", "comanda-test-*")
@@ -245,10 +434,16 @@ func TestHandleDeleteFile(t *testing.T) {
 		}
 	}
 
+	// Get absolute path for DataDir
+	absDataDir, err := filepath.Abs(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// Create server instance
 	server := &Server{
-		config: &ServerConfig{
-			DataDir:     tempDir,
+		config: &config.ServerConfig{
+			DataDir:     absDataDir,
 			BearerToken: "test-token",
 			Enabled:     true,
 		},
@@ -300,7 +495,7 @@ func TestHandleDeleteFile(t *testing.T) {
 			name:           "Empty path",
 			path:           "",
 			expectedStatus: http.StatusBadRequest,
-			expectedError:  "Path parameter is required",
+			expectedError:  "path parameter is required",
 		},
 	}
 

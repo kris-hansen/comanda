@@ -107,7 +107,7 @@ func (s *Server) handleFileOperation(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(FileResponse{
 				Success: false,
-				Error:   "Path parameter is required",
+				Error:   "path parameter is required",
 			})
 			return
 		}
@@ -683,7 +683,7 @@ func (s *Server) handleYAMLProcess(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create processor instance with validation enabled
-	proc := processor.NewProcessor(&dslConfig, s.envConfig, true)
+	proc := processor.NewProcessor(&dslConfig, s.envConfig, s.config, true)
 
 	// Set input if provided
 	if req.Input != "" {
@@ -759,6 +759,8 @@ func (s *Server) handleYAMLProcess(w http.ResponseWriter, r *http.Request) {
 					sseWriter.SendComplete(update.Message)
 				case processor.ProgressError:
 					sseWriter.SendError(update.Error)
+				case processor.ProgressOutput:
+					sseWriter.SendOutput(update.Stdout)
 				}
 			case <-heartbeat.C:
 				sseWriter.SendHeartbeat()

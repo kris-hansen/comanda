@@ -40,7 +40,7 @@ func TestHandleEncryptEnv(t *testing.T) {
 
 	// Create server instance
 	server := &Server{
-		config: &ServerConfig{
+		config: &config.ServerConfig{
 			DataDir:     tempDir,
 			BearerToken: "test-token",
 			Enabled:     true,
@@ -123,7 +123,7 @@ func TestHandleDecryptEnv(t *testing.T) {
 
 	// Create server instance
 	server := &Server{
-		config: &ServerConfig{
+		config: &config.ServerConfig{
 			DataDir:     tempDir,
 			BearerToken: "test-token",
 			Enabled:     true,
@@ -186,7 +186,7 @@ func TestHandleDecryptEnv(t *testing.T) {
 func TestHandleEncryptEnvWithoutPassword(t *testing.T) {
 	// Create server instance
 	server := &Server{
-		config: &ServerConfig{
+		config: &config.ServerConfig{
 			BearerToken: "test-token",
 			Enabled:     true,
 		},

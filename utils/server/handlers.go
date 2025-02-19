@@ -20,7 +20,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerConfig, envConfig *config.EnvConfig) {
+func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *config.ServerConfig, envConfig *config.EnvConfig) {
 	// Determine if streaming is requested
 	streaming := r.URL.Query().Get("streaming") == "true" || r.Header.Get("Accept") == "text/event-stream"
 
@@ -92,11 +92,9 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerC
 	// Clean the path to remove any . or .. components
 	cleanPath := filepath.Clean(filename)
 
-	// If filename doesn't start with data directory, prepend it
-	if !strings.HasPrefix(cleanPath, serverConfig.DataDir) {
-		cleanPath = filepath.Join(serverConfig.DataDir, cleanPath)
-		config.DebugLog("Adjusted filename path: %s", cleanPath)
-	}
+	// Prepend DataDir to the cleaned path
+	cleanPath = filepath.Join(serverConfig.DataDir, cleanPath)
+	config.DebugLog("Adjusted filename path: %s", cleanPath)
 
 	// Get the relative path between the data directory and the target file
 	relPath, err := filepath.Rel(serverConfig.DataDir, cleanPath)
@@ -253,7 +251,7 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerC
 
 	// Create and configure processor
 	config.DebugLog("Creating processor instance with validation enabled")
-	proc := processor.NewProcessor(&dslConfig, envConfig, true)
+	proc := processor.NewProcessor(&dslConfig, envConfig, serverConfig, true)
 	config.DebugLog("Processor created successfully with config: steps=%d", len(dslConfig.Steps))
 
 	// Handle POST input with detailed logging
@@ -429,6 +427,9 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *ServerC
 						}
 						sw.SendProgress(progressData)
 					}
+				case processor.ProgressOutput:
+					config.DebugLog("Received output event: %s", update.Stdout)
+					sw.SendOutput(update.Stdout)
 				case processor.ProgressComplete:
 					config.DebugLog("Received completion event: %s", update.Message)
 					sw.SendComplete(update.Message)

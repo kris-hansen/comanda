@@ -31,7 +31,7 @@ func TestHandleDeleteProvider(t *testing.T) {
 	// Create server instance
 	server := &Server{
 		mux: http.NewServeMux(),
-		config: &ServerConfig{
+		config: &config.ServerConfig{
 			BearerToken: "test-token",
 			Enabled:     true,
 		},
@@ -148,7 +148,7 @@ func TestProviderRouteHandling(t *testing.T) {
 	// Create server instance
 	server := &Server{
 		mux: http.NewServeMux(),
-		config: &ServerConfig{
+		config: &config.ServerConfig{
 			BearerToken: "test-token",
 			Enabled:     true,
 		},

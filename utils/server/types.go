@@ -15,24 +15,6 @@ func debugLog(format string, args ...interface{}) {
 	log.Printf("[DEBUG] "+format, args...)
 }
 
-// CORSConfig holds CORS-related configuration options
-type CORSConfig struct {
-	AllowedOrigins []string `json:"allowedOrigins"`
-	AllowedMethods []string `json:"allowedMethods"`
-	AllowedHeaders []string `json:"allowedHeaders"`
-	MaxAge         int      `json:"maxAge"`
-	Enabled        bool     `json:"enabled"`
-}
-
-// ServerConfig holds the configuration for the HTTP server
-type ServerConfig struct {
-	Port        int        `json:"port"`
-	DataDir     string     `json:"dataDir"`
-	BearerToken string     `json:"bearerToken,omitempty"`
-	Enabled     bool       `json:"enabled"`
-	CORS        CORSConfig `json:"cors"`
-}
-
 // ProcessResponse represents the response for process operations
 type ProcessResponse struct {
 	Success bool   `json:"success"`
@@ -324,5 +306,27 @@ func (sw *sseWriter) SendHeartbeat() (n int, err error) {
 	}
 	sw.f.Flush()
 	debugLog("[SSE] Successfully sent heartbeat event: bytes=%d", n)
+	return
+}
+
+// SendOutput sends an output event with the given content
+func (sw *sseWriter) SendOutput(content string) (n int, err error) {
+	debugLog("[SSE] Sending output event with content length: %d", len(content))
+	data := map[string]string{
+		"content": content,
+	}
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		debugLog("[SSE] Error marshaling output data: %v", err)
+		return 0, err
+	}
+	event := fmt.Sprintf("event: output\ndata: %s\n\n", string(jsonData))
+	n, err = sw.w.Write([]byte(event))
+	if err != nil {
+		debugLog("[SSE] Error writing output event: %v", err)
+		return
+	}
+	sw.f.Flush()
+	debugLog("[SSE] Successfully sent output event: bytes=%d", n)
 	return
 }

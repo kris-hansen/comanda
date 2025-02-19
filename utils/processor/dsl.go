@@ -13,16 +13,17 @@ import (
 
 // Processor handles the DSL processing pipeline
 type Processor struct {
-	config     *DSLConfig
-	envConfig  *config.EnvConfig
-	handler    *input.Handler
-	validator  *input.Validator
-	providers  map[string]models.Provider
-	verbose    bool
-	lastOutput string
-	spinner    *Spinner
-	variables  map[string]string // Store variables from STDIN
-	progress   ProgressWriter    // Progress writer for streaming updates
+	config       *DSLConfig
+	envConfig    *config.EnvConfig
+	serverConfig *config.ServerConfig // Add server config
+	handler      *input.Handler
+	validator    *input.Validator
+	providers    map[string]models.Provider
+	verbose      bool
+	lastOutput   string
+	spinner      *Spinner
+	variables    map[string]string // Store variables from STDIN
+	progress     ProgressWriter    // Progress writer for streaming updates
 }
 
 // isTestMode checks if the code is running in test mode
@@ -31,16 +32,17 @@ func isTestMode() bool {
 }
 
 // NewProcessor creates a new DSL processor
-func NewProcessor(config *DSLConfig, envConfig *config.EnvConfig, verbose bool) *Processor {
+func NewProcessor(config *DSLConfig, envConfig *config.EnvConfig, serverConfig *config.ServerConfig, verbose bool) *Processor {
 	p := &Processor{
-		config:    config,
-		envConfig: envConfig,
-		handler:   input.NewHandler(),
-		validator: input.NewValidator(nil),
-		providers: make(map[string]models.Provider),
-		verbose:   verbose,
-		spinner:   NewSpinner(),
-		variables: make(map[string]string),
+		config:       config,
+		envConfig:    envConfig,
+		serverConfig: serverConfig, // Store server config
+		handler:      input.NewHandler(),
+		validator:    input.NewValidator(nil),
+		providers:    make(map[string]models.Provider),
+		verbose:      verbose,
+		spinner:      NewSpinner(),
+		variables:    make(map[string]string),
 	}
 
 	// Disable spinner in test environments
