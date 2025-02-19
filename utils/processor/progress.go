@@ -8,6 +8,7 @@ const (
 	ProgressStep
 	ProgressComplete
 	ProgressError
+	ProgressOutput // New type for output events
 )
 
 // StepInfo contains detailed information about a processing step
@@ -23,6 +24,7 @@ type ProgressUpdate struct {
 	Message string
 	Error   error
 	Step    *StepInfo // Optional step information
+	Stdout  string    // Content from STDOUT when Type is ProgressOutput
 }
 
 // ProgressWriter is an interface for handling progress updates

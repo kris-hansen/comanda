@@ -308,3 +308,25 @@ func (sw *sseWriter) SendHeartbeat() (n int, err error) {
 	debugLog("[SSE] Successfully sent heartbeat event: bytes=%d", n)
 	return
 }
+
+// SendOutput sends an output event with the given content
+func (sw *sseWriter) SendOutput(content string) (n int, err error) {
+	debugLog("[SSE] Sending output event with content length: %d", len(content))
+	data := map[string]string{
+		"content": content,
+	}
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		debugLog("[SSE] Error marshaling output data: %v", err)
+		return 0, err
+	}
+	event := fmt.Sprintf("event: output\ndata: %s\n\n", string(jsonData))
+	n, err = sw.w.Write([]byte(event))
+	if err != nil {
+		debugLog("[SSE] Error writing output event: %v", err)
+		return
+	}
+	sw.f.Flush()
+	debugLog("[SSE] Successfully sent output event: bytes=%d", n)
+	return
+}

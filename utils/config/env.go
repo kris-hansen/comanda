@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -340,7 +341,7 @@ func (c *EnvConfig) GetServerConfig() *ServerConfig {
 		c.Server = &ServerConfig{
 			Port:    8080,
 			Enabled: false,
-			DataDir: "data",
+			DataDir: "data", // Initial default, will be made absolute
 			CORS: CORS{
 				Enabled:        true,
 				AllowedOrigins: []string{"*"},
@@ -350,6 +351,23 @@ func (c *EnvConfig) GetServerConfig() *ServerConfig {
 			},
 		}
 	}
+
+	// Make DataDir absolute if it's not already
+	if !filepath.IsAbs(c.Server.DataDir) {
+		// Get the directory containing the .env file
+		envPath := GetEnvPath()
+		envDir := filepath.Dir(envPath)
+
+		// Make DataDir absolute relative to the .env file location
+		c.Server.DataDir = filepath.Join(envDir, c.Server.DataDir)
+
+		// Create the directory if it doesn't exist
+		if err := os.MkdirAll(c.Server.DataDir, 0755); err != nil {
+			// Log error but don't fail - the server will handle directory creation as needed
+			VerboseLog("Error creating DataDir: %v", err)
+		}
+	}
+
 	return c.Server
 }
 

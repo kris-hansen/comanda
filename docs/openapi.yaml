@@ -195,6 +195,7 @@ components:
             - complete: Processing completion message
             - error: Error messages
             - heartbeat: Connection keep-alive signals
+            - output: JSON-encoded output from YAML processing when output is set to STDOUT (format: {"content": "output text"})
       required:
         - input
 
@@ -229,19 +230,34 @@ components:
       required:
         - message
 
+    OutputData:
+      type: object
+      description: Output event data structure
+      properties:
+        content:
+          type: string
+          description: The output content
+      required:
+        - content
+
     SSEEvent:
       type: object
       description: Server-Sent Event structure
       properties:
         event:
           type: string
-          enum: [data, progress, complete, error, heartbeat]
+          enum: [data, progress, complete, error, heartbeat, output]
           description: Type of SSE event
         data:
           oneOf:
             - type: string
             - $ref: '#/components/schemas/ProgressData'
-          description: Event payload (string for simple events, object for progress updates)
+            - $ref: '#/components/schemas/OutputData'
+            - type: object
+              properties:
+                error:
+                  type: string
+          description: Event payload (string for simple events, object for structured data)
       required:
         - event
         - data
@@ -270,6 +286,10 @@ components:
             data: {"error": "Model failed to respond"}
         heartbeat:
           value: ": heartbeat"
+        output:
+          value: |
+            event: output
+            data: {"content": "Direct output from YAML processing..."}
 
 security:
   - BearerAuth: []
@@ -740,6 +760,7 @@ paths:
           * complete: Final completion message
           * error: Error information
           * heartbeat: Keep-alive signals (every 15s)
+          * output: JSON-encoded output from YAML processing when output is set to STDOUT (format: {"content": "output text"})
         
         Example SSE events:
         ```
@@ -757,6 +778,9 @@ paths:
 
         event: error
         data: {"error": "Model failed to respond"}
+
+        event: output
+        data: {"content": "Model output content here..."}
 
         : heartbeat
         ```
@@ -827,6 +851,11 @@ paths:
                   value: |
                     event: error
                     data: {"error": "Model failed to respond"}
+
+                output:
+                  value: |
+                    event: output
+                    data: {"content": "Direct output from YAML processing..."}
 
                 heartbeat:
                   value: |

@@ -427,6 +427,9 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *config.
 						}
 						sw.SendProgress(progressData)
 					}
+				case processor.ProgressOutput:
+					config.DebugLog("Received output event: %s", update.Stdout)
+					sw.SendOutput(update.Stdout)
 				case processor.ProgressComplete:
 					config.DebugLog("Received completion event: %s", update.Message)
 					sw.SendComplete(update.Message)

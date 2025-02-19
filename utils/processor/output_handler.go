@@ -12,11 +12,34 @@ func (p *Processor) handleOutput(modelName string, response string, outputs []st
 	for _, output := range outputs {
 		p.debugf("Processing output: %s", output)
 		if output == "STDOUT" {
-			fmt.Printf("\nResponse from %s:\n%s\n", modelName, response)
+			if p.progress != nil {
+				// Send through progress channel for streaming
+				p.debugf("Sending output event with content: %s", response)
+				if err := p.progress.WriteProgress(ProgressUpdate{
+					Type:   ProgressOutput,
+					Stdout: response,
+				}); err != nil {
+					p.debugf("Error sending output event: %v", err)
+					return err
+				}
+				p.debugf("Output event sent successfully")
+			} else {
+				// Fallback to direct console output
+				fmt.Printf("\nResponse from %s:\n%s\n", modelName, response)
+			}
 			p.debugf("Response written to STDOUT")
 		} else {
+			// Determine the output path based on server mode
+			outputPath := output
+			if p.serverConfig != nil && p.serverConfig.Enabled {
+				// In server mode, make the path relative to DataDir
+				p.debugf("Server mode enabled, using DataDir: %s", p.serverConfig.DataDir)
+				outputPath = filepath.Join(p.serverConfig.DataDir, output)
+				p.debugf("Resolved output path: %s", outputPath)
+			}
+
 			// Create directory if it doesn't exist
-			dir := filepath.Dir(output)
+			dir := filepath.Dir(outputPath)
 			if dir != "." {
 				p.debugf("Creating directory if it doesn't exist: %s", dir)
 				if err := os.MkdirAll(dir, 0755); err != nil {
@@ -25,11 +48,11 @@ func (p *Processor) handleOutput(modelName string, response string, outputs []st
 			}
 
 			// Write to file
-			p.debugf("Writing response to file: %s", output)
-			if err := os.WriteFile(output, []byte(response), 0644); err != nil {
-				return fmt.Errorf("failed to write response to file %s: %w", output, err)
+			p.debugf("Writing response to file: %s", outputPath)
+			if err := os.WriteFile(outputPath, []byte(response), 0644); err != nil {
+				return fmt.Errorf("failed to write response to file %s: %w", outputPath, err)
 			}
-			p.debugf("Response successfully written to file: %s", output)
+			p.debugf("Response successfully written to file: %s", outputPath)
 		}
 	}
 	return nil
