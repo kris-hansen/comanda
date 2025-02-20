@@ -87,9 +87,13 @@ func (o *OllamaProvider) SupportsModel(modelName string) bool {
 	return false
 }
 
-// Configure sets up the provider (no API key needed for Ollama)
+// Configure sets up the provider. Since Ollama is a local service that doesn't use API keys,
+// we accept "LOCAL" as a special API key value to indicate it's properly configured.
 func (o *OllamaProvider) Configure(apiKey string) error {
 	o.debugf("Configuring Ollama provider")
+	if apiKey != "LOCAL" {
+		return fmt.Errorf("invalid API key for Ollama: must be 'LOCAL' to indicate local service")
+	}
 	return nil
 }
 
