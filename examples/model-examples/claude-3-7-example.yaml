@@ -1,0 +1,29 @@
+# Example of using Claude 3.7 Sonnet model
+# This example demonstrates using the dated version of Claude 3.7 Sonnet
+
+step_one:
+  input: examples/test.csv
+  model: claude-3-7-sonnet-20250219
+  action: "Analyze this CSV file and provide detailed insights about the data."
+  output: STDOUT
+
+# Example of using Claude 3.7 Sonnet latest
+step_two:
+  input: examples/test.csv
+  model: claude-3-7-sonnet-latest
+  action: "Analyze this CSV file and provide detailed insights about the data."
+  output: STDOUT
+
+# Example of using Claude 3.5 Haiku latest
+step_three:
+  input: examples/test.csv
+  model: claude-3-5-haiku-latest
+  action: "Analyze this CSV file and list the key points."
+  output: STDOUT
+
+# Example of using Claude 3.5 Haiku with specific date
+step_four:
+  input: examples/test.csv
+  model: claude-3-5-haiku-20241022
+  action: "Analyze this CSV file and list the key points."
+  output: STDOUT

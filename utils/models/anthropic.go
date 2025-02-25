@@ -322,9 +322,16 @@ func (a *AnthropicProvider) ValidateModel(modelName string) bool {
 		"claude-3-5-sonnet-20241022",
 		"claude-3-5-sonnet-latest",
 		"claude-3-5-haiku-latest",
+		"claude-3-7-sonnet-20250219",
+		"claude-3-7-sonnet-latest",
+		"claude-3-5-haiku-20241022",
 	}
 
-	modelName = strings.ToLower(modelName)
+	// Trim whitespace and convert to lowercase
+	modelName = strings.TrimSpace(strings.ToLower(modelName))
+	
+	// Add extra debug logging
+	a.debugf("Checking model '%s' against valid models: %v", modelName, validModels)
 	// Check exact matches
 	for _, valid := range validModels {
 		if modelName == valid {
@@ -337,6 +344,7 @@ func (a *AnthropicProvider) ValidateModel(modelName string) bool {
 	modelFamilies := []string{
 		"claude-3-5-sonnet",
 		"claude-3-5-haiku",
+		"claude-3-7-sonnet",
 	}
 
 	for _, family := range modelFamilies {
