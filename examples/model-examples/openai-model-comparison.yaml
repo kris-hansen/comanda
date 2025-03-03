@@ -1,0 +1,31 @@
+step_one:
+  input:
+    - NA
+  model: gpt-4.5-preview
+  action:
+    - write a sonnet about network cables
+  output:
+    - examples/sonnet1.txt
+
+step_two:
+  input:
+    - NA
+  model:
+    - o1-mini
+  action:
+    - write a sonnet about network cables
+  output:
+    - examples/sonnet2.txt
+
+step_three:
+  input:
+    - examples/sonnet1.txt
+    - examples/sonnet2.txt
+  model:
+    - gpt-4o-mini
+  action:
+    - of these two sonnets, which one is better and why? Rate them both on a scale of 1-10
+  output:
+    - STDOUT
+
+
