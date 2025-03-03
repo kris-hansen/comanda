@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/kris-hansen/comanda/utils/config"
 	"github.com/kris-hansen/comanda/utils/input"
@@ -89,6 +90,18 @@ func (p *Processor) emitProgress(msg string, step *StepInfo) {
 	}
 }
 
+// emitProgressWithMetrics sends a progress update with performance metrics
+func (p *Processor) emitProgressWithMetrics(msg string, step *StepInfo, metrics *PerformanceMetrics) {
+	if p.progress != nil {
+		p.progress.WriteProgress(ProgressUpdate{
+			Type:               ProgressStep,
+			Message:            msg,
+			Step:               step,
+			PerformanceMetrics: metrics,
+		})
+	}
+}
+
 // emitParallelProgress sends a progress update for a parallel step
 func (p *Processor) emitParallelProgress(msg string, step *StepInfo, parallelID string) {
 	if p.progress != nil {
@@ -98,6 +111,20 @@ func (p *Processor) emitParallelProgress(msg string, step *StepInfo, parallelID 
 			Step:       step,
 			IsParallel: true,
 			ParallelID: parallelID,
+		})
+	}
+}
+
+// emitParallelProgressWithMetrics sends a progress update for a parallel step with performance metrics
+func (p *Processor) emitParallelProgressWithMetrics(msg string, step *StepInfo, parallelID string, metrics *PerformanceMetrics) {
+	if p.progress != nil {
+		p.progress.WriteProgress(ProgressUpdate{
+			Type:               ProgressParallelStep,
+			Message:            msg,
+			Step:               step,
+			IsParallel:         true,
+			ParallelID:         parallelID,
+			PerformanceMetrics: metrics,
 		})
 	}
 }
@@ -479,6 +506,10 @@ func (p *Processor) Process() error {
 
 // processStep handles the processing of a single step (used for both sequential and parallel processing)
 func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (string, error) {
+	// Create performance metrics for this step
+	metrics := &PerformanceMetrics{}
+	startTime := time.Now()
+
 	// Create a new handler for this step to avoid conflicts in parallel processing
 	stepHandler := input.NewHandler()
 	p.handler = stepHandler
@@ -505,6 +536,7 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 
 	// Handle input based on type with error context
 	var inputs []string
+	inputStartTime := time.Now()
 	p.debugf("Processing input configuration for step: %s", step.Name)
 	switch v := step.Config.Input.(type) {
 	case map[string]interface{}:
@@ -604,6 +636,13 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 		}
 	}
 
+	// Record input processing time
+	metrics.InputProcessingTime = time.Since(inputStartTime).Milliseconds()
+	p.debugf("Input processing completed in %d ms", metrics.InputProcessingTime)
+
+	// Start model processing time tracking
+	modelStartTime := time.Now()
+
 	// Skip model validation and provider configuration if model is NA
 	if !(len(modelNames) == 1 && modelNames[0] == "NA") {
 		// Validate model for this step with detailed logging
@@ -628,6 +667,13 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 	// Process actions with detailed logging
 	p.debugf("Processing actions for step '%s'", step.Name)
 
+	// Record model processing time
+	metrics.ModelProcessingTime = time.Since(modelStartTime).Milliseconds()
+	p.debugf("Model processing completed in %d ms", metrics.ModelProcessingTime)
+
+	// Start action processing time tracking
+	actionStartTime := time.Now()
+
 	// Substitute variables in actions
 	substitutedActions := make([]string, len(actions))
 	for i, action := range actions {
@@ -649,6 +695,13 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 	}
 	p.debugf("Successfully processed actions for step: %s", step.Name)
 
+	// Record action processing time
+	metrics.ActionProcessingTime = time.Since(actionStartTime).Milliseconds()
+	p.debugf("Action processing completed in %d ms", metrics.ActionProcessingTime)
+
+	// Start output processing time tracking
+	outputStartTime := time.Now()
+
 	// Handle output for this step
 	p.debugf("Handling output for step: %s", step.Name)
 
@@ -664,6 +717,21 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 				p.debugf("Database output error: %s", errMsg)
 				return "", fmt.Errorf("database output error: %w", err)
 			}
+
+			// For database outputs, we still want to show performance metrics in STDOUT
+			if p.verbose {
+				fmt.Printf("\nPerformance Metrics for step '%s':\n"+
+					"- Input processing: %d ms\n"+
+					"- Model processing: %d ms\n"+
+					"- Action processing: %d ms\n"+
+					"- Database output: (in progress)\n"+
+					"- Total processing: (in progress)\n",
+					step.Name,
+					metrics.InputProcessingTime,
+					metrics.ModelProcessingTime,
+					metrics.ActionProcessingTime)
+			}
+
 			p.debugf("Successfully processed database output for step: %s", step.Name)
 			handled = true
 		}
@@ -674,13 +742,42 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 		outputs := p.NormalizeStringSlice(step.Config.Output)
 		p.debugf("Processing regular output for step '%s': model=%s outputs=%v",
 			step.Name, modelNames[0], outputs)
-		if err := p.handleOutput(modelNames[0], response, outputs); err != nil {
+		if err := p.handleOutput(modelNames[0], response, outputs, metrics); err != nil {
 			errMsg := fmt.Sprintf("Output processing failed for step '%s': %v (model=%s outputs=%v)",
 				step.Name, err, modelNames[0], outputs)
 			p.debugf("Output processing error: %s", errMsg)
 			return "", fmt.Errorf("output handling error: %w", err)
 		}
 		p.debugf("Successfully processed output for step: %s", step.Name)
+	}
+
+	// Record output processing time
+	metrics.OutputProcessingTime = time.Since(outputStartTime).Milliseconds()
+	p.debugf("Output processing completed in %d ms", metrics.OutputProcessingTime)
+
+	// Calculate total processing time
+	metrics.TotalProcessingTime = time.Since(startTime).Milliseconds()
+
+	// Log performance metrics
+	p.debugf("Step '%s' performance metrics:", step.Name)
+	p.debugf("- Input processing: %d ms", metrics.InputProcessingTime)
+	p.debugf("- Model processing: %d ms", metrics.ModelProcessingTime)
+	p.debugf("- Action processing: %d ms", metrics.ActionProcessingTime)
+	p.debugf("- Output processing: %d ms", metrics.OutputProcessingTime)
+	p.debugf("- Total processing: %d ms", metrics.TotalProcessingTime)
+
+	// Emit progress update with performance metrics
+	if isParallel {
+		p.emitParallelProgressWithMetrics(
+			fmt.Sprintf("Completed parallel step: %s (in %d ms)", step.Name, metrics.TotalProcessingTime),
+			stepInfo,
+			parallelID,
+			metrics)
+	} else {
+		p.emitProgressWithMetrics(
+			fmt.Sprintf("Completed step: %s (in %d ms)", step.Name, metrics.TotalProcessingTime),
+			stepInfo,
+			metrics)
 	}
 
 	return response, nil

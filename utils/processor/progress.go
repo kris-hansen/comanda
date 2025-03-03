@@ -21,13 +21,14 @@ type StepInfo struct {
 
 // ProgressUpdate represents a progress update from the processor
 type ProgressUpdate struct {
-	Type       ProgressType
-	Message    string
-	Error      error
-	Step       *StepInfo // Optional step information
-	Stdout     string    // Content from STDOUT when Type is ProgressOutput
-	IsParallel bool      // Whether this update is from a parallel step
-	ParallelID string    // Identifier for the parallel step group
+	Type               ProgressType
+	Message            string
+	Error              error
+	Step               *StepInfo           // Optional step information
+	Stdout             string              // Content from STDOUT when Type is ProgressOutput
+	IsParallel         bool                // Whether this update is from a parallel step
+	ParallelID         string              // Identifier for the parallel step group
+	PerformanceMetrics *PerformanceMetrics // Performance metrics for the step
 }
 
 // ProgressWriter is an interface for handling progress updates
