@@ -17,10 +17,26 @@ type Step struct {
 
 // DSLConfig represents the structure of the DSL configuration
 type DSLConfig struct {
-	Steps []Step
+	Steps         []Step
+	ParallelSteps map[string][]Step // Steps that can be executed in parallel
+}
+
+// StepDependency represents a dependency between steps
+type StepDependency struct {
+	Name      string
+	DependsOn []string
 }
 
 // NormalizeOptions represents options for string slice normalization
 type NormalizeOptions struct {
 	AllowEmpty bool // Whether to allow empty strings in the result
+}
+
+// PerformanceMetrics tracks timing information for processing steps
+type PerformanceMetrics struct {
+	InputProcessingTime  int64 // Time in milliseconds to process inputs
+	ModelProcessingTime  int64 // Time in milliseconds for model processing
+	ActionProcessingTime int64 // Time in milliseconds for action processing
+	OutputProcessingTime int64 // Time in milliseconds for output processing
+	TotalProcessingTime  int64 // Total time in milliseconds for the step
 }

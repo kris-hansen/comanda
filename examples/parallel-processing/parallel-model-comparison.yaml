@@ -1,0 +1,41 @@
+parallel-process:
+  gpt4o_step:
+    input:
+      - NA
+    model: gpt-4o
+    action:
+      - write a short story about a robot that discovers it has emotions
+    output:
+      - examples/parallel-processing/gpt4o-story.txt
+
+  claude_step:
+    input:
+      - NA
+    model: claude-3-5-sonnet-latest
+    action:
+      - write a short story about a robot that discovers it has emotions
+    output:
+      - examples/parallel-processing/claude-story.txt
+
+  gemini_step:
+    input:
+      - NA
+    model: gemini-1.5-pro
+    action:
+      - write a short story about a robot that discovers it has emotions
+    output:
+      - examples/parallel-processing/gemini-story.txt
+
+compare_step:
+  input:
+    - examples/parallel-processing/gpt4o-story.txt
+    - examples/parallel-processing/claude-story.txt
+    - examples/parallel-processing/gemini-story.txt
+  model: gpt-4o
+  action:
+    - compare these three short stories about robots discovering emotions. 
+    - analyze the differences in style, tone, and approach between the three models.
+    - which one is most creative? which one has the best narrative structure?
+    - provide a detailed analysis with specific examples from each story.
+  output:
+    - examples/parallel-processing/comparison-results.txt

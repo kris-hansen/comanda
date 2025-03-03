@@ -7,7 +7,7 @@ import (
 )
 
 // handleOutput processes the model's response according to the output configuration
-func (p *Processor) handleOutput(modelName string, response string, outputs []string) error {
+func (p *Processor) handleOutput(modelName string, response string, outputs []string, metrics *PerformanceMetrics) error {
 	p.debugf("Handling %d output(s)", len(outputs))
 	for _, output := range outputs {
 		p.debugf("Processing output: %s", output)
@@ -15,9 +15,31 @@ func (p *Processor) handleOutput(modelName string, response string, outputs []st
 			if p.progress != nil {
 				// Send through progress channel for streaming
 				p.debugf("Sending output event with content: %s", response)
+
+				// Format performance metrics for display
+				var perfInfo string
+				if metrics != nil {
+					perfInfo = fmt.Sprintf("\n\nPerformance Metrics:\n"+
+						"- Input processing: %d ms\n"+
+						"- Model processing: %d ms\n"+
+						"- Action processing: %d ms\n"+
+						"- Output processing: (in progress)\n"+
+						"- Total processing: (in progress)\n",
+						metrics.InputProcessingTime,
+						metrics.ModelProcessingTime,
+						metrics.ActionProcessingTime)
+				}
+
+				// Add performance metrics to the output
+				outputWithMetrics := response
+				if metrics != nil {
+					outputWithMetrics = response + perfInfo
+				}
+
 				if err := p.progress.WriteProgress(ProgressUpdate{
-					Type:   ProgressOutput,
-					Stdout: response,
+					Type:               ProgressOutput,
+					Stdout:             outputWithMetrics,
+					PerformanceMetrics: metrics,
 				}); err != nil {
 					p.debugf("Error sending output event: %v", err)
 					return err
@@ -26,6 +48,19 @@ func (p *Processor) handleOutput(modelName string, response string, outputs []st
 			} else {
 				// Fallback to direct console output
 				fmt.Printf("\nResponse from %s:\n%s\n", modelName, response)
+
+				// Print performance metrics if available
+				if metrics != nil {
+					fmt.Printf("\nPerformance Metrics:\n"+
+						"- Input processing: %d ms\n"+
+						"- Model processing: %d ms\n"+
+						"- Action processing: %d ms\n"+
+						"- Output processing: (in progress)\n"+
+						"- Total processing: (in progress)\n",
+						metrics.InputProcessingTime,
+						metrics.ModelProcessingTime,
+						metrics.ActionProcessingTime)
+				}
 			}
 			p.debugf("Response written to STDOUT")
 		} else {

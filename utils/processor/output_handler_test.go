@@ -120,7 +120,7 @@ func TestHandleOutput(t *testing.T) {
 			}
 
 			// Handle output
-			if err := proc.handleOutput("test-model", tt.response, tt.outputs); err != nil {
+			if err := proc.handleOutput("test-model", tt.response, tt.outputs, nil); err != nil {
 				t.Fatalf("handleOutput failed: %v", err)
 			}
 

@@ -1,7 +1,7 @@
 package models
 
 import (
-	"log"
+	"github.com/kris-hansen/comanda/utils/config"
 )
 
 // ModelConfig represents configuration options for model calls
@@ -36,7 +36,7 @@ var DetectProvider DetectProviderFunc = defaultDetectProvider
 
 // defaultDetectProvider is the default implementation of DetectProvider
 func defaultDetectProvider(modelName string) Provider {
-	log.Printf("[DEBUG][Provider] Attempting to detect provider for model: %s", modelName)
+	config.DebugLog("[Provider] Attempting to detect provider for model: %s", modelName)
 
 	// Order providers from most specific to most general
 	providers := []Provider{
@@ -49,12 +49,11 @@ func defaultDetectProvider(modelName string) Provider {
 	}
 
 	for _, provider := range providers {
-		//log.Printf("[DEBUG][Provider] Checking if %s supports model %s", provider.Name(), modelName)
 		if provider.SupportsModel(modelName) {
-			log.Printf("[DEBUG][Provider] Found provider %s for model %s", provider.Name(), modelName)
+			config.DebugLog("[Provider] Found provider %s for model %s", provider.Name(), modelName)
 			return provider
 		}
 	}
-	log.Printf("[DEBUG][Provider] No provider found for model %s", modelName)
+	config.DebugLog("[Provider] No provider found for model %s", modelName)
 	return nil
 }
