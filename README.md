@@ -22,6 +22,7 @@ Comanda allows you to use the best provider and model for each step and compose 
 - 🕷️ Advanced web scraping capabilities with configurable options
 - 🛠️ Extensible YAML configuration for defining workflows
 - ⚡ Efficient processing of LLM chains
+- 🚀 Parallel processing of independent steps for improved performance
 - 🔒 HTTP server mode: use it as a multi-LLM workflow wrapper
 - 🔐 Secure configuration encryption for protecting API keys and secrets
 - 📁 Multi-file input support with content consolidation
@@ -745,6 +746,60 @@ analyze:
   action: "Analyze this image and describe what you see in detail."
   output: "STDOUT"
 ```
+
+### Parallel Processing
+
+Comanda supports parallel processing of independent steps to improve performance. This is particularly useful for tasks that don't depend on each other, such as:
+
+- Running the same prompt against multiple models for comparison
+- Processing multiple files independently
+- Performing different analyses on the same input
+
+To use parallel processing, define steps under a `parallel-process` block in your YAML file:
+
+```yaml
+# parallel-model-comparison.yaml
+parallel-process:
+  gpt4o_step:
+    input:
+      - NA
+    model: gpt-4o
+    action:
+      - write a short story about a robot that discovers it has emotions
+    output:
+      - examples/parallel-processing/gpt4o-story.txt
+
+  claude_step:
+    input:
+      - NA
+    model: claude-3-5-sonnet-latest
+    action:
+      - write a short story about a robot that discovers it has emotions
+    output:
+      - examples/parallel-processing/claude-story.txt
+
+compare_step:
+  input:
+    - examples/parallel-processing/gpt4o-story.txt
+    - examples/parallel-processing/claude-story.txt
+  model: gpt-4o
+  action:
+    - compare these two short stories about robots discovering emotions
+    - which one is more creative and has better narrative structure?
+  output:
+    - STDOUT
+```
+
+In this example:
+- The `gpt4o_step` and `claude_step` will run in parallel
+- The `compare_step` will run after both parallel steps complete, as it depends on their outputs
+
+The system automatically validates dependencies between steps to ensure:
+- No circular dependencies exist
+- Steps that depend on outputs from other steps run after those steps complete
+- Parallel steps are truly independent of each other
+
+Parallel processing leverages Go's concurrency features (goroutines and channels) for efficient execution.
 
 ### Running Commands
 

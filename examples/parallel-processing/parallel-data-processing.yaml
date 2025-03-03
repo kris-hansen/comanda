@@ -1,0 +1,46 @@
+parallel-process:
+  analyze_csv:
+    input:
+      - examples/test.csv
+    model: gpt-4o-mini
+    action:
+      - analyze this CSV data and provide a summary of the key statistics
+      - identify any trends or patterns in the data
+      - create a brief report with your findings
+    output:
+      - examples/parallel-processing/csv-analysis.txt
+
+  extract_entities:
+    input:
+      - examples/test.csv
+    model: gpt-4o-mini
+    action:
+      - extract all named entities (people, organizations, locations) from this CSV data
+      - organize them by category
+      - provide a count of how many times each entity appears
+    output:
+      - examples/parallel-processing/entity-extraction.txt
+
+  generate_visualizations:
+    input:
+      - examples/test.csv
+    model: gpt-4o-mini
+    action:
+      - suggest 3-5 different visualizations that would be appropriate for this data
+      - for each visualization, explain what insights it would reveal
+      - provide sample code in Python using matplotlib or seaborn to create these visualizations
+    output:
+      - examples/parallel-processing/visualization-suggestions.txt
+
+consolidate_results:
+  input:
+    - examples/parallel-processing/csv-analysis.txt
+    - examples/parallel-processing/entity-extraction.txt
+    - examples/parallel-processing/visualization-suggestions.txt
+  model: gpt-4o
+  action:
+    - create a comprehensive data analysis report that combines all the information from these files
+    - the report should have clear sections for statistics, entity analysis, and visualizations
+    - add an executive summary at the beginning that highlights the most important findings
+  output:
+    - examples/parallel-processing/comprehensive-report.txt
