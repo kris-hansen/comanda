@@ -277,5 +277,15 @@ func isSpecialInput(input string) bool {
 	}
 
 	// Check if input is a URL
-	return strings.HasPrefix(input, "http://") || strings.HasPrefix(input, "https://")
+	if strings.HasPrefix(input, "http://") || strings.HasPrefix(input, "https://") {
+		return true
+	}
+
+	// Check if input contains wildcard characters
+	return containsWildcard(input)
+}
+
+// containsWildcard checks if a path contains wildcard characters
+func containsWildcard(path string) bool {
+	return strings.ContainsAny(path, "*?[]")
 }
