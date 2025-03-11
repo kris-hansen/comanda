@@ -101,6 +101,24 @@ func (v *Validator) ValidatePath(path string) error {
 		return fmt.Errorf("path cannot be empty")
 	}
 
+	// Allow wildcard patterns
+	if strings.ContainsAny(path, "*?[]") {
+		// Basic validation for wildcard patterns
+		// Ensure the pattern has some non-wildcard characters
+		nonWildcardChars := strings.ReplaceAll(
+			strings.ReplaceAll(
+				strings.ReplaceAll(
+					strings.ReplaceAll(path, "*", ""),
+					"?", ""),
+				"[", ""),
+			"]", "")
+
+		if len(nonWildcardChars) == 0 {
+			return fmt.Errorf("wildcard pattern must contain some non-wildcard characters")
+		}
+		return nil
+	}
+
 	return nil
 }
 
@@ -113,6 +131,11 @@ func (v *Validator) ValidateFileExtension(path string) error {
 
 	// Handle STDIN input with variable assignment
 	if strings.HasPrefix(path, "STDIN") {
+		return nil
+	}
+
+	// Allow wildcard patterns, they'll be validated when expanded
+	if strings.ContainsAny(path, "*?[]") {
 		return nil
 	}
 

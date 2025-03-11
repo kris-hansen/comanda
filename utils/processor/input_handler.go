@@ -230,23 +230,6 @@ func (p *Processor) processRegularInput(inputPath string) error {
 	// Check if the path exists
 	if _, err := os.Stat(filePath); err != nil {
 		if os.IsNotExist(err) {
-			// Only try glob if the path contains glob characters
-			if containsGlobChar(filePath) {
-				matches, err := filepath.Glob(filePath)
-				if err != nil {
-					return fmt.Errorf("error processing glob pattern %s: %w", filePath, err)
-				}
-				if len(matches) == 0 {
-					return fmt.Errorf("no files found matching pattern: %s", filePath)
-				}
-				for _, match := range matches {
-					if err := p.processFile(match); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
-
 			// Check if the file is an output in any other step
 			if p.isOutputInOtherSteps(filePath) {
 				p.debugf("File %s does not exist yet but will be created as output in another step", filePath)
@@ -257,7 +240,9 @@ func (p *Processor) processRegularInput(inputPath string) error {
 			if filePath != inputPath {
 				return fmt.Errorf("file not found in DataDir (%s) or at path '%s'", p.serverConfig.DataDir, inputPath)
 			}
-			return fmt.Errorf("path does not exist and is not an output of any step: %s", filePath)
+
+			// Let the input handler deal with wildcard patterns
+			return p.processFile(filePath)
 		}
 		return fmt.Errorf("error accessing path %s: %w", filePath, err)
 	}
@@ -283,9 +268,4 @@ func (p *Processor) processFile(path string) error {
 	}
 	p.debugf("Successfully processed file: %s", path)
 	return nil
-}
-
-// containsGlobChar checks if a path contains glob characters
-func containsGlobChar(path string) bool {
-	return strings.ContainsAny(path, "*?[]")
 }

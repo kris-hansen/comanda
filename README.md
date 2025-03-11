@@ -28,6 +28,7 @@ Comanda allows you to use the best provider and model for each step and compose 
 - 📁 Multi-file input support with content consolidation
 - 📝 Markdown file support for reusable actions (prompts)
 - 🗄️ Database integration for read/write operations for inputs and outputs
+- 🔍 Wildcard pattern support for processing multiple files (e.g., `*.pdf`, `data/*.txt`)
 
 ## Installation
 
@@ -692,6 +693,7 @@ COMandA supports various file types for input:
 - Image files: `.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`
 - Web content: Direct URLs to web pages, JSON APIs, or other web resources
 - Special inputs: `screenshot` (captures current screen)
+- Wildcard patterns: `*.txt`, `data/*.pdf`, etc. to process multiple files at once
 
 When using vision-capable models (like gpt-4o), you can analyze both images and screenshots alongside text content.
 
@@ -735,6 +737,43 @@ analyze:
     output:
       file: "analysis.txt"
 ```
+
+#### Using Wildcard Patterns
+
+You can use wildcard patterns to process multiple files at once:
+
+```yaml
+# wildcard-example.yaml
+process-text-files:
+  input: 
+    - "examples/*.txt"  # Process all text files in the examples directory
+  model: "gpt-4o"
+  action: "Summarize the content of each file."
+  output: "STDOUT"
+
+process-pdf-files:
+  input:
+    - "examples/document-processing/*.pdf"  # Process all PDF files in the document-processing directory
+  model: "gpt-4o"
+  action: "Extract key information from each PDF."
+  output: "STDOUT"
+
+process-mixed-files:
+  input:
+    - "examples/file-processing/*.txt"  # Process multiple file types at once
+    - "examples/model-examples/*.yaml"
+  model: "gpt-4o"
+  action: "Analyze the structure and content of each file."
+  output: "STDOUT"
+```
+
+Wildcard patterns support standard glob syntax:
+- `*` matches any number of characters within a filename
+- `?` matches a single character
+- `[abc]` matches any character in the brackets
+- `[a-z]` matches any character in the range
+
+This feature is particularly useful for batch processing multiple files with similar content or for comparing files of the same type.
 
 For image analysis:
 

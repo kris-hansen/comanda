@@ -213,6 +213,11 @@ func (h *Handler) ProcessPath(path string) error {
 		return h.processScreenshot()
 	}
 
+	// Check if the path contains wildcard characters
+	if containsWildcard(path) {
+		return h.processWildcard(path)
+	}
+
 	fileInfo, err := os.Stat(path)
 	if err != nil {
 		return fmt.Errorf("error accessing path %s: %w", path, err)
@@ -231,6 +236,59 @@ func (h *Handler) ProcessPath(path string) error {
 	}
 
 	return h.processFile(path)
+}
+
+// containsWildcard checks if a path contains wildcard characters
+func containsWildcard(path string) bool {
+	return strings.ContainsAny(path, "*?[]")
+}
+
+// processWildcard handles paths with wildcard patterns
+func (h *Handler) processWildcard(pattern string) error {
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return fmt.Errorf("error processing wildcard pattern %s: %w", pattern, err)
+	}
+
+	if len(matches) == 0 {
+		return fmt.Errorf("no files found matching pattern: %s", pattern)
+	}
+
+	for _, match := range matches {
+		// Skip directories in wildcard matches unless explicitly requested
+		fileInfo, err := os.Stat(match)
+		if err != nil {
+			return fmt.Errorf("error accessing matched path %s: %w", match, err)
+		}
+
+		if fileInfo.IsDir() {
+			// Process directory if the pattern explicitly targets directories
+			if strings.HasSuffix(pattern, string(os.PathSeparator)) || strings.HasSuffix(pattern, "/") {
+				if err := h.processDirectory(match); err != nil {
+					return err
+				}
+			}
+			// Otherwise skip directories in wildcard matches
+			continue
+		}
+
+		// Process each matched file based on its type
+		if h.isImageFile(match) {
+			if err := h.processImage(match); err != nil {
+				return err
+			}
+		} else if h.isSourceCode(match) {
+			if err := h.processSourceCode(match); err != nil {
+				return err
+			}
+		} else {
+			if err := h.processFile(match); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 // ProcessScrape handles web scraping input

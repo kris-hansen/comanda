@@ -1,0 +1,27 @@
+# Example of using wildcard patterns for input files
+# This example demonstrates how to use wildcard patterns to process multiple files at once
+
+# Process all text files in the examples directory
+process-text-files:
+  input: 
+    - "examples/*.txt"
+  model: "gpt-4o"
+  action: "Summarize the content of each file."
+  output: "STDOUT"
+
+# Process all PDF files in the document-processing directory
+process-pdf-files:
+  input:
+    - "examples/document-processing/*.pdf"
+  model: "gpt-4o"
+  action: "Extract key information from each PDF."
+  output: "STDOUT"
+
+# Process multiple file types at once
+process-mixed-files:
+  input:
+    - "examples/file-processing/*.txt"
+    - "examples/model-examples/*.yaml"
+  model: "gpt-4o"
+  action: "Analyze the structure and content of each file."
+  output: "STDOUT"
