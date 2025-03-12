@@ -783,6 +783,34 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 	return response, nil
 }
 
+// getCurrentStepConfig returns the configuration for the current step being processed
+func (p *Processor) getCurrentStepConfig() StepConfig {
+	// If we're not processing a step yet, return an empty config with default values
+	if p.config == nil || (len(p.config.Steps) == 0 && len(p.config.ParallelSteps) == 0) {
+		return StepConfig{
+			BatchMode: "individual", // Default to individual mode for safety
+		}
+	}
+
+	// For now, just return the first step's config
+	// In a more complete implementation, this would track the current step being processed
+	if len(p.config.Steps) > 0 {
+		return p.config.Steps[0].Config
+	}
+
+	// If we only have parallel steps, return the first one
+	for _, steps := range p.config.ParallelSteps {
+		if len(steps) > 0 {
+			return steps[0].Config
+		}
+	}
+
+	// Fallback to default config
+	return StepConfig{
+		BatchMode: "individual", // Default to individual mode for safety
+	}
+}
+
 // GetProcessedInputs returns all processed input contents
 func (p *Processor) GetProcessedInputs() []*input.Input {
 	return p.handler.GetInputs()

@@ -29,6 +29,7 @@ Comanda allows you to use the best provider and model for each step and compose 
 - 📝 Markdown file support for reusable actions (prompts)
 - 🗄️ Database integration for read/write operations for inputs and outputs
 - 🔍 Wildcard pattern support for processing multiple files (e.g., `*.pdf`, `data/*.txt`)
+- 🛡️ Resilient batch processing with error handling for multiple files
 
 ## Installation
 
@@ -774,6 +775,36 @@ Wildcard patterns support standard glob syntax:
 - `[a-z]` matches any character in the range
 
 This feature is particularly useful for batch processing multiple files with similar content or for comparing files of the same type.
+
+#### Batch Processing Options
+
+When processing multiple files, you can control how they're handled using batch processing options:
+
+```yaml
+# batch-processing-example.yaml
+process-files-individually:
+  input: 
+    - "examples/*.txt"  # Process all text files in the examples directory
+  model: "gpt-4o"
+  action: "Summarize the content of each file."
+  output: "STDOUT"
+  batch_mode: "individual"  # Process each file individually (safer than "combined")
+  skip_errors: true  # Continue processing even if some files fail
+```
+
+The batch processing options include:
+
+- `batch_mode`: Controls how multiple files are processed
+  - `individual`: Process each file separately and combine results (safer, default)
+  - `combined`: Combine all files into a single prompt (original behavior)
+- `skip_errors`: Whether to continue processing if some files fail
+  - `true`: Continue processing other files if some fail
+  - `false`: Stop processing if any file fails
+
+Individual batch mode is particularly useful when:
+- Processing files that might contain encoding issues
+- Working with large numbers of files
+- Needing to identify which specific files might be problematic
 
 For image analysis:
 
