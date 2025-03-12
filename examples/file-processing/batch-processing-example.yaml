@@ -1,0 +1,22 @@
+# Batch Processing Example
+# This example demonstrates how to use the new batch processing options
+# for safely handling multiple files, especially when some files might have encoding issues
+
+# Process multiple files individually (safer approach)
+process-files-individually:
+  input: 
+    - "examples/*.txt"  # Process all text files in the examples directory
+  model: "gpt-4o"
+  action: "Summarize the content of each file."
+  output: "STDOUT"
+  batch_mode: "individual"  # Process each file individually (safer than "combined")
+  skip_errors: true  # Continue processing even if some files fail
+
+# Process multiple files combined (original approach)
+process-files-combined:
+  input:
+    - "examples/file-processing/*.txt"
+  model: "gpt-4o"
+  action: "Analyze the combined content of all files."
+  output: "STDOUT"
+  batch_mode: "combined"  # Combine all files into a single prompt (less safe)

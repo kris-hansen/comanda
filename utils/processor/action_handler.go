@@ -120,17 +120,70 @@ func (p *Processor) processActions(modelNames []string, actions []string) (strin
 			if len(fileInputs) == 1 {
 				return configuredProvider.SendPromptWithFile(modelName, action, fileInputs[0])
 			}
-			// For multiple files, combine them into a single prompt
-			var combinedPrompt string
-			for i, file := range fileInputs {
-				content, err := fileutil.SafeReadFile(file.Path)
-				if err != nil {
-					return "", fmt.Errorf("failed to read file %s: %w", file.Path, err)
+
+			// Check if we should use combined or individual processing mode
+			batchMode := p.getCurrentStepConfig().BatchMode
+			skipErrors := p.getCurrentStepConfig().SkipErrors
+
+			p.debugf("Multiple files detected. BatchMode=%s, SkipErrors=%v", batchMode, skipErrors)
+
+			// If batch mode is explicitly set to "combined", use the old approach
+			if batchMode == "combined" {
+				p.debugf("Using combined batch mode for multiple files")
+				// For multiple files, combine them into a single prompt
+				var combinedPrompt string
+				for i, file := range fileInputs {
+					content, err := fileutil.SafeReadFile(file.Path)
+					if err != nil {
+						return "", fmt.Errorf("failed to read file %s: %w", file.Path, err)
+					}
+					combinedPrompt += fmt.Sprintf("File %d (%s):\n%s\n\n", i+1, file.Path, string(content))
 				}
-				combinedPrompt += fmt.Sprintf("File %d (%s):\n%s\n\n", i+1, file.Path, string(content))
+				combinedPrompt += fmt.Sprintf("\nAction: %s", action)
+				return configuredProvider.SendPrompt(modelName, combinedPrompt)
 			}
-			combinedPrompt += fmt.Sprintf("\nAction: %s", action)
-			return configuredProvider.SendPrompt(modelName, combinedPrompt)
+
+			// Default to individual processing mode (safer)
+			p.debugf("Using individual processing mode for %d files", len(fileInputs))
+			var results []string
+			var errors []string
+
+			for i, file := range fileInputs {
+				p.debugf("Processing file %d/%d: %s", i+1, len(fileInputs), file.Path)
+
+				// Try to process each file individually
+				result, err := configuredProvider.SendPromptWithFile(modelName,
+					fmt.Sprintf("For this file: %s", action), file)
+
+				if err != nil {
+					// Log error but continue with other files if skipErrors is true
+					errMsg := fmt.Sprintf("Error processing file %s: %v", file.Path, err)
+					p.debugf(errMsg)
+					errors = append(errors, errMsg)
+
+					// If skipErrors is false and not explicitly set, we still continue but log a warning
+					if !skipErrors {
+						p.debugf("Continuing despite error because individual processing mode is designed to be resilient")
+					}
+					continue
+				}
+
+				results = append(results, fmt.Sprintf("Results for %s:\n%s", file.Path, result))
+			}
+
+			// If all files failed, return an error
+			if len(results) == 0 {
+				return "", fmt.Errorf("all files failed processing: %s", strings.Join(errors, "; "))
+			}
+
+			// If some files succeeded, return their results with warnings about failed files
+			combinedResult := strings.Join(results, "\n\n")
+			if len(errors) > 0 {
+				combinedResult += "\n\nWarning: Some files could not be processed:\n" +
+					strings.Join(errors, "\n")
+			}
+
+			return combinedResult, nil
 		}
 
 		// If we have non-file inputs, combine them and use SendPrompt

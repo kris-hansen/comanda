@@ -99,8 +99,10 @@ Examples demonstrating integration with different AI models:
 ### File Processing (`file-processing/`)
 Examples of file manipulation and processing:
 - `analyze-csv.yaml` - Processing CSV data
+- `batch-processing-example.yaml` - Safely processing multiple files with error handling
 - `consolidate-example.yaml` - Combining multiple files
 - `multi-file-example.yaml` - Working with multiple files
+- `wildcard-example.yaml` - Using wildcard patterns to process multiple files
 - Supporting files: `harvey1.txt`, `harvey2.txt`, `consolidated.txt`, `test.csv`
 
 ### Web Scraping (`web-scraping/`)

@@ -179,6 +179,10 @@ func (g *GoogleProvider) SendPromptWithFile(modelName string, prompt string, fil
 			Data:     fileData,
 		})
 	if err != nil {
+		// Check if it's an encoding error
+		if strings.Contains(err.Error(), "invalid UTF-8") {
+			return "", fmt.Errorf("encoding error in file %s: invalid UTF-8 characters detected", file.Path)
+		}
 		return "", fmt.Errorf("Google AI API error: %v", err)
 	}
 
