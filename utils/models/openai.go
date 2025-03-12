@@ -374,7 +374,68 @@ func (o *OpenAIProvider) SendPromptWithResponses(config ResponsesConfig) (string
 	}
 
 	if len(config.Tools) > 0 {
-		requestBody["tools"] = config.Tools
+		// Format tools correctly for the API
+		var formattedTools []map[string]interface{}
+
+		// Debug the tools
+		toolsBytes, _ := json.Marshal(config.Tools)
+		o.debugf("Tools: %s", string(toolsBytes))
+
+		// Process each tool
+		for _, toolMap := range config.Tools {
+			o.debugf("Processing tool: %v", toolMap)
+
+			// Get the tool type
+			toolTypeRaw, ok := toolMap["type"]
+			if !ok {
+				o.debugf("Tool has no type: %v", toolMap)
+				continue
+			}
+
+			toolType, ok := toolTypeRaw.(string)
+			if !ok {
+				o.debugf("Tool type is not a string: %v", toolTypeRaw)
+				continue
+			}
+
+			// Process based on tool type
+			if toolType == "function" {
+				functionRaw, ok := toolMap["function"]
+				if !ok {
+					o.debugf("Function tool has no function field: %v", toolMap)
+					continue
+				}
+
+				function, ok := functionRaw.(map[string]interface{})
+				if !ok {
+					o.debugf("Function field is not a map: %v", functionRaw)
+					continue
+				}
+
+				// Extract the name from the function object
+				name, ok := function["name"].(string)
+				if !ok {
+					o.debugf("Function has no name field: %v", function)
+					continue
+				}
+
+				// Add the formatted function tool with name at the top level
+				formattedTools = append(formattedTools, map[string]interface{}{
+					"type":     "function",
+					"name":     name,
+					"function": function,
+				})
+				o.debugf("Added function tool: %s", name)
+			} else {
+				// Other tool types (like web_search)
+				formattedTools = append(formattedTools, toolMap)
+				o.debugf("Added tool of type %s", toolType)
+			}
+		}
+
+		// Add the formatted tools to the request
+		requestBody["tools"] = formattedTools
+		o.debugf("Final formatted tools: %v", formattedTools)
 	}
 
 	if config.ResponseFormat != nil {
