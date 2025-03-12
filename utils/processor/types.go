@@ -2,6 +2,7 @@ package processor
 
 // StepConfig represents the configuration for a single step
 type StepConfig struct {
+	Type       string      `yaml:"type"`        // Step type (default is standard LLM step)
 	Input      interface{} `yaml:"input"`       // Can be string or map[string]interface{}
 	Model      interface{} `yaml:"model"`       // Can be string or []string
 	Action     interface{} `yaml:"action"`      // Can be string or []string
@@ -9,6 +10,16 @@ type StepConfig struct {
 	NextAction interface{} `yaml:"next-action"` // Can be string or []string
 	BatchMode  string      `yaml:"batch_mode"`  // How to process multiple files: "combined" (default) or "individual"
 	SkipErrors bool        `yaml:"skip_errors"` // Whether to continue processing if some files fail
+
+	// OpenAI Responses API specific fields
+	Instructions       string                   `yaml:"instructions"`         // System message
+	Tools              []map[string]interface{} `yaml:"tools"`                // Tools configuration
+	PreviousResponseID string                   `yaml:"previous_response_id"` // For conversation state
+	MaxOutputTokens    int                      `yaml:"max_output_tokens"`    // Token limit
+	Temperature        float64                  `yaml:"temperature"`          // Temperature setting
+	TopP               float64                  `yaml:"top_p"`                // Top-p sampling
+	Stream             bool                     `yaml:"stream"`               // Whether to stream the response
+	ResponseFormat     map[string]interface{}   `yaml:"response_format"`      // Format specification (e.g., JSON)
 }
 
 // Step represents a named step in the DSL

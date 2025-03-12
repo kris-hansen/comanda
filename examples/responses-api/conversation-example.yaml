@@ -1,0 +1,21 @@
+initial_query:
+  type: openai-responses
+  input:
+    - examples/user_question.txt
+  model: gpt-4o
+  instructions: "You are a helpful assistant."
+  action:
+    - answer this question
+  output:
+    - initial_response.json
+
+followup_query:
+  type: openai-responses
+  input:
+    - examples/followup_question.txt
+  model: gpt-4o
+  previous_response_id: "$initial_query.response_id"
+  action:
+    - answer this followup question
+  output:
+    - final_response.txt

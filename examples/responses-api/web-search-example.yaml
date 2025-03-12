@@ -1,0 +1,12 @@
+research_topic:
+  type: openai-responses
+  input:
+    - examples/research_topic.txt
+  model: gpt-4o
+  instructions: "You are a research assistant. Provide comprehensive information on the given topic."
+  tools:
+    - type: web_search
+  action:
+    - research this topic and provide a detailed summary with the latest information
+  output:
+    - research_results.md

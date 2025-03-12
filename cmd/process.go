@@ -146,7 +146,7 @@ var processCmd = &cobra.Command{
 			}
 			// Create basic server config for CLI processing
 			serverConfig := &config.ServerConfig{
-				Enabled: true,
+				Enabled: false, // Disable server mode for CLI processing
 			}
 			proc := processor.NewProcessor(&dslConfig, envConfig, serverConfig, verbose)
 

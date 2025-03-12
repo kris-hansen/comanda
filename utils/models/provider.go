@@ -18,6 +18,20 @@ type FileInput struct {
 	MimeType string
 }
 
+// ResponsesConfig represents configuration for OpenAI Responses API
+type ResponsesConfig struct {
+	Model              string
+	Input              string
+	Instructions       string
+	PreviousResponseID string
+	MaxOutputTokens    int
+	Temperature        float64
+	TopP               float64
+	Stream             bool
+	Tools              []map[string]interface{}
+	ResponseFormat     map[string]interface{}
+}
+
 // Provider represents a model provider (e.g., Anthropic, OpenAI)
 type Provider interface {
 	Name() string
@@ -26,6 +40,23 @@ type Provider interface {
 	SendPromptWithFile(modelName string, prompt string, file FileInput) (string, error)
 	Configure(apiKey string) error
 	SetVerbose(verbose bool)
+}
+
+// ResponsesStreamHandler defines callbacks for streaming responses
+type ResponsesStreamHandler interface {
+	OnResponseCreated(response map[string]interface{})
+	OnResponseInProgress(response map[string]interface{})
+	OnOutputItemAdded(index int, item map[string]interface{})
+	OnOutputTextDelta(itemID string, index int, contentIndex int, delta string)
+	OnResponseCompleted(response map[string]interface{})
+	OnError(err error)
+}
+
+// ResponsesProvider extends Provider with Responses API capabilities
+type ResponsesProvider interface {
+	Provider
+	SendPromptWithResponses(config ResponsesConfig) (string, error)
+	SendPromptWithResponsesStream(config ResponsesConfig, handler ResponsesStreamHandler) error
 }
 
 // DetectProviderFunc is the type for the provider detection function

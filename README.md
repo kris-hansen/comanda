@@ -4,9 +4,9 @@
 
 ![Demo](comanda-demo.gif)
 
-Comanda is a command-line tool that enables the composition of Large Language Model (LLM) operations using a YAML-based workflow. It simplifies the process of creating and managing agentic workflows.
+Comanda is an inference engine which processes chains of LLM workflow steps.
 
-Think of each step in a YAML file as the equivalent of a Lego block. You can chain these blocks together to create more complex structures which can help solve problems.
+Think of each step in a YAML file as the equivalent of a Lego block. You can chain these blocks together to create more complex structures which can help solve problems. Steps are composed of inputs, models, actions and outputs and there can be different step types.
 
 Create YAML workflow 'recipes' and use `comanda process` to execute the recipe file.
 
@@ -20,8 +20,7 @@ Comanda allows you to use the best provider and model for each step and compose 
 - 🖼️ Support for image analysis with vision models (screenshots and common image formats)
 - 🌐 Direct URL input support for web content analysis
 - 🕷️ Advanced web scraping capabilities with configurable options
-- 🛠️ Extensible YAML configuration for defining workflows
-- ⚡ Efficient processing of LLM chains
+- 🛠️ Support for specialty steps such as OpenAI Responses
 - 🚀 Parallel processing of independent steps for improved performance
 - 🔒 HTTP server mode: use it as a multi-LLM workflow wrapper
 - 🔐 Secure configuration encryption for protecting API keys and secrets
@@ -30,6 +29,7 @@ Comanda allows you to use the best provider and model for each step and compose 
 - 🗄️ Database integration for read/write operations for inputs and outputs
 - 🔍 Wildcard pattern support for processing multiple files (e.g., `*.pdf`, `data/*.txt`)
 - 🛡️ Resilient batch processing with error handling for multiple files
+
 
 ## Installation
 
