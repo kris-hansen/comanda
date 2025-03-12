@@ -1,0 +1,14 @@
+long_running_response:
+  type: openai-responses
+  input:
+    - examples/research_topic.txt
+  model: gpt-4o
+  instructions: "You are a helpful research assistant. Take your time to provide a comprehensive analysis."
+  max_output_tokens: 4000  # Request a large response
+  temperature: 1.0  # Higher temperature for more creative responses
+  action:
+    - provide an extremely detailed and comprehensive analysis of this research topic
+    - include multiple perspectives and approaches
+    - discuss potential applications and future directions
+  output:
+    - long_running_output.txt

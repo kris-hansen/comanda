@@ -9,6 +9,9 @@ These examples demonstrate how to use the OpenAI Responses API with comanda. The
 - **Built-in Tools**: Access file search, web search, computer use capabilities
 - **Function Calling**: Allow models to call custom code and access external systems
 - **Structured Output**: Return JSON or text responses
+- **Streaming Support**: Receive responses in real-time as they're generated
+- **Robust Error Handling**: Automatic retries for transient errors
+- **Progress Tracking**: Monitor the status of long-running requests
 
 ## Examples
 
@@ -107,6 +110,45 @@ weather_query:
     - STDOUT
 ```
 
+### Streaming Example
+
+[streaming-example.yaml](streaming-example.yaml) demonstrates real-time streaming of responses:
+
+```yaml
+streaming_response:
+  type: openai-responses
+  input:
+    - examples/research_topic.txt
+  model: gpt-4o
+  instructions: "You are a helpful research assistant."
+  stream: true  # Enable streaming mode
+  action:
+    - provide a detailed analysis of this research topic
+  output:
+    - streaming_output.txt
+```
+
+### Long-Running Example
+
+[long-running-example.yaml](long-running-example.yaml) shows how to handle long-running transactions:
+
+```yaml
+long_running_response:
+  type: openai-responses
+  input:
+    - examples/research_topic.txt
+  model: gpt-4o
+  instructions: "You are a helpful research assistant. Take your time to provide a comprehensive analysis."
+  max_output_tokens: 4000  # Request a large response
+  temperature: 1.0  # Higher temperature for more creative responses
+  action:
+    - provide an extremely detailed and comprehensive analysis of this research topic
+    - include multiple perspectives and approaches
+    - discuss potential applications and future directions
+  output:
+    - long_running_output.txt
+```
+
 ## Usage
 
 To run these examples, use the `comanda process` command:
@@ -137,6 +179,45 @@ The `openai-responses` step type supports the following parameters:
 - `max_output_tokens`: Maximum number of tokens to generate
 - `temperature`: Sampling temperature (0.0 to 2.0)
 - `top_p`: Nucleus sampling parameter (0.0 to 1.0)
-- `stream`: Whether to stream the response
+- `stream`: Whether to stream the response (true/false)
 - `tools`: Array of tools the model can use
 - `response_format`: Format specification for the response (e.g., JSON)
+
+## Implementation Details
+
+### Streaming Support
+
+When `stream: true` is specified, the response is streamed in real-time as it's generated. This provides several benefits:
+
+1. **Immediate Feedback**: See the response as it's being generated
+2. **Progress Tracking**: Monitor the status of the request with detailed progress updates
+3. **Improved User Experience**: Especially useful for long responses
+
+Streaming works by processing server-sent events from the OpenAI API, including:
+- `response.created`: Initial response creation
+- `response.in_progress`: Response generation in progress
+- `response.output_item.added`: New output item added
+- `response.output_text.delta`: Text chunks as they're generated
+- `response.completed`: Response completion
+
+### Error Handling and Retries
+
+The implementation includes robust error handling with automatic retries for transient errors:
+
+1. **Automatic Retries**: Automatically retries failed requests with exponential backoff
+2. **Error Classification**: Distinguishes between client errors (4xx) and server errors (5xx)
+3. **Timeout Handling**: Sets appropriate timeouts for both streaming and non-streaming requests
+4. **Detailed Error Reporting**: Provides detailed error information for debugging
+
+### Response ID Tracking
+
+Response IDs are automatically extracted and stored as variables, making them available for use in subsequent steps:
+
+```yaml
+followup_query:
+  # ...
+  previous_response_id: "$initial_query.response_id"
+  # ...
+```
+
+This enables seamless multi-turn conversations and stateful interactions.

@@ -6,6 +6,14 @@ import (
 	"path/filepath"
 )
 
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 // handleOutput processes the model's response according to the output configuration
 func (p *Processor) handleOutput(modelName string, response string, outputs []string, metrics *PerformanceMetrics) error {
 	p.debugf("Handling %d output(s)", len(outputs))
@@ -84,10 +92,21 @@ func (p *Processor) handleOutput(modelName string, response string, outputs []st
 
 			// Write to file
 			p.debugf("Writing response to file: %s", outputPath)
+			fmt.Printf("\n==== DEBUG: Writing to file %s ====\n", outputPath)
+			fmt.Printf("Response length: %d characters\n", len(response))
+			fmt.Printf("First 100 characters: %s\n", response[:min(100, len(response))])
+
 			if err := os.WriteFile(outputPath, []byte(response), 0644); err != nil {
-				return fmt.Errorf("failed to write response to file %s: %w", outputPath, err)
+				errMsg := fmt.Sprintf("failed to write response to file %s: %v", outputPath, err)
+				p.debugf(errMsg)
+				fmt.Printf("ERROR: %s\n", errMsg)
+				return fmt.Errorf(errMsg)
 			}
 			p.debugf("Response successfully written to file: %s", outputPath)
+
+			// Print a message to the console to inform the user
+			fmt.Printf("\nResponse written to file: %s\n", outputPath)
+			fmt.Printf("==== END DEBUG ====\n\n")
 		}
 	}
 	return nil

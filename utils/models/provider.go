@@ -42,10 +42,21 @@ type Provider interface {
 	SetVerbose(verbose bool)
 }
 
+// ResponsesStreamHandler defines callbacks for streaming responses
+type ResponsesStreamHandler interface {
+	OnResponseCreated(response map[string]interface{})
+	OnResponseInProgress(response map[string]interface{})
+	OnOutputItemAdded(index int, item map[string]interface{})
+	OnOutputTextDelta(itemID string, index int, contentIndex int, delta string)
+	OnResponseCompleted(response map[string]interface{})
+	OnError(err error)
+}
+
 // ResponsesProvider extends Provider with Responses API capabilities
 type ResponsesProvider interface {
 	Provider
 	SendPromptWithResponses(config ResponsesConfig) (string, error)
+	SendPromptWithResponsesStream(config ResponsesConfig, handler ResponsesStreamHandler) error
 }
 
 // DetectProviderFunc is the type for the provider detection function

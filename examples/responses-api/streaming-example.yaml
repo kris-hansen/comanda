@@ -1,0 +1,11 @@
+streaming_response:
+  type: openai-responses
+  input:
+    - examples/research_topic.txt
+  model: gpt-4o
+  instructions: "You are a helpful research assistant."
+  stream: true  # Enable streaming mode
+  action:
+    - provide a detailed analysis of this research topic
+  output:
+    - streaming_output.txt
