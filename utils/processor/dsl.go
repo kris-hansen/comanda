@@ -510,6 +510,11 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 	metrics := &PerformanceMetrics{}
 	startTime := time.Now()
 
+	// Check if this is an openai-responses step
+	if step.Config.Type == "openai-responses" {
+		return p.processResponsesStep(step, isParallel, parallelID)
+	}
+
 	// Create a new handler for this step to avoid conflicts in parallel processing
 	stepHandler := input.NewHandler()
 	p.handler = stepHandler

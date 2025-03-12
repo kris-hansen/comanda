@@ -1,8 +1,12 @@
 package models
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 
 	"github.com/kris-hansen/comanda/utils/fileutil"
@@ -328,4 +332,155 @@ func (o *OpenAIProvider) GetConfig() ModelConfig {
 // SetVerbose enables or disables verbose mode
 func (o *OpenAIProvider) SetVerbose(verbose bool) {
 	o.verbose = verbose
+}
+
+// SendPromptWithResponses sends a prompt using the OpenAI Responses API
+func (o *OpenAIProvider) SendPromptWithResponses(config ResponsesConfig) (string, error) {
+	o.debugf("Preparing to send prompt using Responses API with model: %s", config.Model)
+
+	if o.apiKey == "" {
+		return "", fmt.Errorf("OpenAI provider not configured: missing API key")
+	}
+
+	if !o.SupportsModel(config.Model) {
+		return "", fmt.Errorf("invalid OpenAI model: %s", config.Model)
+	}
+
+	// Build the request body
+	requestBody := map[string]interface{}{
+		"model": config.Model,
+		"input": config.Input,
+	}
+
+	// Add optional parameters if provided
+	if config.Instructions != "" {
+		requestBody["instructions"] = config.Instructions
+	}
+
+	if config.PreviousResponseID != "" {
+		requestBody["previous_response_id"] = config.PreviousResponseID
+	}
+
+	if config.MaxOutputTokens > 0 {
+		requestBody["max_output_tokens"] = config.MaxOutputTokens
+	}
+
+	if config.Temperature > 0 {
+		requestBody["temperature"] = config.Temperature
+	}
+
+	if config.TopP > 0 {
+		requestBody["top_p"] = config.TopP
+	}
+
+	if len(config.Tools) > 0 {
+		requestBody["tools"] = config.Tools
+	}
+
+	if config.ResponseFormat != nil {
+		requestBody["text"] = config.ResponseFormat
+	}
+
+	// Convert request body to JSON
+	jsonData, err := json.Marshal(requestBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request body: %w", err)
+	}
+
+	// Create HTTP request
+	req, err := http.NewRequest("POST", "https://api.openai.com/v1/responses", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", fmt.Errorf("failed to create HTTP request: %w", err)
+	}
+
+	// Set headers
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", o.apiKey))
+
+	// Send request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to send HTTP request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// Check for error status code
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("OpenAI API error: %s (status code: %d)", string(body), resp.StatusCode)
+	}
+
+	// Parse response
+	var responseData map[string]interface{}
+	if err := json.Unmarshal(body, &responseData); err != nil {
+		return "", fmt.Errorf("failed to parse response body: %w", err)
+	}
+
+	// Extract output text
+	output, err := o.extractOutputText(responseData)
+	if err != nil {
+		return "", fmt.Errorf("failed to extract output text: %w", err)
+	}
+
+	o.debugf("API call completed, response length: %d characters", len(output))
+
+	return output, nil
+}
+
+// extractOutputText extracts the output text from the Responses API response
+func (o *OpenAIProvider) extractOutputText(responseData map[string]interface{}) (string, error) {
+	// Check if output exists
+	output, ok := responseData["output"]
+	if !ok {
+		return "", fmt.Errorf("response does not contain output field")
+	}
+
+	// Output is an array of content items
+	outputArray, ok := output.([]interface{})
+	if !ok {
+		return "", fmt.Errorf("output field is not an array")
+	}
+
+	// Process each output item
+	var result strings.Builder
+
+	for _, item := range outputArray {
+		itemMap, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		// Check if this is a message
+		if itemType, ok := itemMap["type"].(string); ok && itemType == "message" {
+			// Get content array
+			content, ok := itemMap["content"].([]interface{})
+			if !ok {
+				continue
+			}
+
+			// Process each content item
+			for _, contentItem := range content {
+				contentMap, ok := contentItem.(map[string]interface{})
+				if !ok {
+					continue
+				}
+
+				// Check if this is output_text
+				if contentType, ok := contentMap["type"].(string); ok && contentType == "output_text" {
+					if text, ok := contentMap["text"].(string); ok {
+						result.WriteString(text)
+						result.WriteString("\n")
+					}
+				}
+			}
+		}
+	}
+
+	return result.String(), nil
 }

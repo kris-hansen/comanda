@@ -1,0 +1,24 @@
+weather_query:
+  type: openai-responses
+  input:
+    - examples/weather_query.txt
+  model: gpt-4o
+  tools:
+    - type: function
+      function:
+        name: get_weather
+        description: "Get the current weather for a location"
+        parameters:
+          type: object
+          properties:
+            location:
+              type: string
+              description: "The city and state, e.g. San Francisco, CA"
+            unit:
+              type: string
+              enum: ["celsius", "fahrenheit"]
+              description: "The unit of temperature"
+  action:
+    - answer the user's question about the weather
+  output:
+    - STDOUT

@@ -1,0 +1,10 @@
+analyze_text:
+  type: openai-responses
+  input:
+    - examples/example_filename.txt
+  model: gpt-4o
+  instructions: "You are a helpful assistant specialized in business analysis."
+  action:
+    - analyze these company names and identify which are in the HVAC industry
+  output:
+    - STDOUT
