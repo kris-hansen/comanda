@@ -135,11 +135,6 @@ func (p *Processor) extractOutputTextFromResponse(responseData map[string]interf
 		return "", fmt.Errorf("failed to marshal response: %w", err)
 	}
 
-	// Debug the full response
-	fmt.Println("\n==== DEBUG: Full Response Structure ====")
-	fmt.Println(string(responseBytes))
-	fmt.Println("==== END FULL RESPONSE ====\n")
-
 	// Parse the response
 	var parsedResponse map[string]interface{}
 	if err := json.Unmarshal(responseBytes, &parsedResponse); err != nil {
@@ -184,14 +179,6 @@ func (p *Processor) extractOutputTextFromResponse(responseData map[string]interf
 		return string(outputBytes), nil
 	}
 
-	// Debug the output array
-	fmt.Println("\n==== DEBUG: Output Array Structure ====")
-	for i, item := range outputArray {
-		itemBytes, _ := json.Marshal(item)
-		fmt.Printf("Item %d: %s\n", i, string(itemBytes))
-	}
-	fmt.Println("==== END DEBUG ====\n")
-
 	// Process each output item
 	var result strings.Builder
 	var annotations []map[string]interface{}
@@ -205,7 +192,6 @@ func (p *Processor) extractOutputTextFromResponse(responseData map[string]interf
 
 		// Skip web_search_call items
 		if itemType, ok := itemMap["type"].(string); ok && itemType == "web_search_call" {
-			fmt.Println("\nDEBUG: Skipping web_search_call item")
 			continue
 		}
 
@@ -229,11 +215,8 @@ func (p *Processor) extractOutputTextFromResponse(responseData map[string]interf
 					if text, ok := contentMap["text"].(string); ok {
 						result.WriteString(text)
 						result.WriteString("\n")
-						fmt.Printf("\nDEBUG: Extracted text from output_text: %d characters\n", len(text))
-
 						// Collect annotations if present
 						if annotationsArray, ok := contentMap["annotations"].([]interface{}); ok && len(annotationsArray) > 0 {
-							fmt.Printf("\nDEBUG: Found %d annotations\n", len(annotationsArray))
 							for _, anno := range annotationsArray {
 								if annoMap, ok := anno.(map[string]interface{}); ok {
 									annotations = append(annotations, annoMap)
@@ -248,28 +231,23 @@ func (p *Processor) extractOutputTextFromResponse(responseData map[string]interf
 			if text, ok := itemMap["text"].(string); ok {
 				result.WriteString(text)
 				result.WriteString("\n")
-				fmt.Printf("\nDEBUG: Extracted text from item: %d characters\n", len(text))
 			} else if content, ok := itemMap["content"].(string); ok {
 				result.WriteString(content)
 				result.WriteString("\n")
-				fmt.Printf("\nDEBUG: Extracted content from item: %d characters\n", len(content))
 			}
 		}
 	}
 
 	// If we didn't extract any text, try a more aggressive approach
 	if result.Len() == 0 {
-		fmt.Println("\nDEBUG: No text extracted using standard approach, trying recursive extraction")
 		extractedText := p.recursiveExtractText(parsedResponse)
 		if extractedText != "" {
 			result.WriteString(extractedText)
-			fmt.Printf("\nDEBUG: Extracted text using recursive approach: %d characters\n", len(extractedText))
 		}
 	}
 
 	// If we still didn't extract any text, return the entire response as a string
 	if result.Len() == 0 {
-		fmt.Println("\nDEBUG: No text extracted, returning entire response")
 		return string(responseBytes), nil
 	}
 
@@ -286,7 +264,6 @@ func (p *Processor) extractOutputTextFromResponse(responseData map[string]interf
 		}
 	}
 
-	fmt.Printf("\nDEBUG: Total extracted text: %d characters\n", result.Len())
 	return result.String(), nil
 }
 
@@ -543,52 +520,38 @@ func (p *Processor) processResponsesStep(step Step, isParallel bool, parallelID 
 	p.debugf("Processing output for responses step '%s': model=%s outputs=%v",
 		step.Name, modelName, outputs)
 
-	// Print debug info to console
-	fmt.Println("\n\n==== DEBUG OUTPUT ====")
-	fmt.Println("About to handle output for responses step:", step.Name)
-	fmt.Println("Output destinations:", outputs)
-	fmt.Println("Response length:", len(response), "characters")
-
 	// Extract the text from the response using our improved extraction function
 	var responseData map[string]interface{}
 	if err := json.Unmarshal([]byte(response), &responseData); err != nil {
-		fmt.Printf("Error parsing response: %v\n", err)
 		// If we can't parse the response, use it as-is
 		if err := p.handleOutput(modelName, response, outputs, metrics); err != nil {
 			errMsg := fmt.Sprintf("Output processing failed for responses step '%s': %v (model=%s outputs=%v)",
 				step.Name, err, modelName, outputs)
 			p.debugf("Output processing error: %s", errMsg)
-			fmt.Printf("\nERROR: %s\n", errMsg)
 			return "", fmt.Errorf("output handling error: %w", err)
 		}
 	} else {
 		// Extract text using our improved function
 		extractedText, err := p.extractOutputTextFromResponse(responseData)
 		if err != nil {
-			fmt.Printf("Error extracting text: %v\n", err)
 			// If extraction fails, use the original response
 			if err := p.handleOutput(modelName, response, outputs, metrics); err != nil {
 				errMsg := fmt.Sprintf("Output processing failed for responses step '%s': %v (model=%s outputs=%v)",
 					step.Name, err, modelName, outputs)
 				p.debugf("Output processing error: %s", errMsg)
-				fmt.Printf("\nERROR: %s\n", errMsg)
 				return "", fmt.Errorf("output handling error: %w", err)
 			}
 		} else {
 			// Use the extracted text
-			fmt.Printf("Successfully extracted text: %d characters\n", len(extractedText))
 			if err := p.handleOutput(modelName, extractedText, outputs, metrics); err != nil {
 				errMsg := fmt.Sprintf("Output processing failed for responses step '%s': %v (model=%s outputs=%v)",
 					step.Name, err, modelName, outputs)
 				p.debugf("Output processing error: %s", errMsg)
-				fmt.Printf("\nERROR: %s\n", errMsg)
 				return "", fmt.Errorf("output handling error: %w", err)
 			}
 		}
 	}
-	fmt.Println("==== END DEBUG OUTPUT ====\n\n")
 	p.debugf("Successfully processed output for responses step: %s", step.Name)
-	fmt.Printf("\nDEBUG: Successfully processed output for responses step: %s\n", step.Name)
 
 	return response, nil
 }
