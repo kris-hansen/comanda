@@ -84,6 +84,85 @@ components:
         - success
         - providers
 
+    # --- Model Management Schemas ---
+    ConfiguredModel:
+      type: object
+      description: Represents a model as configured within Comanda
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          description: Model type (e.g., local, external)
+        modes:
+          type: array
+          items:
+            type: string
+            enum: [text, vision, multi, file]
+      required: [name, type, modes]
+
+    AvailableModel:
+      type: object
+      description: Represents a model available from the provider's service
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          description: Optional description if available from provider
+      required: [name]
+
+    AvailableModelList:
+      type: object
+      description: Response for listing available models from a provider
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        models:
+          type: array
+          items:
+            $ref: '#/components/schemas/AvailableModel'
+      required: [success, models]
+
+    ConfiguredModelList:
+      type: object
+      description: Response for listing models configured for a provider
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        models:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConfiguredModel'
+      required: [success, models]
+
+    AddModelRequest:
+      type: object
+      description: Request body for adding a model to a provider's configuration
+      properties:
+        name:
+          type: string
+        modes:
+          type: array
+          items:
+            type: string
+            enum: [text, vision, multi, file]
+      required: [name, modes]
+
+    UpdateModelRequest:
+      type: object
+      description: Request body for updating a configured model's modes
+      properties:
+        modes:
+          type: array
+          items:
+            type: string
+            enum: [text, vision, multi, file]
+      required: [modes]
+    # --- End Model Management Schemas ---
+
     EncryptionRequest:
       type: object
       properties:
@@ -362,6 +441,186 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+
+  # --- Model Management Paths ---
+  /providers/{provider_name}/models:
+    parameters:
+      - name: provider_name
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Name of the provider (e.g., openai, ollama)
+    get:
+      summary: List Configured Models
+      description: Retrieves the list of models currently configured for the specified provider within Comanda.
+      responses:
+        '200':
+          description: List of configured models retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfiguredModelList'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Provider not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      summary: Add Model to Provider
+      description: Adds a new model to the specified provider's configuration within Comanda.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddModelRequest'
+            example:
+              name: gpt-4-turbo
+              modes: [text, vision]
+      responses:
+        '200':
+          description: Model added successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '400':
+          description: Bad request (e.g., invalid modes, model already exists)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Provider not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /providers/{provider_name}/available-models:
+    parameters:
+      - name: provider_name
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Name of the provider (e.g., openai, ollama)
+    get:
+      summary: List Available Models
+      description: Retrieves the list of models available from the provider's service (e.g., via API or known lists). Requires API key for some providers if not already configured.
+      responses:
+        '200':
+          description: List of available models retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvailableModelList'
+        '400':
+          description: Bad request (e.g., provider requires API key but not configured)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error (e.g., failed to fetch models from provider API)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /providers/{provider_name}/models/{model_name}:
+    parameters:
+      - name: provider_name
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Name of the provider.
+      - name: model_name
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Name of the model.
+    put:
+      summary: Update Model Modes
+      description: Updates the supported modes for a specific model configured within a provider.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateModelRequest'
+            example:
+              modes: [text]
+      responses:
+        '200':
+          description: Model modes updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '400':
+          description: Bad request (e.g., invalid modes)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Provider or model not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: Remove Model from Provider
+      description: Removes a specific model from the specified provider's configuration within Comanda.
+      responses:
+        '200':
+          description: Model removed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Provider or model not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  # --- End Model Management Paths ---
 
   /env/encrypt:
     post:

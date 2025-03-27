@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	cfg "github.com/kris-hansen/comanda/utils/config" // Added alias cfg
 )
 
 // debugLog provides local logging to avoid circular imports
@@ -225,6 +227,58 @@ func (sw *sseWriter) SendData(data string) (n int, err error) {
 	sw.f.Flush()
 	debugLog("[SSE] Successfully sent data event: bytes=%d", n)
 	return
+}
+
+// --- Model Management API Types ---
+
+// ConfiguredModel represents a model as configured within Comanda
+type ConfiguredModel struct {
+	Name  string          `json:"name"`
+	Type  string          `json:"type"`  // e.g., "local", "external"
+	Modes []cfg.ModelMode `json:"modes"` // Use alias cfg
+}
+
+// AvailableModel represents a model available from the provider's service
+type AvailableModel struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"` // Optional description if available
+}
+
+// AvailableModelListResponse is the response for listing available models from a provider
+type AvailableModelListResponse struct {
+	Success bool             `json:"success"`
+	Models  []AvailableModel `json:"models"`
+	Error   string           `json:"error,omitempty"`
+}
+
+// ConfiguredModelListResponse is the response for listing models configured for a provider
+type ConfiguredModelListResponse struct {
+	Success bool              `json:"success"`
+	Models  []ConfiguredModel `json:"models"`
+	Error   string            `json:"error,omitempty"`
+}
+
+// AddModelRequest is the request body for adding a model to a provider's configuration
+type AddModelRequest struct {
+	Name  string          `json:"name"`
+	Modes []cfg.ModelMode `json:"modes"` // Use alias cfg
+}
+
+// UpdateModelRequest is the request body for updating a configured model's modes
+type UpdateModelRequest struct {
+	Modes []cfg.ModelMode `json:"modes"` // Use alias cfg
+}
+
+// SuccessResponse represents a generic successful API response
+type SuccessResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+}
+
+// ErrorResponse represents a generic error API response
+type ErrorResponse struct {
+	Success bool   `json:"success"` // Should always be false
+	Error   string `json:"error"`
 }
 
 func (sw *sseWriter) SendProgress(data interface{}) (n int, err error) {
