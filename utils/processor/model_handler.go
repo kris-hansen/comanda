@@ -2,6 +2,7 @@ package processor
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/kris-hansen/comanda/utils/config"
 	"github.com/kris-hansen/comanda/utils/models"
@@ -47,6 +48,13 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 		p.debugf("Getting model configuration for %s from provider %s", modelName, providerName)
 		modelConfig, err := p.envConfig.GetModelConfig(providerName, modelName)
 		if err != nil {
+			// Check if the error is specifically "model not found" after provider support was confirmed
+			if strings.Contains(err.Error(), fmt.Sprintf("model %s not found for provider %s", modelName, providerName)) {
+				errMsg := fmt.Sprintf("model %s is supported by provider %s but is not enabled in your configuration. Use 'comanda configure' to add it.", modelName, providerName)
+				p.debugf("Configuration error: %s", errMsg)
+				return fmt.Errorf(errMsg)
+			}
+			// Otherwise, return the original configuration error
 			errMsg := fmt.Sprintf("failed to get model configuration for %s: %v", modelName, err)
 			p.debugf("Configuration error: %s", errMsg)
 			return fmt.Errorf(errMsg)
