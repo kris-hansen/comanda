@@ -78,6 +78,145 @@
               "path": ["providers", "openai"]
             }
           }
+        },
+        {
+          "name": "List Configured Models",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/providers/:provider_name/models",
+              "host": ["{{base_url}}"],
+              "path": ["providers", ":provider_name", "models"],
+              "variable": [
+                {
+                  "key": "provider_name",
+                  "value": "openai"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Available Models",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/providers/:provider_name/available-models",
+              "host": ["{{base_url}}"],
+              "path": ["providers", ":provider_name", "available-models"],
+              "variable": [
+                {
+                  "key": "provider_name",
+                  "value": "openai"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Add Model to Provider",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"gpt-4-turbo\",\n  \"modes\": [\"text\", \"vision\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/providers/:provider_name/models",
+              "host": ["{{base_url}}"],
+              "path": ["providers", ":provider_name", "models"],
+              "variable": [
+                {
+                  "key": "provider_name",
+                  "value": "openai"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Model Modes",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"modes\": [\"text\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/providers/:provider_name/models/:model_name",
+              "host": ["{{base_url}}"],
+              "path": ["providers", ":provider_name", "models", ":model_name"],
+              "variable": [
+                {
+                  "key": "provider_name",
+                  "value": "openai"
+                },
+                {
+                  "key": "model_name",
+                  "value": "gpt-4-turbo"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Remove Model from Provider",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/providers/:provider_name/models/:model_name",
+              "host": ["{{base_url}}"],
+              "path": ["providers", ":provider_name", "models", ":model_name"],
+              "variable": [
+                {
+                  "key": "provider_name",
+                  "value": "openai"
+                },
+                {
+                  "key": "model_name",
+                  "value": "gpt-4-turbo"
+                }
+              ]
+            }
+          }
         }
       ]
     },

@@ -62,7 +62,7 @@ func TestHandleDeleteProvider(t *testing.T) {
 			name:           "Empty provider name",
 			providerName:   "",
 			expectedStatus: http.StatusBadRequest,
-			expectedError:  "Provider name is required",
+			expectedError:  "Provider name is required in the path", // Updated expected error
 		},
 	}
 
@@ -81,23 +81,31 @@ func TestHandleDeleteProvider(t *testing.T) {
 				t.Errorf("Expected status code %d, got %d", tt.expectedStatus, rec.Code)
 			}
 
-			// Parse response
-			var response map[string]string
-			if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
-				t.Fatal(err)
-			}
-
-			if tt.expectedError != "" {
-				if response["error"] != tt.expectedError {
-					t.Errorf("Expected error '%s', got '%s'", tt.expectedError, response["error"])
+			// Parse response based on expected status
+			if tt.expectedStatus >= 400 {
+				var response ErrorResponse
+				if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+					t.Fatalf("Failed to decode error response: %v. Body: %s", err, rec.Body.String())
+				}
+				if response.Error != tt.expectedError {
+					t.Errorf("Expected error '%s', got '%s'", tt.expectedError, response.Error)
+				}
+				if response.Success {
+					t.Error("Expected success to be false in error response")
 				}
 			} else {
+				var response SuccessResponse
+				if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+					t.Fatalf("Failed to decode success response: %v. Body: %s", err, rec.Body.String())
+				}
 				// For successful deletion
 				expectedMessage := "Provider " + tt.providerName + " removed successfully"
-				if response["message"] != expectedMessage {
-					t.Errorf("Expected message '%s', got '%s'", expectedMessage, response["message"])
+				if response.Message != expectedMessage {
+					t.Errorf("Expected message '%s', got '%s'", expectedMessage, response.Message)
 				}
-
+				if !response.Success {
+					t.Error("Expected success to be true in success response") // This check was correct
+				}
 				// Verify provider was actually removed
 				if tt.providerName != "" && testConfig.Providers[tt.providerName] != nil {
 					t.Error("Provider was not removed from configuration")
@@ -190,14 +198,14 @@ func TestProviderRouteHandling(t *testing.T) {
 			method:         "GET",
 			path:           "/providers/openai",
 			expectedStatus: http.StatusMethodNotAllowed,
-			expectedError:  "Method not allowed",
+			expectedError:  "Method not allowed for this path", // Updated expected error
 		},
 		{
 			name:           "Empty provider name",
 			method:         "DELETE",
 			path:           "/providers/",
 			expectedStatus: http.StatusBadRequest,
-			expectedError:  "Provider name is required",
+			expectedError:  "Provider name is required in the path", // Updated expected error
 		},
 	}
 
@@ -214,17 +222,19 @@ func TestProviderRouteHandling(t *testing.T) {
 			// Check status code
 			if rec.Code != tt.expectedStatus {
 				t.Errorf("Expected status code %d, got %d", tt.expectedStatus, rec.Code)
-			}
-
-			if tt.expectedError != "" {
-				var response map[string]string
+			} else if tt.expectedStatus >= 400 { // Check error responses for other tests
+				var response ErrorResponse
 				if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
-					t.Fatal(err)
+					t.Fatalf("Failed to decode error response: %v. Body: %s", err, rec.Body.String())
 				}
-				if response["error"] != tt.expectedError {
-					t.Errorf("Expected error '%s', got '%s'", tt.expectedError, response["error"])
+				if response.Error != tt.expectedError {
+					t.Errorf("Expected error '%s', got '%s'", tt.expectedError, response.Error)
+				}
+				if response.Success {
+					t.Error("Expected success to be false in error response")
 				}
 			}
+			// No need to check success response body for these tests yet
 		})
 	}
 }

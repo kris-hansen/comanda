@@ -279,36 +279,66 @@ func (s *Server) routes() {
 		}
 	}))
 
-	// Provider operations with path parameter
+	// Provider and Model operations with path parameters
 	s.mux.HandleFunc("/providers/", s.combinedMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		path := strings.TrimPrefix(r.URL.Path, "/providers/")
+		parts := strings.Split(path, "/")
 
-		// Extract provider name from path
-		providerName := strings.TrimPrefix(r.URL.Path, "/providers/")
+		// Expected formats:
+		// {provider_name} -> DELETE
+		// {provider_name}/models -> GET, POST
+		// {provider_name}/available-models -> GET
+		// {provider_name}/models/{model_name} -> PUT, DELETE
 
-		// Handle empty provider name
-		if providerName == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]string{
-				"error": "Provider name is required",
-			})
+		if len(parts) == 0 || parts[0] == "" {
+			sendJSONError(w, http.StatusBadRequest, "Provider name is required in the path")
 			return
 		}
+		providerName := parts[0]
 
-		// Handle different HTTP methods
-		switch r.Method {
-		case http.MethodDelete:
-			s.handleDeleteProvider(w, r, providerName)
-		case http.MethodGet, http.MethodPut, http.MethodPatch, http.MethodPost:
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			json.NewEncoder(w).Encode(map[string]string{
-				"error": "Method not allowed",
-			})
+		switch len(parts) {
+		case 1: // Path: /providers/{provider_name}
+			if r.Method == http.MethodDelete {
+				s.handleDeleteProvider(w, r, providerName)
+			} else {
+				sendJSONError(w, http.StatusMethodNotAllowed, "Method not allowed for this path")
+			}
+		case 2: // Path: /providers/{provider_name}/models or /providers/{provider_name}/available-models
+			if parts[1] == "models" {
+				switch r.Method {
+				case http.MethodGet:
+					s.handleGetConfiguredModels(w, r, providerName)
+				case http.MethodPost:
+					s.handleAddModel(w, r, providerName)
+				default:
+					sendJSONError(w, http.StatusMethodNotAllowed, "Method not allowed for /models path")
+				}
+			} else if parts[1] == "available-models" {
+				if r.Method == http.MethodGet {
+					s.handleGetAvailableModels(w, r, providerName)
+				} else {
+					sendJSONError(w, http.StatusMethodNotAllowed, "Method not allowed for /available-models path")
+				}
+			} else {
+				sendJSONError(w, http.StatusNotFound, "Invalid path")
+			}
+		case 3: // Path: /providers/{provider_name}/models/{model_name}
+			if parts[1] == "models" && parts[2] != "" {
+				modelName := parts[2]
+				switch r.Method {
+				case http.MethodPut:
+					s.handleUpdateModel(w, r, providerName, modelName)
+				case http.MethodDelete:
+					s.handleDeleteModel(w, r, providerName, modelName)
+				default:
+					sendJSONError(w, http.StatusMethodNotAllowed, "Method not allowed for specific model path")
+				}
+			} else {
+				sendJSONError(w, http.StatusNotFound, "Invalid path")
+			}
 		default:
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			json.NewEncoder(w).Encode(map[string]string{
-				"error": "Method not allowed",
-			})
+			sendJSONError(w, http.StatusNotFound, "Invalid path")
 		}
 	}))
 

@@ -43,18 +43,25 @@ func (g *GoogleProvider) debugf(format string, args ...interface{}) {
 // ValidateModel checks if the specific Google model variant is valid
 func (g *GoogleProvider) ValidateModel(modelName string) bool {
 	g.debugf("Validating model: %s", modelName)
+	// List based on user input and existing models
 	validModels := []string{
-		"gemini-1.5-flash",
-		"gemini-1.5-flash-8b",
-		"gemini-1.5-pro",
+		// From user input
+		"gemini-2.5-pro-exp-03-25",
+		"gemini-2.0-flash",
+		"gemini-2.0-flash-lite",
+		"gemini-1.5-flash",    // Also existing
+		"gemini-1.5-flash-8b", // Also existing
+		"gemini-1.5-pro",      // Also existing
+		"gemini-embedding-exp",
+
+		// Existing models not explicitly in user list but kept for compatibility/completeness
 		"gemini-1.0-pro",
-		"gemini-2.0-flash-exp",
-		"gemini-2.0-flash-001",
-		"gemini-2.0-pro-exp-02-05",
-		"gemini-2.0-flash-lite-preview-02-05",
-		"gemini-2.0-flash-thinking-exp-01-21",
-		"text-embedding-004",
-		"aqa",
+		"gemini-2.0-flash-exp",                // Experimental version
+		"gemini-2.0-flash-001",                // Specific version
+		"gemini-2.0-pro-exp-02-05",            // Experimental version
+		"gemini-2.0-flash-lite-preview-02-05", // Preview version
+		"gemini-2.0-flash-thinking-exp-01-21", // Experimental version
+		"aqa",                                 // Attributed Question Answering model
 	}
 
 	modelName = strings.ToLower(modelName)
