@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/kris-hansen/comanda/utils/fileutil"
 )
@@ -114,7 +115,8 @@ func (o *OllamaProvider) SendPrompt(modelName string, prompt string) (string, er
 	}
 
 	o.debugf("Sending request to Ollama API: %s", string(jsonData))
-	resp, err := http.Post("http://localhost:11434/api/generate", "application/json", bytes.NewBuffer(jsonData))
+	client := &http.Client{Timeout: 30 * time.Second} // Add a 30-second timeout
+	resp, err := client.Post("http://localhost:11434/api/generate", "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		o.debugf("Error calling Ollama API: %v", err)
 		return "", fmt.Errorf("error calling Ollama API: %v (is Ollama running?)", err)
@@ -178,7 +180,8 @@ func (o *OllamaProvider) SendPromptWithFile(modelName string, prompt string, fil
 		return "", fmt.Errorf("error marshaling request: %v", err)
 	}
 
-	resp, err := http.Post("http://localhost:11434/api/generate", "application/json", bytes.NewBuffer(jsonData))
+	client := &http.Client{Timeout: 30 * time.Second} // Add a 30-second timeout
+	resp, err := client.Post("http://localhost:11434/api/generate", "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return "", fmt.Errorf("error calling Ollama API: %v", err)
 	}
