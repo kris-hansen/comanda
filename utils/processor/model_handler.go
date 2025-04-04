@@ -1,12 +1,74 @@
 package processor
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
+	"time"
 
 	"github.com/kris-hansen/comanda/utils/config"
 	"github.com/kris-hansen/comanda/utils/models"
 )
+
+// --- Ollama specific types (copied from ollama.go for local check) ---
+
+// OllamaTagsResponse represents the top-level structure of Ollama's /api/tags response
+type OllamaTagsResponse struct {
+	Models []OllamaModelTag `json:"models"`
+}
+
+// OllamaModelTag represents the details of a single model tag from /api/tags
+type OllamaModelTag struct {
+	Name string `json:"name"`
+}
+
+// --- Helper function to check local Ollama models ---
+
+// checkOllamaModelExists queries the local Ollama instance to see if a model tag exists.
+func checkOllamaModelExists(modelName string) (bool, error) {
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get("http://localhost:11434/api/tags")
+	if err != nil {
+		if strings.Contains(err.Error(), "connection refused") {
+			return false, fmt.Errorf("failed to connect to Ollama at http://localhost:11434 to verify model '%s'. Is Ollama running?", modelName)
+		}
+		return false, fmt.Errorf("error calling Ollama /api/tags to verify model '%s': %v", modelName, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return false, fmt.Errorf("Ollama /api/tags returned non-OK status %d while verifying model '%s': %s", resp.StatusCode, modelName, string(bodyBytes))
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return false, fmt.Errorf("error reading Ollama /api/tags response body while verifying model '%s': %v", modelName, err)
+	}
+
+	var tagsResponse OllamaTagsResponse
+	if err := json.Unmarshal(bodyBytes, &tagsResponse); err != nil {
+		return false, fmt.Errorf("error unmarshaling Ollama /api/tags response while verifying model '%s': %v. Body: %s", modelName, err, string(bodyBytes))
+	}
+
+	modelNameLower := strings.ToLower(modelName)
+	for _, model := range tagsResponse.Models {
+		if strings.ToLower(model.Name) == modelNameLower {
+			return true, nil // Model found
+		}
+	}
+
+	// Model not found in the list
+	// Construct a helpful error message suggesting how to pull the model
+	availableModels := make([]string, len(tagsResponse.Models))
+	for i, m := range tagsResponse.Models {
+		availableModels[i] = m.Name
+	}
+	errMsg := fmt.Sprintf("model tag '%s' not found in local Ollama instance. Available models: %v. Try running 'ollama pull %s'", modelName, availableModels, modelName)
+	return false, fmt.Errorf(errMsg)
+}
 
 // validateModel checks if the specified model is supported and has the required capabilities
 func (p *Processor) validateModel(modelNames []string, inputs []string) error {
@@ -43,6 +105,26 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 
 		// Get provider name
 		providerName := provider.Name()
+
+		// --- Add Ollama specific local check ---
+		if providerName == "ollama" {
+			p.debugf("Performing local check for Ollama model tag: %s", modelName)
+			exists, err := checkOllamaModelExists(modelName)
+			if err != nil {
+				// Error occurred during check (e.g., connection refused, API error)
+				p.debugf("Ollama local check failed for %s: %v", modelName, err)
+				return fmt.Errorf("Ollama check failed: %w", err) // Wrap the specific error
+			}
+			if !exists {
+				// Model tag specifically not found in the list from /api/tags
+				// The error from checkOllamaModelExists already contains the helpful message
+				p.debugf("Ollama model tag %s not found locally.", modelName)
+				// The error from checkOllamaModelExists includes the suggestion to pull
+				return fmt.Errorf("model tag '%s' not found locally via Ollama API", modelName)
+			}
+			p.debugf("Ollama model tag %s confirmed to exist locally.", modelName)
+		}
+		// --- End Ollama specific check ---
 
 		// Get model configuration from environment
 		p.debugf("Getting model configuration for %s from provider %s", modelName, providerName)
@@ -98,9 +180,9 @@ func (p *Processor) configureProviders() error {
 	for providerName, provider := range p.providers {
 		p.debugf("Configuring provider %s", providerName)
 
-		// Handle Ollama provider separately since it doesn't need an API key
+		// Handle Ollama provider separately since it doesn't need an API key, but expects "LOCAL"
 		if providerName == "ollama" {
-			if err := provider.Configure(""); err != nil {
+			if err := provider.Configure("LOCAL"); err != nil { // Pass "LOCAL" as expected by OllamaProvider.Configure
 				return fmt.Errorf("failed to configure provider %s: %w", providerName, err)
 			}
 			p.debugf("Successfully configured local provider %s", providerName)

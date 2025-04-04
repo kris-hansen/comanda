@@ -47,49 +47,29 @@ func (o *OllamaProvider) debugf(format string, args ...interface{}) {
 	}
 }
 
-// SupportsModel checks if the given model name is supported by Ollama
+// SupportsModel for OllamaProvider. Since Ollama is the fallback provider in DetectProvider,
+// if this function is reached, we assume the model *should* be handled by Ollama.
+// The actual check for whether the model tag exists locally will happen later during validation.
 func (o *OllamaProvider) SupportsModel(modelName string) bool {
-	o.debugf("Checking if model is supported: %s", modelName)
-
-	// Ollama supports specific model families
-	modelName = strings.ToLower(modelName)
-	o.debugf("Checking model name: %s", modelName)
-
-	// List of known Ollama model prefixes
-	ollamaPrefixes := []string{
-		"llama2",
-		"codellama",
-		"mistral",
-		"neural-chat",
-		"dolphin",
-		"orca",
-		"vicuna",
-		"nous",
-		"wizard",
-		"stable",
-		"phi",
-		"openchat",
-		"solar",
-		"yi",
-		"qwen",
-		"mixtral",
-		"deepseek-r1",
-	}
-
-	// Check if model starts with any known Ollama prefix
-	for _, prefix := range ollamaPrefixes {
-		if strings.HasPrefix(modelName, prefix) {
-			o.debugf("Model %s is supported by Ollama (matches prefix: %s)", modelName, prefix)
-			return true
+	o.debugf("Ollama provider assuming responsibility for model: %s (as fallback)", modelName)
+	// Basic sanity check: don't claim models that clearly belong to others if DetectProvider logic changes
+	knownPrefixes := []string{"claude-", "gpt-", "gemini-", "grok-", "deepseek-"}
+	modelNameLower := strings.ToLower(modelName)
+	for _, prefix := range knownPrefixes {
+		if strings.HasPrefix(modelNameLower, prefix) {
+			o.debugf("Model %s has a known prefix for another provider (%s), Ollama will not claim it.", modelName, prefix)
+			return false // Should not happen with current DetectProvider order, but good safeguard
 		}
 	}
-
-	o.debugf("Model %s is not supported by Ollama (no matching prefix)", modelName)
-	return false
+	return true // Assume it's an Ollama model if no other provider claimed it
 }
 
 // Configure sets up the provider. Since Ollama is a local service that doesn't use API keys,
 // we accept "LOCAL" as a special API key value to indicate it's properly configured.
+// Note: The original implementation checked for "LOCAL". This seems unnecessary now
+// as configuration might not be needed if we dynamically check models.
+// However, keeping the Configure method might be required by the Provider interface.
+// Let's keep the check for now, but it might be removable later if configure isn't called.
 func (o *OllamaProvider) Configure(apiKey string) error {
 	o.debugf("Configuring Ollama provider")
 	if apiKey != "LOCAL" {
