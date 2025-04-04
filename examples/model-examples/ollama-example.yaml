@@ -1,5 +1,5 @@
 step:
   input: examples/example_filename.txt
-  model: llama2
+  model: gemma3:latest
   action: look through these company names and identify the top five which seem most likely in the HVAC business
   output: STDOUT
