@@ -12,10 +12,8 @@ step_two:
   input:
     - STDIN
   model:
-    - o1-mini
+    - o3-mini
   action:
     - for each of these company names provide a snappy tagline that would make them stand out
   output:
     - STDOUT
-
-

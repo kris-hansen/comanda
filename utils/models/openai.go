@@ -56,6 +56,7 @@ func (o *OpenAIProvider) SupportsModel(modelName string) bool {
 	validPrefixes := []string{
 		"gpt-",
 		"o1-",
+		"o3-", // Added support for o3 models
 	}
 
 	for _, prefix := range validPrefixes {
@@ -80,10 +81,10 @@ func (o *OpenAIProvider) Configure(apiKey string) error {
 	return nil
 }
 
-// isNewModelSeries checks if the model is part of the newer series (4o or o1)
+// isNewModelSeries checks if the model is part of the newer series (4o, o1, or o3)
 func (o *OpenAIProvider) isNewModelSeries(modelName string) bool {
 	modelName = strings.ToLower(modelName)
-	return strings.Contains(modelName, "4o") || strings.HasPrefix(modelName, "o1-")
+	return strings.Contains(modelName, "4o") || strings.HasPrefix(modelName, "o1-") || strings.HasPrefix(modelName, "o3-")
 }
 
 // createChatCompletionRequest creates a ChatCompletionRequest with the appropriate parameters
