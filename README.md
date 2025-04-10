@@ -29,6 +29,7 @@ Comanda allows you to use the best provider and model for each step and compose 
 - 🗄️ Database integration for read/write operations for inputs and outputs
 - 🔍 Wildcard pattern support for processing multiple files (e.g., `*.pdf`, `data/*.txt`)
 - 🛡️ Resilient batch processing with error handling for multiple files
+- 📂 Runtime directory support for organizing uploads and YAML processing scripts
 
 
 ## Installation
@@ -288,6 +289,7 @@ The server configuration is stored in your `.env` file alongside provider and mo
 server:
   port: 8080
   data_dir: "examples"  # Directory containing YAML files to process
+  runtime_dir: "runtime"  # Optional directory for runtime files like uploads and YAML processing scripts
   bearer_token: "your-generated-token"
   enabled: true  # Whether authentication is required
   cors:
@@ -304,6 +306,33 @@ The CORS configuration allows you to control Cross-Origin Resource Sharing setti
 - `allowed_methods`: List of HTTP methods allowed for cross-origin requests
 - `allowed_headers`: List of headers allowed in requests
 - `max_age`: How long browsers should cache preflight request results
+
+### Runtime Directory
+
+The runtime directory feature allows you to organize uploaded files and YAML processing scripts in a dedicated directory within the data directory. This helps keep your server data organized and prevents clutter in the main data directory.
+
+You can specify a runtime directory in the following ways:
+
+1. In the server configuration (as shown above with the `runtime_dir` setting)
+2. As a query parameter in API requests:
+   ```
+   /files/upload?runtimeDir=uploads
+   /yaml/upload?runtimeDir=scripts
+   /yaml/process?runtimeDir=scripts
+   /process?filename=example.yaml&runtimeDir=runtime
+   ```
+
+When a runtime directory is specified, the server will:
+1. Create the directory if it doesn't exist
+2. Store uploaded files in that directory
+3. Look for files in that directory first before falling back to the data directory
+4. Use that directory for temporary files during processing
+
+This feature is particularly useful for:
+- Organizing uploads by type (documents, images, etc.)
+- Keeping YAML scripts separate from other files
+- Creating separate workspaces for different projects or users
+- Isolating temporary files from permanent storage
 
 To start the server:
 
@@ -333,7 +362,7 @@ curl -X POST \
      -H "Authorization: Bearer your-token" \
      -F "file=@/path/to/local/file.txt" \
      -F "path=destination/file.txt" \
-     "http://localhost:8080/files/upload"
+     "http://localhost:8080/files/upload?runtimeDir=uploads"
 ```
 
 Using JavaScript:
@@ -399,10 +428,10 @@ curl "http://localhost:8080/process?filename=openai-example.yaml"
 curl -H "Accept: text/event-stream" \
      "http://localhost:8080/process?filename=openai-example.yaml&streaming=true"
 
-# With authentication (when enabled)
+# With authentication (when enabled) and runtime directory
 curl -H "Authorization: Bearer your-token" \
      -H "Accept: text/event-stream" \
-     "http://localhost:8080/process?filename=openai-example.yaml&streaming=true"
+     "http://localhost:8080/process?filename=openai-example.yaml&streaming=true&runtimeDir=runtime"
 ```
 
 #### POST Request (for YAML files with STDIN input)
@@ -565,7 +594,7 @@ curl -X POST \
      -H "Authorization: Bearer your-token" \
      -H "Content-Type: application/json" \
      -d '{"content": "your yaml content here"}' \
-     "http://localhost:8080/yaml/upload"
+     "http://localhost:8080/yaml/upload?runtimeDir=myproject"
 ```
 
 Response format:
@@ -585,7 +614,7 @@ curl -X POST \
      -H "Authorization: Bearer your-token" \
      -H "Content-Type: application/json" \
      -d '{"content": "your yaml content here", "streaming": false}' \
-     "http://localhost:8080/yaml/process"
+     "http://localhost:8080/yaml/process?runtimeDir=myproject"
 
 # Streaming processing (Server-Sent Events)
 curl -X POST \

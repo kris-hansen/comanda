@@ -901,6 +901,13 @@ paths:
   /files/upload:
     post:
       summary: Upload File
+      parameters:
+        - name: runtimeDir
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Directory for runtime files like uploads (relative to data directory)
       requestBody:
         content:
           multipart/form-data:
@@ -1001,6 +1008,96 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+                
+  /yaml/upload:
+    post:
+      summary: Upload YAML File
+      parameters:
+        - name: runtimeDir
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Directory for runtime files like YAML scripts (e.g., myproject) (relative to data directory)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                  description: YAML content to upload
+              required:
+                - content
+      responses:
+        '200':
+          description: YAML file uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+                
+  /yaml/process:
+    post:
+      summary: Process YAML Content
+      parameters:
+        - name: runtimeDir
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Directory for runtime files like YAML processing scripts (e.g., myproject) (relative to data directory)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                  description: YAML content to process
+                input:
+                  type: string
+                  description: Input for YAML processing
+                streaming:
+                  type: boolean
+                  description: Enable real-time output streaming
+              required:
+                - content
+      responses:
+        '200':
+          description: YAML processed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  output:
+                    type: string
+                required:
+                  - success
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/SSEEvent'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /process:
     post:
@@ -1052,6 +1149,12 @@ paths:
           schema:
             type: string
           description: Path to the YAML file to process
+        - name: runtimeDir
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Directory for runtime files like uploads and YAML processing scripts (relative to data directory)
       requestBody:
         required: true
         content:
