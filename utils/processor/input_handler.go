@@ -206,20 +206,39 @@ func (p *Processor) isOutputInOtherSteps(path string) bool {
 // processRegularInput handles regular file and directory inputs
 func (p *Processor) processRegularInput(inputPath string) error {
 	// If the input is not an absolute path and doesn't contain directory separators,
-	// try to find it in the DataDir first
+	// try to find it in the runtime directory first, then in the DataDir
 	var filePath string
 	if !filepath.IsAbs(inputPath) && filepath.Base(inputPath) == inputPath {
-		// Input is just a filename, try DataDir first
-		dataDirPath := filepath.Join(p.serverConfig.DataDir, inputPath)
-		p.debugf("Checking DataDir path: %s", dataDirPath)
+		// Input is just a filename
 
-		if _, err := os.Stat(dataDirPath); err == nil {
-			filePath = dataDirPath
-			p.debugf("Found file in DataDir: %s", filePath)
-		} else {
-			// If not found in DataDir, use the original path
+		// If runtime directory is specified and server config exists, check there first
+		if p.runtimeDir != "" && p.serverConfig != nil && p.serverConfig.Enabled {
+			runtimeDirPath := filepath.Join(p.serverConfig.DataDir, p.runtimeDir, inputPath)
+			p.debugf("Checking runtime directory path: %s", runtimeDirPath)
+
+			if _, err := os.Stat(runtimeDirPath); err == nil {
+				filePath = runtimeDirPath
+				p.debugf("Found file in runtime directory: %s", filePath)
+			}
+		}
+
+		// If not found in runtime directory or no runtime directory specified, try DataDir
+		if filePath == "" && p.serverConfig != nil && p.serverConfig.Enabled {
+			dataDirPath := filepath.Join(p.serverConfig.DataDir, inputPath)
+			p.debugf("Checking DataDir path: %s", dataDirPath)
+
+			if _, err := os.Stat(dataDirPath); err == nil {
+				filePath = dataDirPath
+				p.debugf("Found file in DataDir: %s", filePath)
+			} else {
+				// If not found in DataDir, use the original path
+				filePath = inputPath
+				p.debugf("File not found in DataDir, using original path: %s", filePath)
+			}
+		} else if filePath == "" {
+			// Not in server mode or not found in runtime directory
 			filePath = inputPath
-			p.debugf("File not found in DataDir, using original path: %s", filePath)
+			p.debugf("Using original path: %s", filePath)
 		}
 	} else {
 		// Input contains path separators or is absolute, use as is

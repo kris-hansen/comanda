@@ -15,6 +15,9 @@ import (
 	"github.com/kris-hansen/comanda/utils/processor"
 )
 
+// Runtime directory flag
+var runtimeDir string
+
 var processCmd = &cobra.Command{
 	Use:   "process [files...]",
 	Short: "Process YAML workflow files",
@@ -148,7 +151,7 @@ var processCmd = &cobra.Command{
 			serverConfig := &config.ServerConfig{
 				Enabled: false, // Disable server mode for CLI processing
 			}
-			proc := processor.NewProcessor(&dslConfig, envConfig, serverConfig, verbose)
+			proc := processor.NewProcessor(&dslConfig, envConfig, serverConfig, verbose, runtimeDir)
 
 			// If we have STDIN data, set it as initial output
 			if stdinData != "" {
@@ -205,4 +208,7 @@ var processCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(processCmd)
+
+	// Add runtime directory flag
+	processCmd.Flags().StringVar(&runtimeDir, "runtime-dir", "", "Runtime directory for file operations (relative to data directory)")
 }

@@ -26,6 +26,7 @@ type Processor struct {
 	spinner      *Spinner
 	variables    map[string]string // Store variables from STDIN
 	progress     ProgressWriter    // Progress writer for streaming updates
+	runtimeDir   string            // Runtime directory for file operations
 }
 
 // isTestMode checks if the code is running in test mode
@@ -34,7 +35,13 @@ func isTestMode() bool {
 }
 
 // NewProcessor creates a new DSL processor
-func NewProcessor(config *DSLConfig, envConfig *config.EnvConfig, serverConfig *config.ServerConfig, verbose bool) *Processor {
+func NewProcessor(config *DSLConfig, envConfig *config.EnvConfig, serverConfig *config.ServerConfig, verbose bool, runtimeDir ...string) *Processor {
+	// Default runtime directory to empty string if not provided
+	rd := ""
+	if len(runtimeDir) > 0 {
+		rd = runtimeDir[0]
+	}
+
 	p := &Processor{
 		config:       config,
 		envConfig:    envConfig,
@@ -45,6 +52,7 @@ func NewProcessor(config *DSLConfig, envConfig *config.EnvConfig, serverConfig *
 		verbose:      verbose,
 		spinner:      NewSpinner(),
 		variables:    make(map[string]string),
+		runtimeDir:   rd,
 	}
 
 	// Disable spinner in test environments
@@ -53,6 +61,9 @@ func NewProcessor(config *DSLConfig, envConfig *config.EnvConfig, serverConfig *
 	}
 
 	p.debugf("Creating new validator with default extensions")
+	if rd != "" {
+		p.debugf("Using runtime directory: %s", rd)
+	}
 	return p
 }
 

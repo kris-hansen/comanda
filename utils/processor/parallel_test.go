@@ -59,7 +59,7 @@ func TestParallelProcessing(t *testing.T) {
 	}
 
 	// Create a processor with the test config
-	processor := NewProcessor(&config, createTestEnvConfig(), createTestServerConfig(), false)
+	processor := NewProcessor(&config, createTestEnvConfig(), createTestServerConfig(), false, "")
 
 	// Run the processor
 	err := processor.Process()
@@ -193,7 +193,7 @@ func TestParallelDependencyValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			processor := NewProcessor(&tt.config, createTestEnvConfig(), createTestServerConfig(), false)
+			processor := NewProcessor(&tt.config, createTestEnvConfig(), createTestServerConfig(), false, "")
 			err := processor.validateDependencies()
 
 			if tt.expectError && err == nil {

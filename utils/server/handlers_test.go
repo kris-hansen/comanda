@@ -270,10 +270,10 @@ summarize:
 	}
 
 	// Verify both configs can be processed
-	cliProc := processor.NewProcessor(&cliConfig, testEnvConfig, testServerConfig, true)
+	cliProc := processor.NewProcessor(&cliConfig, testEnvConfig, testServerConfig, true, "")
 	assert.NotNil(t, cliProc, "CLI processor should be created successfully")
 
-	serverProc := processor.NewProcessor(&serverConfig, testEnvConfig, testServerConfig, true)
+	serverProc := processor.NewProcessor(&serverConfig, testEnvConfig, testServerConfig, true, "")
 	assert.NotNil(t, serverProc, "Server processor should be created successfully")
 }
 

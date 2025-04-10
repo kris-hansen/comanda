@@ -93,6 +93,16 @@ func TestHandleOutput(t *testing.T) {
 			},
 			expectInDataDir: true,
 		},
+		{
+			name:          "Server mode with runtime directory",
+			serverEnabled: true,
+			outputs:       []string{"test.txt"},
+			response:      "runtime content",
+			expectedFiles: map[string]string{
+				"runtime/test.txt": "runtime content",
+			},
+			expectInDataDir: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -117,6 +127,15 @@ func TestHandleOutput(t *testing.T) {
 			proc := &Processor{
 				serverConfig: serverConfig,
 				verbose:      true,
+			}
+
+			// Set runtime directory for the runtime directory test
+			if tt.name == "Server mode with runtime directory" {
+				proc.runtimeDir = "runtime"
+				// Create runtime directory
+				if err := os.MkdirAll(filepath.Join(absDataDir, "runtime"), 0755); err != nil {
+					t.Fatalf("Failed to create runtime directory: %v", err)
+				}
 			}
 
 			// Handle output

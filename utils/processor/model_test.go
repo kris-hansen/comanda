@@ -5,7 +5,7 @@ import (
 )
 
 func TestValidateModel(t *testing.T) {
-	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), createTestServerConfig(), false)
+	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), createTestServerConfig(), false, "")
 
 	tests := []struct {
 		name      string
@@ -102,7 +102,7 @@ func TestConfigureProviders(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), createTestServerConfig(), false)
+			processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), createTestServerConfig(), false, "")
 
 			// First validate the models with empty inputs list
 			err := processor.validateModel(tt.models, []string{})

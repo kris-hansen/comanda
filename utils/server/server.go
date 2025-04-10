@@ -228,6 +228,8 @@ func New(envConfig *config.EnvConfig) (*http.Server, error) {
 		envConfig: envConfig,
 	}
 
+	// No default runtime directory is created
+
 	// Register routes
 	s.routes()
 
@@ -392,6 +394,8 @@ func Run(envConfig *config.EnvConfig) error {
 
 	fmt.Printf("Starting server on port %d...\n", serverConfig.Port)
 	fmt.Printf("Data directory: %s\n", serverConfig.DataDir)
+	fmt.Printf("Runtime directories can be specified with the runtimeDir query parameter\n")
+
 	if serverConfig.Enabled {
 		fmt.Println("Authentication is enabled. Bearer token required.")
 		fmt.Printf("Example usage: curl -H 'Authorization: Bearer %s' 'http://localhost:%d/process?filename=examples/openai-example.yaml'\n",
