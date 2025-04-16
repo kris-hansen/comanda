@@ -674,16 +674,66 @@ paths:
 
   /list:
     get:
-      summary: List Files
+      summary: List Files in Directory
+      description: |
+        Returns a list of files and directories within the specified directory path.
+        The response includes metadata for each item, including whether it's a directory.
+        This endpoint supports directory navigation by specifying different paths.
+      parameters:
+        - name: path
+          in: query
+          required: false
+          schema:
+            type: string
+          description: |
+            Directory path to list (relative to data directory).
+            If omitted or set to "/", lists the root data directory.
+            Use directory paths (e.g., "examples" or "examples/model-examples") to navigate the directory structure.
+          example: examples/model-examples
       responses:
         '200':
-          description: List of files retrieved successfully
+          description: List of files and directories retrieved successfully
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/FileList'
+              example:
+                success: true
+                files:
+                  - name: advanced-google-models-example.yaml
+                    path: examples/model-examples/advanced-google-models-example.yaml
+                    size: 1024
+                    isDir: false
+                    createdAt: "2024-04-01T12:00:00Z"
+                    modifiedAt: "2024-04-01T12:00:00Z"
+                    methods: "POST"
+                  - name: images
+                    path: examples/model-examples/images
+                    size: 0
+                    isDir: true
+                    createdAt: "2024-04-01T12:00:00Z"
+                    modifiedAt: "2024-04-01T12:00:00Z"
+                    methods: ""
+        '400':
+          description: Bad request (e.g., path is not a directory)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden (e.g., path attempts to escape data directory)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Directory not found
           content:
             application/json:
               schema:

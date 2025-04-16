@@ -39,10 +39,70 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	config.VerboseLog("Listing files in data directory")
-	config.DebugLog("Scanning directory: %s", s.config.DataDir)
+	// Get path from query parameters, default to root if not provided
+	dirPath := r.URL.Query().Get("path")
+	if dirPath == "" {
+		dirPath = "/"
+	}
 
-	files, err := s.listFilesWithMetadata(s.config.DataDir)
+	config.VerboseLog("Listing files in directory: %s", dirPath)
+	
+	// Validate and resolve the path
+	var fullPath string
+	if dirPath == "/" {
+		// Root path is just the data directory
+		fullPath = s.config.DataDir
+		config.DebugLog("Listing root directory: %s", fullPath)
+	} else {
+		// For non-root paths, validate and resolve
+		var err error
+		fullPath, err = s.validatePath(dirPath)
+		if err != nil {
+			config.VerboseLog("Invalid path: %v", err)
+			w.WriteHeader(http.StatusForbidden)
+			json.NewEncoder(w).Encode(ListResponse{
+				Success: false,
+				Error:   fmt.Sprintf("Invalid directory path: %v", err),
+			})
+			return
+		}
+		config.DebugLog("Listing directory: %s", fullPath)
+		
+		// Verify the path exists and is a directory
+		fileInfo, err := os.Stat(fullPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				config.VerboseLog("Directory not found: %s", fullPath)
+				w.WriteHeader(http.StatusNotFound)
+				json.NewEncoder(w).Encode(ListResponse{
+					Success: false,
+					Error:   "Directory not found",
+				})
+				return
+			}
+			config.VerboseLog("Error accessing directory: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(ListResponse{
+				Success: false,
+				Error:   fmt.Sprintf("Error accessing directory: %v", err),
+			})
+			return
+		}
+		
+		// Ensure the path is a directory
+		if !fileInfo.IsDir() {
+			config.VerboseLog("Path is not a directory: %s", fullPath)
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(ListResponse{
+				Success: false,
+				Error:   "Path is not a directory",
+			})
+			return
+		}
+	}
+
+	// List files in the specified directory (non-recursively)
+	files, err := s.listFilesWithMetadata(fullPath)
 	if err != nil {
 		config.VerboseLog("Error listing files: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -60,23 +120,34 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// listFilesWithMetadata returns detailed information about files in a directory
+// listFilesWithMetadata returns detailed information about files in a directory (non-recursively)
 func (s *Server) listFilesWithMetadata(dir string) ([]FileInfo, error) {
 	var files []FileInfo
 
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	// Read directory entries (non-recursive)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	// Process each entry
+	for _, entry := range entries {
+		// Get full path for the entry
+		path := filepath.Join(dir, entry.Name())
+		
+		// Get detailed file info
+		info, err := entry.Info()
 		if err != nil {
-			return err
+			config.DebugLog("Error getting info for %s: %v", path, err)
+			continue
 		}
 
-		// Skip the directory itself
-		if path == dir {
-			return nil
-		}
-
-		relPath, err := filepath.Rel(dir, path)
+		// Get path relative to data directory (not the current directory)
+		// This ensures paths are consistent regardless of which directory we're listing
+		relPath, err := filepath.Rel(s.config.DataDir, path)
 		if err != nil {
-			return err
+			config.DebugLog("Error getting relative path for %s: %v", path, err)
+			continue
 		}
 
 		// For YAML files, always use POST method
@@ -94,11 +165,9 @@ func (s *Server) listFilesWithMetadata(dir string) ([]FileInfo, error) {
 			ModifiedAt: info.ModTime(),
 			Methods:    methods,
 		})
+	}
 
-		return nil
-	})
-
-	return files, err
+	return files, nil
 }
 
 // handleFileOperation handles file operations (create, update, delete)

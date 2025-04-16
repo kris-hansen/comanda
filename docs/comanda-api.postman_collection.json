@@ -279,7 +279,8 @@
       "name": "File Operations",
       "item": [
         {
-          "name": "List Files",
+          "name": "List Files in Directory",
+          "description": "Returns a list of files and directories within the specified directory path. The response includes metadata for each item, including whether it's a directory. This endpoint supports directory navigation by specifying different paths.",
           "request": {
             "method": "GET",
             "header": [
@@ -289,9 +290,16 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/list",
+              "raw": "{{base_url}}/list?path=examples/model-examples",
               "host": ["{{base_url}}"],
-              "path": ["list"]
+              "path": ["list"],
+              "query": [
+                {
+                  "key": "path",
+                  "value": "examples/model-examples",
+                  "description": "Directory path to list (relative to data directory). If omitted or set to '/', lists the root data directory."
+                }
+              ]
             }
           }
         },
