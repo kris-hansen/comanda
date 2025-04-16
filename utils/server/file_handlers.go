@@ -18,6 +18,19 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// ensureRuntimeDir creates the specified runtime directory if it doesn't exist
+func (s *Server) ensureRuntimeDir(runtimeDir string) error {
+	if runtimeDir == "" {
+		return nil // No runtime directory specified, nothing to create
+	}
+
+	runtimePath := filepath.Join(s.config.DataDir, runtimeDir)
+	if err := os.MkdirAll(runtimePath, 0755); err != nil {
+		return fmt.Errorf("error creating runtime directory: %v", err)
+	}
+	return nil
+}
+
 // handleListFiles returns a list of files with detailed metadata
 func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -26,10 +39,70 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	config.VerboseLog("Listing files in data directory")
-	config.DebugLog("Scanning directory: %s", s.config.DataDir)
+	// Get path from query parameters, default to root if not provided
+	dirPath := r.URL.Query().Get("path")
+	if dirPath == "" {
+		dirPath = "/"
+	}
 
-	files, err := s.listFilesWithMetadata(s.config.DataDir)
+	config.VerboseLog("Listing files in directory: %s", dirPath)
+	
+	// Validate and resolve the path
+	var fullPath string
+	if dirPath == "/" {
+		// Root path is just the data directory
+		fullPath = s.config.DataDir
+		config.DebugLog("Listing root directory: %s", fullPath)
+	} else {
+		// For non-root paths, validate and resolve
+		var err error
+		fullPath, err = s.validatePath(dirPath)
+		if err != nil {
+			config.VerboseLog("Invalid path: %v", err)
+			w.WriteHeader(http.StatusForbidden)
+			json.NewEncoder(w).Encode(ListResponse{
+				Success: false,
+				Error:   fmt.Sprintf("Invalid directory path: %v", err),
+			})
+			return
+		}
+		config.DebugLog("Listing directory: %s", fullPath)
+		
+		// Verify the path exists and is a directory
+		fileInfo, err := os.Stat(fullPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				config.VerboseLog("Directory not found: %s", fullPath)
+				w.WriteHeader(http.StatusNotFound)
+				json.NewEncoder(w).Encode(ListResponse{
+					Success: false,
+					Error:   "Directory not found",
+				})
+				return
+			}
+			config.VerboseLog("Error accessing directory: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(ListResponse{
+				Success: false,
+				Error:   fmt.Sprintf("Error accessing directory: %v", err),
+			})
+			return
+		}
+		
+		// Ensure the path is a directory
+		if !fileInfo.IsDir() {
+			config.VerboseLog("Path is not a directory: %s", fullPath)
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(ListResponse{
+				Success: false,
+				Error:   "Path is not a directory",
+			})
+			return
+		}
+	}
+
+	// List files in the specified directory (non-recursively)
+	files, err := s.listFilesWithMetadata(fullPath)
 	if err != nil {
 		config.VerboseLog("Error listing files: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -47,23 +120,34 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// listFilesWithMetadata returns detailed information about files in a directory
+// listFilesWithMetadata returns detailed information about files in a directory (non-recursively)
 func (s *Server) listFilesWithMetadata(dir string) ([]FileInfo, error) {
 	var files []FileInfo
 
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	// Read directory entries (non-recursive)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	// Process each entry
+	for _, entry := range entries {
+		// Get full path for the entry
+		path := filepath.Join(dir, entry.Name())
+		
+		// Get detailed file info
+		info, err := entry.Info()
 		if err != nil {
-			return err
+			config.DebugLog("Error getting info for %s: %v", path, err)
+			continue
 		}
 
-		// Skip the directory itself
-		if path == dir {
-			return nil
-		}
-
-		relPath, err := filepath.Rel(dir, path)
+		// Get path relative to data directory (not the current directory)
+		// This ensures paths are consistent regardless of which directory we're listing
+		relPath, err := filepath.Rel(s.config.DataDir, path)
 		if err != nil {
-			return err
+			config.DebugLog("Error getting relative path for %s: %v", path, err)
+			continue
 		}
 
 		// For YAML files, always use POST method
@@ -81,11 +165,9 @@ func (s *Server) listFilesWithMetadata(dir string) ([]FileInfo, error) {
 			ModifiedAt: info.ModTime(),
 			Methods:    methods,
 		})
+	}
 
-		return nil
-	})
-
-	return files, err
+	return files, nil
 }
 
 // handleFileOperation handles file operations (create, update, delete)
@@ -427,6 +509,21 @@ func (s *Server) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get runtime directory from query parameter
+	runtimeDir := r.URL.Query().Get("runtimeDir")
+	// No default runtime directory - use data directory directly if not specified
+
+	// Ensure runtime directory exists
+	if err := s.ensureRuntimeDir(runtimeDir); err != nil {
+		config.VerboseLog("Error ensuring runtime directory: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(FileUploadResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Error ensuring runtime directory: %v", err),
+		})
+		return
+	}
+
 	// Parse multipart form with 32MB limit
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		config.VerboseLog("Error parsing multipart form: %v", err)
@@ -454,8 +551,13 @@ func (s *Server) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 	// Get path from form or use filename
 	filePath := r.FormValue("path")
 	if filePath == "" {
-		filePath = header.Filename
+		// If no path is provided, store in runtime directory by default
+		filePath = filepath.Join(runtimeDir, header.Filename)
+	} else if !strings.Contains(filePath, string(filepath.Separator)) {
+		// If only a filename is provided (no path separators), store in runtime directory
+		filePath = filepath.Join(runtimeDir, filePath)
 	}
+	// If a path with separators is provided, use it as is (will be validated next)
 
 	// Validate path
 	fullPath, err := s.validatePath(filePath)
@@ -531,6 +633,21 @@ func (s *Server) handleYAMLUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get runtime directory from query parameter
+	runtimeDir := r.URL.Query().Get("runtimeDir")
+	// No default runtime directory - use data directory directly if not specified
+
+	// Ensure runtime directory exists
+	if err := s.ensureRuntimeDir(runtimeDir); err != nil {
+		config.VerboseLog("Error ensuring runtime directory: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(FileResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Error ensuring runtime directory: %v", err),
+		})
+		return
+	}
+
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		json.NewEncoder(w).Encode(FileResponse{
@@ -551,9 +668,10 @@ func (s *Server) handleYAMLUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate a unique filename for the YAML content
-	filename := fmt.Sprintf("upload_%d.yaml", time.Now().UnixNano())
-	fullPath, err := s.validatePath(filename)
+	// Generate a unique filename for the YAML content in the runtime directory
+	filename := fmt.Sprintf("script_%d.yaml", time.Now().UnixNano())
+	scriptPath := filepath.Join(runtimeDir, filename)
+	fullPath, err := s.validatePath(scriptPath)
 	if err != nil {
 		config.VerboseLog("Invalid path: %v", err)
 		w.WriteHeader(http.StatusForbidden)
@@ -682,8 +800,11 @@ func (s *Server) handleYAMLProcess(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	// Create processor instance with validation enabled
-	proc := processor.NewProcessor(&dslConfig, s.envConfig, s.config, true)
+	// Get runtime directory from query parameter
+	runtimeDir := r.URL.Query().Get("runtimeDir")
+
+	// Create processor instance with validation enabled and runtime directory
+	proc := processor.NewProcessor(&dslConfig, s.envConfig, s.config, true, runtimeDir)
 
 	// Set input if provided
 	if req.Input != "" {

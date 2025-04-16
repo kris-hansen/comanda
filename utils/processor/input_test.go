@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/kris-hansen/comanda/utils/config"
 )
 
 func TestProcessInputs(t *testing.T) {
@@ -13,6 +15,13 @@ func TestProcessInputs(t *testing.T) {
 	validFile1 := filepath.Join(tmpDir, "test1.txt")
 	validFile2 := filepath.Join(tmpDir, "test2.txt")
 	invalidFile := filepath.Join(tmpDir, "test.invalid")
+
+	// Create runtime directory and file
+	runtimeDir := filepath.Join(tmpDir, "runtime")
+	if err := os.MkdirAll(runtimeDir, 0755); err != nil {
+		t.Fatalf("Failed to create runtime directory: %v", err)
+	}
+	runtimeFile := filepath.Join(runtimeDir, "runtime.txt")
 
 	// Create test files
 	if err := os.WriteFile(validFile1, []byte("test content 1"), 0644); err != nil {
@@ -24,11 +33,16 @@ func TestProcessInputs(t *testing.T) {
 	if err := os.WriteFile(invalidFile, []byte("invalid content"), 0644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
+	if err := os.WriteFile(runtimeFile, []byte("runtime content"), 0644); err != nil {
+		t.Fatalf("Failed to create runtime file: %v", err)
+	}
 
 	tests := []struct {
-		name      string
-		inputs    []string
-		expectErr bool
+		name          string
+		inputs        []string
+		expectErr     bool
+		serverEnabled bool
+		runtimeDir    string
 	}{
 		{
 			name:      "single valid file",
@@ -65,11 +79,31 @@ func TestProcessInputs(t *testing.T) {
 			inputs:    []string{filepath.Join(tmpDir, "*.txt")},
 			expectErr: false,
 		},
+		{
+			name:          "runtime directory file",
+			inputs:        []string{"runtime.txt"},
+			expectErr:     false,
+			serverEnabled: true,
+			runtimeDir:    "runtime",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), createTestServerConfig(), false)
+			// Create server config based on test case
+			var serverConfig *config.ServerConfig
+			if tt.serverEnabled {
+				serverConfig = &config.ServerConfig{
+					Enabled: true,
+					DataDir: tmpDir,
+				}
+			} else {
+				serverConfig = &config.ServerConfig{
+					Enabled: true,
+				}
+			}
+
+			processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), serverConfig, false, tt.runtimeDir)
 
 			err := processor.processInputs(tt.inputs)
 			if (err != nil) != tt.expectErr {
@@ -94,7 +128,7 @@ func TestGetProcessedInputs(t *testing.T) {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), createTestServerConfig(), false)
+	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), &config.ServerConfig{Enabled: true}, false, "")
 
 	// Process a test file
 	err := processor.processInputs([]string{testFile})

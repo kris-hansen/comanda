@@ -4,6 +4,7 @@ package config
 type ServerConfig struct {
 	Port        int    `yaml:"port"`
 	DataDir     string `yaml:"dataDir"`
+	RuntimeDir  string `yaml:"runtimeDir"` // Directory for runtime files like uploads and YAML processing
 	Enabled     bool   `yaml:"enabled"`
 	BearerToken string `yaml:"bearerToken"`
 	CORS        CORS   `yaml:"cors"`

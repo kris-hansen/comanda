@@ -241,7 +241,7 @@ Response:
 
 #### Upload File
 ```http
-POST /files/upload
+POST /files/upload?runtimeDir=uploads
 Authorization: Bearer <token>
 Content-Type: multipart/form-data
 
@@ -250,7 +250,7 @@ Form fields:
 - path: "path/to/file.ext"
 ```
 
-Uploads a file using multipart/form-data format. The file will be saved at the specified path.
+Uploads a file using multipart/form-data format. The file will be saved at the specified path. The optional `runtimeDir` query parameter specifies a subdirectory within the data directory for organizing uploads.
 
 Response:
 ```json
@@ -309,7 +309,7 @@ Response:
 
 #### Upload YAML
 ```http
-POST /yaml/upload
+POST /yaml/upload?runtimeDir=myproject
 Authorization: Bearer <token>
 Content-Type: application/json
 
@@ -318,7 +318,7 @@ Content-Type: application/json
 }
 ```
 
-Uploads a YAML file for processing.
+Uploads a YAML file for processing. The optional `runtimeDir` query parameter specifies a subdirectory within the data directory for organizing YAML scripts.
 
 Response:
 ```json
@@ -330,7 +330,7 @@ Response:
 
 #### Process YAML
 ```http
-POST /yaml/process
+POST /yaml/process?runtimeDir=myproject
 Authorization: Bearer <token>
 Content-Type: application/json
 
@@ -377,12 +377,12 @@ The process endpoint handles YAML file processing via POST requests only, suppor
 
 #### Process File (POST)
 ```http
-POST /process?filename=example.yaml
+POST /process?filename=example.yaml&runtimeDir=myproject
 Authorization: Bearer <token>
 Content-Type: application/json
 
 # Process a YAML file with input
-POST /process?filename=example.yaml
+POST /process?filename=example.yaml&runtimeDir=myproject
 Authorization: Bearer <token>
 Content-Type: application/json
 

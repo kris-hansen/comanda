@@ -72,12 +72,20 @@ func (p *Processor) handleOutput(modelName string, response string, outputs []st
 			}
 			p.debugf("Response written to STDOUT")
 		} else {
-			// Determine the output path based on server mode
+			// Determine the output path based on server mode and runtime directory
 			outputPath := output
 			if p.serverConfig != nil && p.serverConfig.Enabled {
-				// In server mode, make the path relative to DataDir
+				// In server mode, make the path relative to DataDir and runtime directory if specified
 				p.debugf("Server mode enabled, using DataDir: %s", p.serverConfig.DataDir)
-				outputPath = filepath.Join(p.serverConfig.DataDir, output)
+
+				// If runtime directory is specified, use it as a subdirectory of DataDir
+				if p.runtimeDir != "" {
+					p.debugf("Using runtime directory: %s", p.runtimeDir)
+					outputPath = filepath.Join(p.serverConfig.DataDir, p.runtimeDir, output)
+				} else {
+					// Otherwise, use DataDir directly
+					outputPath = filepath.Join(p.serverConfig.DataDir, output)
+				}
 				p.debugf("Resolved output path: %s", outputPath)
 			}
 

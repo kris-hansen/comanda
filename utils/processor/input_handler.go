@@ -203,69 +203,157 @@ func (p *Processor) isOutputInOtherSteps(path string) bool {
 	return false
 }
 
-// processRegularInput handles regular file and directory inputs
+// processRegularInput handles regular file and directory inputs, respecting runtimeDir and globs
 func (p *Processor) processRegularInput(inputPath string) error {
-	// If the input is not an absolute path and doesn't contain directory separators,
-	// try to find it in the DataDir first
-	var filePath string
-	if !filepath.IsAbs(inputPath) && filepath.Base(inputPath) == inputPath {
-		// Input is just a filename, try DataDir first
-		dataDirPath := filepath.Join(p.serverConfig.DataDir, inputPath)
-		p.debugf("Checking DataDir path: %s", dataDirPath)
-
-		if _, err := os.Stat(dataDirPath); err == nil {
-			filePath = dataDirPath
-			p.debugf("Found file in DataDir: %s", filePath)
+	// --- Step 1: Check for Glob Pattern ---
+	isGlob := strings.ContainsAny(inputPath, "*?[")
+	if isGlob {
+		p.debugf("Input '%s' identified as a potential glob pattern.", inputPath)
+		// Determine the base path for glob expansion based on context
+		var globPattern string
+		if filepath.IsAbs(inputPath) {
+			globPattern = inputPath // Absolute path glob
+			p.debugf("Using absolute glob pattern: %s", globPattern)
+		} else if p.runtimeDir != "" {
+			// p.runtimeDir should be absolute after NewProcessor
+			globPattern = filepath.Join(p.runtimeDir, inputPath)
+			p.debugf("Resolving glob '%s' relative to runtimeDir '%s': %s", inputPath, p.runtimeDir, globPattern)
+		} else if p.serverConfig != nil && p.serverConfig.Enabled {
+			// Server mode, no runtimeDir, use DataDir
+			globPattern = filepath.Join(p.serverConfig.DataDir, inputPath)
+			p.debugf("Resolving glob '%s' relative to DataDir '%s': %s", inputPath, p.serverConfig.DataDir, globPattern)
 		} else {
-			// If not found in DataDir, use the original path
-			filePath = inputPath
-			p.debugf("File not found in DataDir, using original path: %s", filePath)
+			// CLI mode, relative to current working directory
+			globPattern = inputPath
+			p.debugf("Resolving glob '%s' relative to current working directory", globPattern)
+		}
+		// Pass the fully formed glob pattern to processFile, which handles expansion via the handler
+		return p.processFile(globPattern)
+	}
+
+	// --- Step 2: Not a glob, resolve as a regular file path ---
+	var filePath string
+	pathSource := "provided" // Track where the path was resolved from for error messages
+
+	if !filepath.IsAbs(inputPath) {
+		// Input is a relative path
+		if p.runtimeDir != "" {
+			// Check relative to runtimeDir (should be absolute)
+			resolvedPath := filepath.Join(p.runtimeDir, inputPath)
+			pathSource = fmt.Sprintf("runtime directory '%s'", p.runtimeDir)
+			p.debugf("Checking relative path '%s' against %s: %s", inputPath, pathSource, resolvedPath)
+			// Check existence immediately
+			if _, err := os.Stat(resolvedPath); err == nil {
+				filePath = resolvedPath
+				p.debugf("Found file at resolved path: %s", filePath)
+			} else if !os.IsNotExist(err) {
+				return fmt.Errorf("error checking path '%s' in %s: %w", resolvedPath, pathSource, err)
+			} else {
+				p.debugf("File not found at resolved path: %s", resolvedPath)
+				// Keep filePath empty, will trigger "not found" error later if needed
+			}
+		} else if p.serverConfig != nil && p.serverConfig.Enabled {
+			// Server mode, no runtimeDir, check relative to DataDir
+			resolvedPath := filepath.Join(p.serverConfig.DataDir, inputPath)
+			pathSource = fmt.Sprintf("data directory '%s'", p.serverConfig.DataDir)
+			p.debugf("Checking relative path '%s' against %s: %s", inputPath, pathSource, resolvedPath)
+			// Check existence immediately
+			if _, err := os.Stat(resolvedPath); err == nil {
+				filePath = resolvedPath
+				p.debugf("Found file at resolved path: %s", filePath)
+			} else if !os.IsNotExist(err) {
+				return fmt.Errorf("error checking path '%s' in %s: %w", resolvedPath, pathSource, err)
+			} else {
+				p.debugf("File not found at resolved path: %s", resolvedPath)
+				// Keep filePath empty
+			}
+		} else {
+			// CLI mode, relative path
+			pathSource = "current working directory"
+			p.debugf("Using relative path '%s' in %s", inputPath, pathSource)
+			filePath = inputPath // Use as is, relative to CWD
 		}
 	} else {
-		// Input contains path separators or is absolute, use as is
+		// Input is an absolute path
+		p.debugf("Using absolute path as provided: %s", inputPath)
 		filePath = inputPath
-		p.debugf("Using provided path: %s", filePath)
 	}
 
-	// Check if the path exists
-	if _, err := os.Stat(filePath); err != nil {
-		if os.IsNotExist(err) {
-			// Check if the file is an output in any other step
-			if p.isOutputInOtherSteps(filePath) {
-				p.debugf("File %s does not exist yet but will be created as output in another step", filePath)
-				return nil
-			}
-
-			// If we tried DataDir and failed, include that in the error message
-			if filePath != inputPath {
-				return fmt.Errorf("file not found in DataDir (%s) or at path '%s'", p.serverConfig.DataDir, inputPath)
-			}
-
-			// Let the input handler deal with wildcard patterns
-			return p.processFile(filePath)
+	// --- Step 3: Check Existence and Type (if not found in context) ---
+	if filePath == "" {
+		// This means it was a relative path that wasn't found in runtimeDir or DataDir
+		if p.isOutputInOtherSteps(inputPath) { // Check original inputPath name for output steps
+			p.debugf("Relative input '%s' not found, but might be created as output later.", inputPath)
+			return nil // Allow processing to continue
 		}
-		return fmt.Errorf("error accessing path %s: %w", filePath, err)
+		// Return specific "not found" error based on where we looked
+		return fmt.Errorf("input file '%s' not found in %s", inputPath, pathSource)
 	}
 
-	return p.processFile(filePath)
+	// If filePath is set (either absolute or resolved), check it
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// File doesn't exist at the final path. Check if it's an output.
+			if p.isOutputInOtherSteps(filePath) {
+				p.debugf("File '%s' does not exist yet but will be created as output in another step", filePath)
+				return nil // Allow processing to continue
+			}
+			// Final "not found" error, referencing the path we actually checked
+			return fmt.Errorf("input file '%s' not found (checked path: %s)", inputPath, filePath)
+		}
+		// Other error accessing the path (e.g., permissions)
+		return fmt.Errorf("error accessing input path '%s': %w", filePath, err) // Use filePath in error
+	}
+
+	// If it exists, ensure it's not a directory
+	if fileInfo.IsDir() {
+		return fmt.Errorf("input path '%s' is a directory, not a file", filePath)
+	}
+
+	// --- Step 4: Process the validated file path ---
+	return p.processFile(filePath) // Pass the final, validated filePath
 }
 
-// processFile handles a single file input
+// processFile handles a single file input or glob pattern
 func (p *Processor) processFile(path string) error {
-	p.debugf("Validating path: %s", path)
-	if err := p.validator.ValidatePath(path); err != nil {
-		return err
+	// Check the base name for glob characters to decide on validation
+	isGlob := strings.ContainsAny(filepath.Base(path), "*?[")
+
+	if !isGlob {
+		// Only validate if it's not potentially a glob pattern
+		p.debugf("Validating non-glob path: %s", path)
+		if err := p.validator.ValidatePath(path); err != nil {
+			return fmt.Errorf("path validation failed for '%s': %w", path, err)
+		}
+		// Add file extension validation
+		if err := p.validator.ValidateFileExtension(path); err != nil {
+			return fmt.Errorf("file extension validation failed for '%s': %w", path, err)
+		}
+	} else {
+		p.debugf("Skipping path/extension validation for potential glob pattern: %s", path)
 	}
 
-	// Add file extension validation
-	if err := p.validator.ValidateFileExtension(path); err != nil {
-		return err
+	p.debugf("Processing file/glob via handler: %s", path)
+	err := p.handler.ProcessPath(path) // The handler attempts glob expansion internally if needed
+	if err != nil {
+		// Check if the error indicates a glob pattern matched no files.
+		// The exact error might depend on the handler implementation, but often involves "no such file"
+		// or a specific glob error type if the handler provides one.
+		// We check if it's a glob and if the error is a "not found" type.
+		if isGlob && os.IsNotExist(err) {
+			// This suggests the glob pattern itself might have been stat'd after expansion failed,
+			// or the handler explicitly returned IsNotExist for no matches.
+			p.debugf("Glob pattern '%s' matched no files or handler errored: %v", path, err)
+			// Return a clearer error indicating the glob pattern failed.
+			return fmt.Errorf("glob pattern '%s' did not match any files", path)
+		}
+		// Return other errors from the handler, wrapped for context.
+		return fmt.Errorf("error processing path '%s' via handler: %w", path, err)
 	}
 
-	p.debugf("Processing file: %s", path)
-	if err := p.handler.ProcessPath(path); err != nil {
-		return err
-	}
-	p.debugf("Successfully processed file: %s", path)
+	// If ProcessPath succeeded (even if glob matched 0 files but didn't error), log success.
+	// The handler internally manages adding matched files.
+	p.debugf("Successfully processed file/glob: %s", path)
 	return nil
 }

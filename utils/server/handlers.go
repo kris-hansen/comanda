@@ -20,6 +20,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// No default runtime directory - use data directory by default
+
 func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *config.ServerConfig, envConfig *config.EnvConfig) {
 	// Determine if streaming is requested
 	streaming := r.URL.Query().Get("streaming") == "true" || r.Header.Get("Accept") == "text/event-stream"
@@ -92,8 +94,17 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *config.
 	// Clean the path to remove any . or .. components
 	cleanPath := filepath.Clean(filename)
 
-	// Prepend DataDir to the cleaned path
-	cleanPath = filepath.Join(serverConfig.DataDir, cleanPath)
+	// Check if the path contains directory separators
+	if !strings.Contains(cleanPath, string(filepath.Separator)) {
+		// No directory specified, assume it's in the root of DataDir
+		cleanPath = filepath.Join(serverConfig.DataDir, cleanPath)
+		config.DebugLog("Using file in data directory: %s", cleanPath)
+	} else {
+		// Path contains separators, prepend DataDir
+		cleanPath = filepath.Join(serverConfig.DataDir, cleanPath)
+		config.DebugLog("Using path with directories: %s", cleanPath)
+	}
+
 	config.DebugLog("Adjusted filename path: %s", cleanPath)
 
 	// Get the relative path between the data directory and the target file
@@ -249,10 +260,14 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *config.
 		})
 	}
 
-	// Create and configure processor
+	// Calculate the runtime directory based on the final path of the YAML file
+	runtimeDir := filepath.Dir(finalPath)
+	config.DebugLog("Calculated runtime directory: %s", runtimeDir)
+
+	// Create and configure processor with runtime directory
 	config.DebugLog("Creating processor instance with validation enabled")
-	proc := processor.NewProcessor(&dslConfig, envConfig, serverConfig, true)
-	config.DebugLog("Processor created successfully with config: steps=%d", len(dslConfig.Steps))
+	proc := processor.NewProcessor(&dslConfig, envConfig, serverConfig, true, runtimeDir)
+	config.DebugLog("Processor created successfully with config: steps=%d, runtimeDir=%s", len(dslConfig.Steps), runtimeDir)
 
 	// Handle POST input with detailed logging
 	var stdinInput string
