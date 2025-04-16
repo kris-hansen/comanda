@@ -94,28 +94,11 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *config.
 	// Clean the path to remove any . or .. components
 	cleanPath := filepath.Clean(filename)
 
-	// Get runtime directory from query parameter
-	runtimeDir := r.URL.Query().Get("runtimeDir")
-
 	// Check if the path contains directory separators
 	if !strings.Contains(cleanPath, string(filepath.Separator)) {
-		if runtimeDir != "" {
-			// If runtime directory is specified, check there first
-			runtimePath := filepath.Join(serverConfig.DataDir, runtimeDir, cleanPath)
-			if _, err := os.Stat(runtimePath); err == nil {
-				// File exists in runtime directory, use that path
-				cleanPath = runtimePath
-				config.DebugLog("Found file in runtime directory: %s", cleanPath)
-			} else {
-				// File not found in runtime directory, fall back to data directory
-				cleanPath = filepath.Join(serverConfig.DataDir, cleanPath)
-				config.DebugLog("Using file in data directory: %s", cleanPath)
-			}
-		} else {
-			// No runtime directory specified, use data directory directly
-			cleanPath = filepath.Join(serverConfig.DataDir, cleanPath)
-			config.DebugLog("Using file in data directory: %s", cleanPath)
-		}
+		// No directory specified, assume it's in the root of DataDir
+		cleanPath = filepath.Join(serverConfig.DataDir, cleanPath)
+		config.DebugLog("Using file in data directory: %s", cleanPath)
 	} else {
 		// Path contains separators, prepend DataDir
 		cleanPath = filepath.Join(serverConfig.DataDir, cleanPath)
@@ -276,6 +259,10 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *config.
 			Config: stepConfig,
 		})
 	}
+
+	// Calculate the runtime directory based on the final path of the YAML file
+	runtimeDir := filepath.Dir(finalPath)
+	config.DebugLog("Calculated runtime directory: %s", runtimeDir)
 
 	// Create and configure processor with runtime directory
 	config.DebugLog("Creating processor instance with validation enabled")
