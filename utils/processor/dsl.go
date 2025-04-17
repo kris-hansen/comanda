@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath" // Added missing import
 	"strings"
 	"sync"
 	"time"
@@ -53,35 +52,24 @@ func NewProcessor(config *DSLConfig, envConfig *config.EnvConfig, serverConfig *
 		verbose:      verbose,
 		spinner:    NewSpinner(),
 		variables:  make(map[string]string),
-		runtimeDir: rd, // Initial value
+		runtimeDir: rd, // Store runtime directory
 	}
 
-	// Resolve runtimeDir if provided
+	// Store runtime directory as-is (relative or empty)
 	if rd != "" {
-		pathToCheck := rd
-		// If in server mode and rd is relative, base it on DataDir
-		if serverConfig != nil && serverConfig.Enabled && !filepath.IsAbs(rd) {
-			pathToCheck = filepath.Join(serverConfig.DataDir, rd)
-			p.debugf("RuntimeDir '%s' is relative, joining with DataDir '%s': %s", rd, serverConfig.DataDir, pathToCheck)
-		}
-
-		// Attempt to get the absolute path
-		absRd, err := filepath.Abs(pathToCheck)
-		if err == nil {
-			p.runtimeDir = absRd // Store the absolute path
-			if absRd != rd {
-				p.debugf("Resolved runtimeDir '%s' to absolute path: %s", rd, absRd)
-			} else {
-				p.debugf("RuntimeDir '%s' is already absolute.", rd)
-			}
-		} else {
-			p.runtimeDir = rd // Use original path if Abs fails
-			p.debugf("Warning: Failed to resolve runtimeDir '%s' (checked path: '%s') to absolute path: %v. Using original.", rd, pathToCheck, err)
-		}
+		p.debugf("Processor initialized with runtime directory: %s", rd)
 	} else {
-		p.runtimeDir = "" // Ensure it's empty if not provided
+		p.debugf("Processor initialized without a specific runtime directory.")
 	}
 
+	// Log server configuration
+	if p.serverConfig != nil {
+		p.debugf("Server configuration:")
+		p.debugf("- Enabled: %v", p.serverConfig.Enabled)
+		p.debugf("- DataDir: %s", p.serverConfig.DataDir)
+	} else {
+		p.debugf("No server configuration provided")
+	}
 
 	// Disable spinner in test environments
 	if isTestMode() {
@@ -89,12 +77,6 @@ func NewProcessor(config *DSLConfig, envConfig *config.EnvConfig, serverConfig *
 	}
 
 	p.debugf("Creating new validator with default extensions")
-	// Log the final runtimeDir being used by the processor instance
-	if p.runtimeDir != "" {
-		p.debugf("Processor initialized with runtime directory: %s", p.runtimeDir)
-	} else {
-		p.debugf("Processor initialized without a specific runtime directory.")
-	}
 	return p
 }
 

@@ -16,6 +16,12 @@ import (
 	"github.com/kris-hansen/comanda/utils/input"
 )
 
+// fileExists checks if a file exists at the given path
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
 // isSpecialInput checks if the input is a special type (e.g., screenshot)
 func (p *Processor) isSpecialInput(input string) bool {
 	specialInputs := []string{"screenshot", "NA", "STDIN"}
@@ -192,19 +198,73 @@ func (p *Processor) isScrapeInput(url string) bool {
 
 // isOutputInOtherSteps checks if a file is an output in any of the steps
 func (p *Processor) isOutputInOtherSteps(path string) bool {
+	// Get the base filename without any directory components
+	basePath := filepath.Base(path)
+	
+	// Check sequential steps
 	for _, step := range p.config.Steps {
 		outputs := p.NormalizeStringSlice(step.Config.Output)
 		for _, output := range outputs {
-			if output != "STDOUT" && output == path {
-				return true
+			if output != "STDOUT" {
+				// Check for exact match
+				if output == path {
+					p.debugf("Found exact match '%s' as output in sequential step: %s", path, step.Name)
+					return true
+				}
+				
+				// Check for basename match (for files in runtime directory)
+				if filepath.Base(output) == basePath {
+					p.debugf("Found basename match '%s' as output in sequential step: %s", basePath, step.Name)
+					return true
+				}
 			}
 		}
 	}
+
+	// Check parallel steps
+	for groupName, steps := range p.config.ParallelSteps {
+		for _, step := range steps {
+			outputs := p.NormalizeStringSlice(step.Config.Output)
+			for _, output := range outputs {
+				if output != "STDOUT" {
+					// Check for exact match
+					if output == path {
+						p.debugf("Found exact match '%s' as output in parallel step: %s (group: %s)", path, step.Name, groupName)
+						return true
+					}
+					
+					// Check for basename match (for files in runtime directory)
+					if filepath.Base(output) == basePath {
+						p.debugf("Found basename match '%s' as output in parallel step: %s (group: %s)", basePath, step.Name, groupName)
+						return true
+					}
+				}
+			}
+		}
+	}
+
+	p.debugf("'%s' not found as output in any step", path)
 	return false
 }
 
 // processRegularInput handles regular file and directory inputs, respecting runtimeDir and globs
 func (p *Processor) processRegularInput(inputPath string) error {
+	// Debug server and runtime directory configuration
+	p.debugf("Server and runtime directory configuration:")
+	p.debugf("- Runtime directory: %s (empty: %v)", p.runtimeDir, p.runtimeDir == "")
+	p.debugf("- Server config: %v (nil: %v)", p.serverConfig, p.serverConfig == nil)
+	if p.serverConfig != nil {
+		p.debugf("- Server enabled: %v", p.serverConfig.Enabled)
+		p.debugf("- Data directory: %s", p.serverConfig.DataDir)
+	}
+
+	// Force server mode with runtime directory if available
+	if p.runtimeDir != "" {
+		p.debugf("IMPORTANT: Server mode with runtime directory is active")
+		p.debugf("All relative paths will be resolved relative to: %s", 
+			filepath.Join(p.serverConfig.DataDir, p.runtimeDir))
+	}
+
 	// --- Step 1: Check for Glob Pattern ---
 	isGlob := strings.ContainsAny(inputPath, "*?[")
 	if isGlob {
@@ -214,18 +274,34 @@ func (p *Processor) processRegularInput(inputPath string) error {
 		if filepath.IsAbs(inputPath) {
 			globPattern = inputPath // Absolute path glob
 			p.debugf("Using absolute glob pattern: %s", globPattern)
-		} else if p.runtimeDir != "" {
-			// p.runtimeDir should be absolute after NewProcessor
-			globPattern = filepath.Join(p.runtimeDir, inputPath)
-			p.debugf("Resolving glob '%s' relative to runtimeDir '%s': %s", inputPath, p.runtimeDir, globPattern)
+		} else if p.runtimeDir != "" && p.serverConfig != nil {
+			// In server mode with runtime directory, join with DataDir
+			runtimeDirPath := filepath.Join(p.serverConfig.DataDir, p.runtimeDir)
+			if err := os.MkdirAll(runtimeDirPath, 0755); err != nil {
+				return fmt.Errorf("failed to create runtime directory '%s': %w", runtimeDirPath, err)
+			}
+			p.debugf("Ensured runtime directory exists: %s", runtimeDirPath)
+			globPattern = filepath.Join(runtimeDirPath, inputPath)
+			p.debugf("Resolving glob '%s' relative to DataDir/runtimeDir: %s", inputPath, globPattern)
 		} else if p.serverConfig != nil && p.serverConfig.Enabled {
 			// Server mode, no runtimeDir, use DataDir
 			globPattern = filepath.Join(p.serverConfig.DataDir, inputPath)
 			p.debugf("Resolving glob '%s' relative to DataDir '%s': %s", inputPath, p.serverConfig.DataDir, globPattern)
 		} else {
 			// CLI mode, relative to current working directory
-			globPattern = inputPath
-			p.debugf("Resolving glob '%s' relative to current working directory", globPattern)
+			// If we have a runtime directory, we should still use it even in CLI mode
+			if p.runtimeDir != "" {
+				runtimeDirPath := p.runtimeDir
+				if err := os.MkdirAll(runtimeDirPath, 0755); err != nil {
+					return fmt.Errorf("failed to create runtime directory '%s': %w", runtimeDirPath, err)
+				}
+				p.debugf("CLI mode with runtime directory: ensured directory exists: %s", runtimeDirPath)
+				globPattern = filepath.Join(runtimeDirPath, inputPath)
+				p.debugf("Resolving glob '%s' relative to runtime directory: %s", inputPath, globPattern)
+			} else {
+				globPattern = inputPath
+				p.debugf("Resolving glob '%s' relative to current working directory", globPattern)
+			}
 		}
 		// Pass the fully formed glob pattern to processFile, which handles expansion via the handler
 		return p.processFile(globPattern)
@@ -237,19 +313,39 @@ func (p *Processor) processRegularInput(inputPath string) error {
 
 	if !filepath.IsAbs(inputPath) {
 		// Input is a relative path
-		if p.runtimeDir != "" {
-			// Check relative to runtimeDir (should be absolute)
-			resolvedPath := filepath.Join(p.runtimeDir, inputPath)
-			pathSource = fmt.Sprintf("runtime directory '%s'", p.runtimeDir)
-			p.debugf("Checking relative path '%s' against %s: %s", inputPath, pathSource, resolvedPath)
+		if p.runtimeDir != "" && p.serverConfig != nil {
+			// In server mode with runtime directory, check relative to DataDir/runtimeDir
+			resolvedPath := filepath.Join(p.serverConfig.DataDir, p.runtimeDir, inputPath)
+			pathSource = fmt.Sprintf("runtime directory '%s' in data directory", p.runtimeDir)
+			p.debugf("Path resolution context:")
+			p.debugf("- Input path: %s", inputPath)
+			p.debugf("- Server config enabled: %v", p.serverConfig.Enabled)
+			p.debugf("- Data directory: %s", p.serverConfig.DataDir)
+			p.debugf("- Runtime directory: %s", p.runtimeDir)
+			p.debugf("- Resolved path: %s", resolvedPath)
+
+			// Ensure runtime directory exists
+			runtimeDirPath := filepath.Join(p.serverConfig.DataDir, p.runtimeDir)
+			if err := os.MkdirAll(runtimeDirPath, 0755); err != nil {
+				return fmt.Errorf("failed to create runtime directory '%s': %w", runtimeDirPath, err)
+			}
+			p.debugf("Ensured runtime directory exists: %s", runtimeDirPath)
+
 			// Check existence immediately
 			if _, err := os.Stat(resolvedPath); err == nil {
 				filePath = resolvedPath
 				p.debugf("Found file at resolved path: %s", filePath)
 			} else if !os.IsNotExist(err) {
+				p.debugf("Error accessing path: %v", err)
 				return fmt.Errorf("error checking path '%s' in %s: %w", resolvedPath, pathSource, err)
 			} else {
 				p.debugf("File not found at resolved path: %s", resolvedPath)
+				p.debugf("Checking if file will be created as output...")
+				if p.isOutputInOtherSteps(inputPath) {
+					p.debugf("File '%s' will be created as output in another step", inputPath)
+				} else {
+					p.debugf("File is not marked as an output in any step")
+				}
 				// Keep filePath empty, will trigger "not found" error later if needed
 			}
 		} else if p.serverConfig != nil && p.serverConfig.Enabled {
@@ -265,13 +361,21 @@ func (p *Processor) processRegularInput(inputPath string) error {
 				return fmt.Errorf("error checking path '%s' in %s: %w", resolvedPath, pathSource, err)
 			} else {
 				p.debugf("File not found at resolved path: %s", resolvedPath)
-				// Keep filePath empty
+				// Keep filePath empty, will trigger "not found" error later if needed
 			}
 		} else {
 			// CLI mode, relative path
-			pathSource = "current working directory"
-			p.debugf("Using relative path '%s' in %s", inputPath, pathSource)
-			filePath = inputPath // Use as is, relative to CWD
+			// If we have a runtime directory, we should still use it even in CLI mode
+			if p.runtimeDir != "" {
+				resolvedPath := filepath.Join(p.runtimeDir, inputPath)
+				pathSource = fmt.Sprintf("runtime directory '%s'", p.runtimeDir)
+				p.debugf("CLI mode with runtime directory: using path '%s' in %s", inputPath, pathSource)
+				filePath = resolvedPath
+			} else {
+				pathSource = "current working directory"
+				p.debugf("Using relative path '%s' in %s", inputPath, pathSource)
+				filePath = inputPath // Use as is, relative to CWD
+			}
 		}
 	} else {
 		// Input is an absolute path
@@ -281,13 +385,21 @@ func (p *Processor) processRegularInput(inputPath string) error {
 
 	// --- Step 3: Check Existence and Type (if not found in context) ---
 	if filePath == "" {
-		// This means it was a relative path that wasn't found in runtimeDir or DataDir
-		if p.isOutputInOtherSteps(inputPath) { // Check original inputPath name for output steps
-			p.debugf("Relative input '%s' not found, but might be created as output later.", inputPath)
-			return nil // Allow processing to continue
-		}
-		// Return specific "not found" error based on where we looked
+	// This means it was a relative path that wasn't found in runtimeDir or DataDir
+	if p.isOutputInOtherSteps(inputPath) { // Check original inputPath name for output steps
+		p.debugf("Relative input '%s' not found, but will be created as output in another step.", inputPath)
+		p.debugf("Allowing processing to continue since file will be created later")
+		return nil // Allow processing to continue
+	}
+	// Return specific "not found" error based on where we looked
+	p.debugf("File not found and is not marked as an output in any step")
+	if p.runtimeDir != "" && p.serverConfig != nil {
+		// In server mode with runtime directory, use the resolved path in the error message
+		resolvedPath := filepath.Join(p.serverConfig.DataDir, p.runtimeDir, inputPath)
+		return fmt.Errorf("input file '%s' not found (checked path: %s)", inputPath, resolvedPath)
+	} else {
 		return fmt.Errorf("input file '%s' not found in %s", inputPath, pathSource)
+	}
 	}
 
 	// If filePath is set (either absolute or resolved), check it
@@ -300,7 +412,13 @@ func (p *Processor) processRegularInput(inputPath string) error {
 				return nil // Allow processing to continue
 			}
 			// Final "not found" error, referencing the path we actually checked
-			return fmt.Errorf("input file '%s' not found (checked path: %s)", inputPath, filePath)
+			if p.runtimeDir != "" && p.serverConfig != nil {
+				// In server mode with runtime directory, use the resolved path in the error message
+				resolvedPath := filepath.Join(p.serverConfig.DataDir, p.runtimeDir, inputPath)
+				return fmt.Errorf("input file '%s' not found (checked path: %s)", inputPath, resolvedPath)
+			} else {
+				return fmt.Errorf("input file '%s' not found (checked path: %s)", inputPath, filePath)
+			}
 		}
 		// Other error accessing the path (e.g., permissions)
 		return fmt.Errorf("error accessing input path '%s': %w", filePath, err) // Use filePath in error
