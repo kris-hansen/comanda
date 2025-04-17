@@ -260,9 +260,21 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *config.
 		})
 	}
 
-	// Calculate the runtime directory based on the final path of the YAML file
-	runtimeDir := filepath.Dir(finalPath)
-	config.DebugLog("Calculated runtime directory: %s", runtimeDir)
+	// Get runtime directory from query parameter or calculate from path
+	runtimeDir := r.URL.Query().Get("runtimeDir")
+	if runtimeDir == "" {
+		// Calculate from path if not provided
+		runtimeDir = filepath.Dir(relPath) // Use relPath which is relative to DataDir
+		if runtimeDir == "." {
+			runtimeDir = "" // No subdirectory
+		}
+	}
+	config.DebugLog("Runtime directory context:")
+	config.DebugLog("- From query param: %v", r.URL.Query().Get("runtimeDir") != "")
+	config.DebugLog("- DataDir: %s", serverConfig.DataDir)
+	config.DebugLog("- RelPath: %s", relPath)
+	config.DebugLog("- RuntimeDir: %s", runtimeDir)
+	config.DebugLog("- CleanPath: %s", cleanPath)
 
 	// Create and configure processor with runtime directory
 	config.DebugLog("Creating processor instance with validation enabled")
