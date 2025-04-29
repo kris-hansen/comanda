@@ -49,9 +49,10 @@ func (g *GoogleProvider) ValidateModel(modelName string) bool {
 		"gemini-2.5-pro-exp-03-25",
 		"gemini-2.0-flash",
 		"gemini-2.0-flash-lite",
-		"gemini-1.5-flash",    // Also existing
-		"gemini-1.5-flash-8b", // Also existing
-		"gemini-1.5-pro",      // Also existing
+		"gemini-1.5-flash",             // Also existing
+		"gemini-1.5-flash-8b",          // Also existing
+		"gemini-1.5-pro",               // Also existing
+		"gemini-2.5-pro-preview-03-25", // Added new model
 		"gemini-embedding-exp",
 
 		// Existing models not explicitly in user list but kept for compatibility/completeness
