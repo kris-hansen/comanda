@@ -22,7 +22,7 @@ First, you need to get the COMandA binary. You have a few options:
 
 For detailed instructions, please refer to the [Installation](#installation) section below.
 
-[![asciicast](https://asciinema.org/a/HRXZsShEmu2UmrUQUdYFpXSPf.svg)](https://asciinema.org/a/HRXZsShEmu2UmrUQUdYFpXSPf)
+![Comanda Install Demo](comanda-install.gif)
 
 ## 2. Initial Configuration
 
@@ -43,7 +43,7 @@ This will launch an interactive setup process where you can:
 
 Repeat this for each provider you intend to use. Your configuration, including API keys, will be stored in a `.env` file in your current directory by default. For more advanced configuration options, including encryption, see the [Configuration](#configuration) section.
 
-[![asciicast](https://asciinema.org/a/vY6ESRCHDwGedRsZQuCrzCKHj.svg)](https://asciinema.org/a/vY6ESRCHDwGedRsZQuCrzCKHj)
+![Comanda configure demo](comanda-configure.gif)
 
 ## 3. Your First COMandA Workflow
 
@@ -77,7 +77,7 @@ comanda process hello_world.yaml
 
 You should see the LLM's welcome message printed in your terminal!
 
-[![asciicast](https://asciinema.org/a/Gj2FgoImbg9SPhOW4byQRLSek.svg)](https://asciinema.org/a/Gj2FgoImbg9SPhOW4byQRLSek)
+![Comanda process example](comanda-process.gif)
 
 This is just a basic example. COMandA can do much more, including chaining multiple steps, working with files, processing images, and interacting with web content.
 
