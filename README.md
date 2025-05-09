@@ -2,15 +2,92 @@
 
 # COMandA (Chain of Models and Actions)
 
-![Demo](comanda-demo.gif)
-
 Comanda is an inference engine which processes chains of LLM workflow steps.
 
 Think of each step in a YAML file as the equivalent of a Lego block. You can chain these blocks together to create more complex structures which can help solve problems. Steps are composed of inputs, models, actions and outputs and there can be different step types.
 
-Create YAML workflow 'recipes' and use `comanda process` to execute the recipe file.
-
 Comanda allows you to use the best provider and model for each step and compose workflows that combine the stregths of different LLMs. It supports multiple LLM providers (Anthropic, Deepseek, Google, Local models via Ollama, OpenAI, and X.AI) and offers the ability to chain these models together by passing outputs from one step to inputs in the next step.
+
+# Getting Started with COMandA
+
+This guide will walk you through the initial steps to get COMandA up and running.
+
+## 1. Installation
+
+First, you need to get the COMandA binary. You have a few options:
+
+*   **Download a Pre-built Binary:** The quickest way is to download a binary for your operating system from our [GitHub Releases page](https://github.com/kris-hansen/comanda/releases).
+*   **Install via Go:** If you have Go installed, you can use `go install github.com/kris-hansen/comanda@latest`.
+*   **Build from Source:** Clone the repository and build it yourself with `go build .` in the repository directory.
+
+For detailed instructions, please refer to the [Installation](#installation) section below.
+
+[![asciicast](https://asciinema.org/a/HRXZsShEmu2UmrUQUdYFpXSPf.svg)](https://asciinema.org/a/HRXZsShEmu2UmrUQUdYFpXSPf)
+
+## 2. Initial Configuration
+
+Once COMandA is installed, you need to configure your LLM providers. This tells COMandA which models you want to use and provides the necessary API keys. These are stored in an .env file which is by default in the current working directory and can be set with the environment variable see the [Configuration](#configuration) section for more information on this.
+
+Run the following command in your terminal:
+
+```bash
+comanda configure
+```
+
+This will launch an interactive setup process where you can:
+
+1.  Select an LLM provider (e.g., OpenAI, Anthropic, Google, Ollama).
+2.  Enter your API key for that provider (if applicable).
+3.  Specify the model name(s) you want to use from that provider.
+4.  Choose the mode for each model (text, vision, etc.).
+
+Repeat this for each provider you intend to use. Your configuration, including API keys, will be stored in a `.env` file in your current directory by default. For more advanced configuration options, including encryption, see the [Configuration](#configuration) section.
+
+[![asciicast](https://asciinema.org/a/vY6ESRCHDwGedRsZQuCrzCKHj.svg)](https://asciinema.org/a/vY6ESRCHDwGedRsZQuCrzCKHj)
+
+## 3. Your First COMandA Workflow
+
+COMandA uses YAML files to define workflows. A workflow consists of one or more steps, where each step performs an action, often involving an LLM.
+
+Let's create a very simple workflow. Create a file named `hello_world.yaml` with the following content:
+
+```yaml
+# hello-world.yaml
+say_hello:
+  input: NA # Input is not applicable because we are generating
+  model: gpt-4.1  # Or any model you configured, e.g., a local Ollama model
+  action: Write a small haiku which includes the words "hello world!"    # this is your prompt
+  output: STDOUT     # This will print the output to your terminal
+```
+
+**Explanation:**
+
+*   `say_hello`: This is the name of our step, it can be anything as it's really a label for the step name.
+
+*   `input:`: This can be a file in various forms and formats or a database or other input types (see examples). In our case it's NA as we are generating new text.
+*   `model`: Specifies which LLM to use. Make sure this matches a model you set up in `comanda configure`.
+*   `action`: This is the instruction we give to the LLM.
+*   `output:`: This can be a file of various formats or a database. In the case of this simple example it will just be standard output to the terminal.
+
+To run this workflow, use the `process` command:
+
+```bash
+comanda process hello_world.yaml
+```
+
+You should see the LLM's welcome message printed in your terminal!
+
+[![asciicast](https://asciinema.org/a/Gj2FgoImbg9SPhOW4byQRLSek.svg)](https://asciinema.org/a/Gj2FgoImbg9SPhOW4byQRLSek)
+
+This is just a basic example. COMandA can do much more, including chaining multiple steps, working with files, processing images, and interacting with web content.
+
+Build more robust agentic workflows by:
+*  Chaining steps together by having the output of some steps feed the input of other steps
+*  Give the steps agentic roles by prompting for context in the action
+*  Pass documents as input and output
+*  Have some steps assess the work of other steps
+
+Explore the [Features](#features) and [Examples](examples/README.md) to learn more.
 
 ## Features
 
