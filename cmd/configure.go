@@ -90,6 +90,7 @@ func getGoogleModels() []string {
 		"gemini-1.5-flash-8b",
 		"gemini-1.5-pro",
 		"gemini-2.5-pro-preview-03-25", // Added new model
+		"gemini-2.5-pro-preview-05-06", // Added new model
 		"gemini-embedding-exp",
 
 		// Existing models not explicitly in user list but kept for compatibility/completeness
