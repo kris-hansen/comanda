@@ -55,7 +55,7 @@ Let's create a very simple workflow. Create a file named `hello_world.yaml` with
 # hello-world.yaml
 say_hello:
   input: NA # Input is not applicable because we are generating
-  model: gpt-4.1  # Or any model you configured, e.g., a local Ollama model
+  model: gpt-4o  # Or any model you configured, e.g., a local Ollama model
   action: Write a small haiku which includes the words "hello world!"    # this is your prompt
   output: STDOUT     # This will print the output to your terminal
 ```
