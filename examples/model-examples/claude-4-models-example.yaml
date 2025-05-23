@@ -1,0 +1,12 @@
+# examples/model-examples/claude-4-new-models-example.yaml
+claude_opus_example:
+  input: NA
+  model: claude-opus-4-20250514
+  action: Write a short poem about the beauty of a sunset.
+  output: STDOUT
+
+claude_sonnet_example:
+  input: NA
+  model: claude-sonnet-4-20250514
+  action: Summarize the key events of the French Revolution in 5 sentences.
+  output: STDOUT
