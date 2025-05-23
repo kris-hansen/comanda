@@ -114,9 +114,9 @@ Explore the [Features](#features) and [Examples](examples/README.md) to learn mo
 ### Download Pre-built Binary
 
 The easiest way to get started is to download a pre-built binary from the [GitHub Releases page](https://github.com/kris-hansen/comanda/releases). Binaries are available for:
-- Windows (386, amd64)
+- Windows (x86, amd64)
 - macOS (amd64, arm64)
-- Linux (386, amd64, arm64)
+- Linux (x86, amd64, arm64)
 
 Download the appropriate binary for your system, extract it if needed, and place it somewhere in your system's PATH.
 
@@ -189,6 +189,9 @@ comanda configure --list
 This will prompt for the password if the configuration is encrypted.
 
 ### Provider Configuration
+
+Users updating an existing COMandA installation may need to run `comanda configure` to select and enable these new models.
+A guide for adding new models to existing providers can be found in [docs/adding-new-model-guide.md](docs/adding-new-model-guide.md).
 
 Configure your providers and models using the interactive configuration command:
 
@@ -300,6 +303,13 @@ anthropic:
     Modes: text, vision, multi, file
   - claude-3-5-haiku-latest (external)
     Modes: text, vision, multi, file
+  - claude-opus-4-20250514 (external)
+    Modes: text, vision, multi, file
+  - claude-sonnet-4-20250514 (external)
+    Modes: text, vision, multi, file
+
+Users updating an existing COMandA installation may need to run `comanda configure` to select and enable these new models.
+A guide for adding new models to existing providers can be found in [docs/adding-new-model-guide.md](docs/adding-new-model-guide.md).
 
 deepseek:
   - deepseek-chat (external)
