@@ -6,7 +6,7 @@ Comanda is an inference engine which processes chains of LLM workflow steps.
 
 Think of each step in a YAML file as the equivalent of a Lego block. You can chain these blocks together to create more complex structures which can help solve problems. Steps are composed of inputs, models, actions and outputs and there can be different step types.
 
-Comanda allows you to use the best provider and model for each step and compose workflows that combine the stregths of different LLMs. It supports multiple LLM providers (Anthropic, Deepseek, Google, Local models via Ollama, OpenAI, and X.AI) and offers the ability to chain these models together by passing outputs from one step to inputs in the next step.
+Comanda allows you to use the best provider and model for each step and compose workflows that combine the strengths of different LLMs. It supports multiple LLM providers (Anthropic, Deepseek, Google, Local models via Ollama, OpenAI, and X.AI) and offers the ability to chain these models together by passing outputs from one step to inputs in the next step.
 
 # Getting Started with COMandA
 
@@ -107,6 +107,7 @@ Explore the [Features](#features) and [Examples](examples/README.md) to learn mo
 - 🔍 Wildcard pattern support for processing multiple files (e.g., `*.pdf`, `data/*.txt`)
 - 🛡️ Resilient batch processing with error handling for multiple files
 - 📂 Runtime directory support for organizing uploads and YAML processing scripts
+- ✨ YAML workflow generation from natural language prompts
 
 
 ## Installation
@@ -257,7 +258,7 @@ Enter new API key: sk-...
 Successfully updated API key for provider 'openai'
 ```
 
-### Setting Default Model for Generation
+### Setting the Default Model for Generation
 
 You can set a default model for the `comanda generate` command, which creates YAML workflows from natural language prompts:
 
