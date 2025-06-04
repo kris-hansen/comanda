@@ -371,6 +371,45 @@ data: Processing step 2...
 data: Processing complete
 ```
 
+### Generate Endpoint
+
+The generate endpoint allows you to generate Comanda workflow YAML files using an LLM based on natural language prompts.
+
+#### Generate Workflow
+```http
+POST /generate
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "prompt": "Create a workflow to summarize a file and save it",
+  "model": "gpt-4o-mini"  # Optional, uses default_generation_model if not specified
+}
+```
+
+Generates a new Comanda workflow YAML file based on the provided prompt.
+
+Request parameters:
+- `prompt` (required): Natural language description of the workflow you want to create
+- `model` (optional): Specific model to use for generation. If not provided, uses the `default_generation_model` from configuration
+
+Response:
+```json
+{
+  "success": true,
+  "yaml": "step_one:\n  model: gpt-4o-mini\n  input: FILE\n  ...",
+  "model": "gpt-4o-mini"
+}
+```
+
+Error response:
+```json
+{
+  "success": false,
+  "error": "No model specified and no default_generation_model configured"
+}
+```
+
 ### Process Endpoint
 
 The process endpoint handles YAML file processing via POST requests only, supporting both regular and streaming responses.
@@ -543,6 +582,22 @@ curl -H "Authorization: Bearer your-token" \
      --output downloaded_file.pdf
 ```
 
+9. Generate Workflow:
+```bash
+curl -X POST \
+     -H "Authorization: Bearer your-token" \
+     -H "Content-Type: application/json" \
+     -d '{"prompt":"Create a workflow to read a CSV file and summarize its contents"}' \
+     http://localhost:8080/generate
+
+# With specific model
+curl -X POST \
+     -H "Authorization: Bearer your-token" \
+     -H "Content-Type: application/json" \
+     -d '{"prompt":"Create a workflow to analyze sentiment from user input","model":"gpt-4o"}' \
+     http://localhost:8080/generate
+```
+
 ### Using JavaScript
 
 ```javascript
@@ -701,6 +756,21 @@ async function downloadFile(path) {
   return await response.blob();
 }
 
+// Generate workflow
+async function generateWorkflow(prompt, model = null) {
+  const body = { prompt };
+  if (model) {
+    body.model = model;
+  }
+  
+  const response = await fetch(`${API_URL}/generate`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body)
+  });
+  return await response.json();
+}
+
 // Example usage
 async function example() {
   try {
@@ -731,6 +801,19 @@ async function example() {
     // Create a file
     const createResult = await createFile('example.yaml', 'file content');
     console.log('Create result:', createResult);
+
+    // Generate a workflow
+    const generateResult = await generateWorkflow(
+      'Create a workflow to read a CSV file and summarize its contents'
+    );
+    console.log('Generated YAML:', generateResult.yaml);
+
+    // Generate with specific model
+    const generateWithModel = await generateWorkflow(
+      'Create a workflow to analyze sentiment from user input',
+      'gpt-4o'
+    );
+    console.log('Generated with model:', generateWithModel.model);
   } catch (error) {
     console.error('Error:', error);
   }

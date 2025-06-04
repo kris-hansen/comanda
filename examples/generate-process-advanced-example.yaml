@@ -1,0 +1,35 @@
+# Advanced example demonstrating generate and process tags with data passing
+# This workflow generates a YAML file that creates multiple haikus, then processes it
+
+set_haiku_theme:
+  input: NA
+  model: gpt-4o-mini
+  action: "Choose a random theme for haikus from: nature, technology, seasons, or emotions. Just output the single word theme."
+  output: STDOUT as $theme
+
+generate_haiku_collection_workflow:
+  input: $theme
+  generate:
+    model: gpt-4o-mini
+    action: |
+      Create a Comanda workflow YAML file that:
+      1. Has three steps: 'haiku_one', 'haiku_two', and 'haiku_three'
+      2. Each step should:
+         - Use input: NA
+         - Use model: gpt-4o-mini
+         - Have an action that creates a haiku about the theme provided in the input (which will be passed as $parent.theme)
+         - Output to STDOUT
+      3. Include a fourth step 'combine_haikus' that:
+         - Uses input: STDIN (to get the previous haiku)
+         - Uses model: gpt-4o-mini
+         - Action: "Take the previous haiku and add a title 'Haiku Collection: [theme]' at the top, where [theme] is $parent.theme"
+         - Outputs to: haiku_collection.txt
+      Make sure to reference $parent.theme in the actions.
+    output: generated_haiku_collection.yaml
+
+execute_haiku_collection:
+  input: NA
+  process:
+    workflow_file: generated_haiku_collection.yaml
+    inputs: 
+      theme: $theme

@@ -110,6 +110,28 @@ func collectOutputFiles(stepNode *yaml.Node, outputFiles map[string]bool) {
 					outputFiles[item.Value] = true
 				}
 			}
+		} else if key == "generate" && value.Kind == yaml.MappingNode {
+			// Look for output within a generate block
+			for j := 0; j < len(value.Content); j += 2 {
+				genKey := value.Content[j].Value
+				genValue := value.Content[j+1]
+				if genKey == "output" && genValue.Kind == yaml.ScalarNode {
+					outputFiles[genValue.Value] = true
+				}
+			}
+		} else if key == "process" && value.Kind == yaml.MappingNode {
+			// Look for capture_outputs within a process block
+			for j := 0; j < len(value.Content); j += 2 {
+				procKey := value.Content[j].Value
+				procValue := value.Content[j+1]
+				if procKey == "capture_outputs" && procValue.Kind == yaml.SequenceNode {
+					for _, item := range procValue.Content {
+						if item.Kind == yaml.ScalarNode {
+							outputFiles[item.Value] = true
+						}
+					}
+				}
+			}
 		}
 	}
 }
@@ -120,6 +142,28 @@ func validateStep(t *testing.T, filename, stepName string, stepNode *yaml.Node, 
 		return
 	}
 
+	// Check if this is a generate or process step
+	isGenerateStep := false
+	isProcessStep := false
+	for i := 0; i < len(stepNode.Content); i += 2 {
+		key := stepNode.Content[i].Value
+		if key == "generate" {
+			isGenerateStep = true
+		} else if key == "process" {
+			isProcessStep = true
+		}
+	}
+
+	// If it's a generate or process step, validate differently
+	if isGenerateStep {
+		validateGenerateStep(t, filename, stepName, stepNode, outputFiles)
+		return
+	} else if isProcessStep {
+		validateProcessStep(t, filename, stepName, stepNode, outputFiles)
+		return
+	}
+
+	// Standard step validation
 	requiredFields := map[string]bool{
 		"input":  false,
 		"model":  false,
@@ -276,6 +320,11 @@ func isSpecialInput(input string) bool {
 		}
 	}
 
+	// Check if input is a variable reference
+	if strings.HasPrefix(input, "$") {
+		return true
+	}
+
 	// Check if input is a URL
 	if strings.HasPrefix(input, "http://") || strings.HasPrefix(input, "https://") {
 		return true
@@ -288,4 +337,100 @@ func isSpecialInput(input string) bool {
 // containsWildcard checks if a path contains wildcard characters
 func containsWildcard(path string) bool {
 	return strings.ContainsAny(path, "*?[]")
+}
+
+// validateGenerateStep validates a generate step
+func validateGenerateStep(t *testing.T, filename, stepName string, stepNode *yaml.Node, outputFiles map[string]bool) {
+	hasInput := false
+	hasGenerate := false
+
+	for i := 0; i < len(stepNode.Content); i += 2 {
+		key := stepNode.Content[i].Value
+		value := stepNode.Content[i+1]
+
+		if key == "input" {
+			hasInput = true
+			// Validate input path
+			if value.Kind == yaml.ScalarNode {
+				validateInputPath(t, filename, stepName, value.Value, outputFiles)
+			}
+		} else if key == "generate" && value.Kind == yaml.MappingNode {
+			hasGenerate = true
+			// Validate generate block
+			hasAction := false
+			hasOutput := false
+
+			for j := 0; j < len(value.Content); j += 2 {
+				genKey := value.Content[j].Value
+				genValue := value.Content[j+1]
+
+				if genKey == "action" && genValue.Kind == yaml.ScalarNode && genValue.Value != "" {
+					hasAction = true
+				} else if genKey == "output" && genValue.Kind == yaml.ScalarNode && genValue.Value != "" {
+					hasOutput = true
+					// Add to output files
+					outputFiles[genValue.Value] = true
+				}
+			}
+
+			if !hasAction {
+				t.Errorf("Step %s in %s: generate block missing required field 'action'", stepName, filename)
+			}
+			if !hasOutput {
+				t.Errorf("Step %s in %s: generate block missing required field 'output'", stepName, filename)
+			}
+		}
+	}
+
+	if !hasInput {
+		t.Errorf("Step %s in %s: missing required field 'input'", stepName, filename)
+	}
+	if !hasGenerate {
+		t.Errorf("Step %s in %s: missing required field 'generate'", stepName, filename)
+	}
+}
+
+// validateProcessStep validates a process step
+func validateProcessStep(t *testing.T, filename, stepName string, stepNode *yaml.Node, outputFiles map[string]bool) {
+	hasInput := false
+	hasProcess := false
+
+	for i := 0; i < len(stepNode.Content); i += 2 {
+		key := stepNode.Content[i].Value
+		value := stepNode.Content[i+1]
+
+		if key == "input" {
+			hasInput = true
+			// Validate input path
+			if value.Kind == yaml.ScalarNode {
+				validateInputPath(t, filename, stepName, value.Value, outputFiles)
+			}
+		} else if key == "process" && value.Kind == yaml.MappingNode {
+			hasProcess = true
+			// Validate process block
+			hasWorkflowFile := false
+
+			for j := 0; j < len(value.Content); j += 2 {
+				procKey := value.Content[j].Value
+				procValue := value.Content[j+1]
+
+				if procKey == "workflow_file" && procValue.Kind == yaml.ScalarNode && procValue.Value != "" {
+					hasWorkflowFile = true
+					// Check if workflow file exists or is an output from another step
+					validateInputPath(t, filename, stepName, procValue.Value, outputFiles)
+				}
+			}
+
+			if !hasWorkflowFile {
+				t.Errorf("Step %s in %s: process block missing required field 'workflow_file'", stepName, filename)
+			}
+		}
+	}
+
+	if !hasInput {
+		t.Errorf("Step %s in %s: missing required field 'input'", stepName, filename)
+	}
+	if !hasProcess {
+		t.Errorf("Step %s in %s: missing required field 'process'", stepName, filename)
+	}
 }

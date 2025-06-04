@@ -20,12 +20,14 @@ import (
 )
 
 var (
-	listFlag      bool
-	encryptFlag   bool
-	decryptFlag   bool
-	removeFlag    string
-	updateKeyFlag string
-	databaseFlag  bool
+	listFlag                      bool
+	encryptFlag                   bool
+	decryptFlag                   bool
+	removeFlag                    string
+	updateKeyFlag                 string
+	databaseFlag                  bool
+	setDefaultGenerationModelFlag string
+	defaultFlag                   bool
 )
 
 // Green checkmark for successful operations
@@ -367,6 +369,23 @@ func promptForModes(reader *bufio.Reader, modelName string) ([]config.ModelMode,
 	return modes, nil
 }
 
+// getAllConfiguredModelNames retrieves a list of all unique model names from the configuration.
+func getAllConfiguredModelNames(envConfig *config.EnvConfig) []string {
+	var modelNames []string
+	seen := make(map[string]bool) // Used to ensure uniqueness
+
+	for _, provider := range envConfig.Providers {
+		for _, model := range provider.Models {
+			if !seen[model.Name] {
+				modelNames = append(modelNames, model.Name)
+				seen[model.Name] = true
+			}
+		}
+	}
+	// Consider sorting modelNames alphabetically here if desired for UX, e.g., sort.Strings(modelNames)
+	return modelNames
+}
+
 var configureCmd = &cobra.Command{
 	Use:   "configure",
 	Short: "Configure model settings",
@@ -491,6 +510,42 @@ var configureCmd = &cobra.Command{
 				fmt.Printf("Error configuring database: %v\n", err)
 				return
 			}
+		} else if setDefaultGenerationModelFlag != "" {
+			envConfig.DefaultGenerationModel = setDefaultGenerationModelFlag
+			fmt.Printf("Default generation model set to '%s'\n", setDefaultGenerationModelFlag)
+		} else if defaultFlag {
+			// Interactive mode to set default generation model
+			reader := bufio.NewReader(os.Stdin)
+			allModels := getAllConfiguredModelNames(envConfig)
+			if len(allModels) == 0 {
+				fmt.Println("No models are currently configured. Please configure models first using 'comanda configure'.")
+				return
+			}
+
+			fmt.Println("Available configured models:")
+			for i, modelName := range allModels {
+				fmt.Printf("%d. %s", i+1, modelName)
+				if envConfig.DefaultGenerationModel == modelName {
+					fmt.Print(" (current default)")
+				}
+				fmt.Println()
+			}
+
+			var selectedDefaultModel string
+			for {
+				fmt.Print("\nEnter the number of the model to set as default for generation: ")
+				selectionInput, _ := reader.ReadString('\n')
+				selectionNum, err := strconv.Atoi(strings.TrimSpace(selectionInput))
+				if err != nil || selectionNum < 1 || selectionNum > len(allModels) {
+					fmt.Println("Invalid selection. Please enter a number from the list.")
+					continue
+				}
+				selectedDefaultModel = allModels[selectionNum-1]
+				break
+			}
+
+			envConfig.DefaultGenerationModel = selectedDefaultModel
+			fmt.Printf("%s Default generation model set to '%s'\n", greenCheckmark, selectedDefaultModel)
 		} else {
 			reader := bufio.NewReader(os.Stdin)
 			// Prompt for provider
@@ -645,6 +700,37 @@ var configureCmd = &cobra.Command{
 					continue
 				}
 			}
+
+			// Prompt to set default generation model if not using a specific flag for it
+			if setDefaultGenerationModelFlag == "" {
+				fmt.Print("\nDo you want to set or update the default model for workflow generation? (y/n): ")
+				setDefaultGenModelInput, _ := reader.ReadString('\n')
+				if strings.TrimSpace(strings.ToLower(setDefaultGenModelInput)) == "y" {
+					allModels := getAllConfiguredModelNames(envConfig)
+					if len(allModels) == 0 {
+						fmt.Println("No models are currently configured. Cannot set a default generation model.")
+					} else {
+						fmt.Println("\nAvailable configured models for default generation:")
+						for i, modelName := range allModels {
+							fmt.Printf("%d. %s\n", i+1, modelName)
+						}
+						var selectedDefaultModel string
+						for {
+							fmt.Print("Enter the number of the model to set as default: ")
+							selectionInput, _ := reader.ReadString('\n')
+							selectionNum, err := strconv.Atoi(strings.TrimSpace(selectionInput))
+							if err != nil || selectionNum < 1 || selectionNum > len(allModels) {
+								fmt.Println("Invalid selection. Please enter a number from the list.")
+								continue
+							}
+							selectedDefaultModel = allModels[selectionNum-1]
+							break
+						}
+						envConfig.DefaultGenerationModel = selectedDefaultModel
+						fmt.Printf("%s Default generation model set to '%s'\n", greenCheckmark, selectedDefaultModel)
+					}
+				}
+			}
 		}
 
 		// Create parent directory if it doesn't exist
@@ -682,6 +768,11 @@ func listConfiguration() {
 	}
 
 	fmt.Printf("Configuration from %s:\n\n", configPath)
+
+	// List default generation model
+	if envConfig.DefaultGenerationModel != "" {
+		fmt.Printf("Default Generation Model: %s\n\n", envConfig.DefaultGenerationModel)
+	}
 
 	// List server configuration if it exists
 	if server := envConfig.GetServerConfig(); server != nil {
@@ -744,5 +835,7 @@ func init() {
 	configureCmd.Flags().StringVar(&removeFlag, "remove", "", "Remove a model by name")
 	configureCmd.Flags().StringVar(&updateKeyFlag, "update-key", "", "Update API key for specified provider")
 	configureCmd.Flags().BoolVar(&databaseFlag, "database", false, "Configure database settings")
+	configureCmd.Flags().StringVar(&setDefaultGenerationModelFlag, "set-default-generation-model", "", "Set the default model for workflow generation")
+	configureCmd.Flags().BoolVar(&defaultFlag, "default", false, "Interactively set the default model for workflow generation")
 	rootCmd.AddCommand(configureCmd)
 }

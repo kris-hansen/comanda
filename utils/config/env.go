@@ -59,9 +59,10 @@ type Provider struct {
 
 // EnvConfig represents the complete environment configuration
 type EnvConfig struct {
-	Providers map[string]*Provider      `yaml:"providers"` // Changed to store pointers to Provider
-	Server    *ServerConfig             `yaml:"server,omitempty"`
-	Databases map[string]DatabaseConfig `yaml:"databases,omitempty"` // Added database configurations
+	Providers              map[string]*Provider      `yaml:"providers"` // Changed to store pointers to Provider
+	Server                 *ServerConfig             `yaml:"server,omitempty"`
+	Databases              map[string]DatabaseConfig `yaml:"databases,omitempty"` // Added database configurations
+	DefaultGenerationModel string                    `yaml:"default_generation_model,omitempty"`
 }
 
 // Verbose indicates whether verbose logging is enabled
@@ -537,4 +538,24 @@ func (c *DatabaseConfig) GetConnectionString() string {
 	default:
 		return ""
 	}
+}
+
+// GetAllConfiguredModels returns a list of all configured models across all providers
+func (c *EnvConfig) GetAllConfiguredModels() []string {
+	var models []string
+
+	if c.Providers == nil {
+		return models
+	}
+
+	for _, provider := range c.Providers {
+		if provider == nil {
+			continue
+		}
+		for _, model := range provider.Models {
+			models = append(models, model.Name)
+		}
+	}
+
+	return models
 }

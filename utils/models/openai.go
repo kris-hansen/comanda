@@ -87,8 +87,8 @@ func (o *OpenAIProvider) Configure(apiKey string) error {
 // isNewModelSeries checks if the model is part of the newer series (4o, o1, o3, o4)
 func (o *OpenAIProvider) isNewModelSeries(modelName string) bool {
 	modelName = strings.ToLower(modelName)
-	return strings.Contains(modelName, "4o") || 
-		strings.HasPrefix(modelName, "o1-") || 
+	return strings.Contains(modelName, "4o") ||
+		strings.HasPrefix(modelName, "o1-") ||
 		strings.HasPrefix(modelName, "o3-") ||
 		strings.HasPrefix(modelName, "o4-") // Support for o4-mini series
 }

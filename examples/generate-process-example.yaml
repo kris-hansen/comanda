@@ -1,0 +1,20 @@
+# Example demonstrating generate and process tags
+# This workflow generates a YAML file with a haiku, then processes it
+
+generate_haiku_workflow:
+  input: NA
+  generate:
+    model: gpt-4o-mini
+    action: |
+      Create a Comanda workflow YAML file that:
+      1. Has a single step called 'create_haiku'
+      2. Uses gpt-4o-mini model
+      3. The action should be to write a beautiful haiku about coding
+      4. Outputs to STDOUT
+      Make it simple and elegant.
+    output: generated_haiku_workflow.yaml
+
+execute_haiku_workflow:
+  input: NA
+  process:
+    workflow_file: generated_haiku_workflow.yaml

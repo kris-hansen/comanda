@@ -1,310 +1,179 @@
-# Comanda YAML DSL Guide
+# Comanda YAML DSL Guide (for LLM Consumption)
 
-This guide explains how to create workflow files for comanda, a tool that orchestrates multi-step workflows involving LLMs, file processing, and data operations.
+This guide specifies the YAML-based Domain Specific Language (DSL) for Comanda workflows, enabling LLMs to generate valid workflow files.
 
 ## Overview
 
-Comanda uses a YAML-based Domain Specific Language (DSL) to define workflows. Each workflow consists of one or more steps that process inputs through models and actions to produce outputs.
+Comanda workflows consist of one or more named steps. Each step performs an operation. There are three main types of steps:
+1.  **Standard Processing Step:** Involves LLMs, file processing, data operations.
+2.  **Generate Step:** Uses an LLM to dynamically create a new Comanda workflow YAML file.
+3.  **Process Step:** Executes another Comanda workflow file (static or dynamically generated).
 
-## Basic Structure
+## Core Workflow Structure
 
-A comanda workflow file follows this basic structure:
+A Comanda workflow is a YAML map where each key is a `step_name` (string, user-defined), mapping to a dictionary defining the step.
 
+```yaml
+# Example of a workflow structure
+workflow_step_1:
+  # ... step definition ...
+another_step_name:
+  # ... step definition ...
+```
+
+## 1. Standard Processing Step Definition
+
+This is the most common step type.
+
+**Basic Structure:**
 ```yaml
 step_name:
   input: [input source]
   model: [model name]
   action: [action to perform / prompt provided]
   output: [output destination]
+  type: [optional, e.g., "openai-responses"] # Specifies specialized handling
+  batch_mode: [individual|combined] # Optional, for multi-file inputs
+  skip_errors: [true|false] # Optional, for multi-file inputs
+  # ... other type-specific fields for "openai-responses" like 'instructions', 'tools', etc.
 ```
 
-Each step must include these four key elements:
-- `input`: Source of data (file paths, STDIN, or special inputs)
-- `model`: LLM model to use (or "NA" if no model needed)
-- `action`: Instructions or operations to perform
-- `output`: Where to send the results (file paths or STDOUT)
+**Key Elements:**
+- `input`: (Required for most, can be `NA`) Source of data. See "Input Types".
+- `model`: (Required, can be `NA`) LLM model to use. See "Models".
+- `action`: (Required for most) Instructions or operations. See "Actions".
+- `output`: (Required) Destination for results. See "Outputs".
+- `type`: (Optional) Specifies a specialized handler for the step, e.g., `openai-responses`. If omitted, it's a general-purpose LLM or NA step.
+- `batch_mode`: (Optional, default: `combined`) For steps with multiple file inputs, defines if files are processed `combined` into one LLM call or `individual`ly.
+- `skip_errors`: (Optional, default: `false`) If `batch_mode: individual`, determines if processing continues if one file fails.
 
-## Input Types
+**OpenAI Responses API Specific Fields (used when `type: openai-responses`):**
+- `instructions`: (string) System message for the LLM.
+- `tools`: (list of maps) Configuration for tools/functions the LLM can call.
+- `previous_response_id`: (string) ID of a previous response for maintaining conversation state.
+- `max_output_tokens`: (int) Token limit for the LLM response.
+- `temperature`: (float) Sampling temperature.
+- `top_p`: (float) Nucleus sampling (top-p).
+- `stream`: (bool) Whether to stream the response.
+- `response_format`: (map) Specifies response format, e.g., `{ type: "json_object" }`.
 
-Inputs can be specified in several ways:
 
-1. File paths:
+## 2. Generate Step Definition (`generate`)
+
+This step uses an LLM to dynamically create a new Comanda workflow YAML file.
+
+**Structure:**
 ```yaml
-input: examples/myfile.txt
+step_name_for_generation:
+  input: [optional_input_source_for_context, or NA] # e.g., STDIN, a file with requirements
+  generate:
+    model: [llm_model_for_generation, optional] # e.g., gpt-4o-mini. Uses default if omitted.
+    action: [prompt_for_workflow_generation] # Natural language instruction for the LLM.
+    output: [filename_for_generated_yaml] # e.g., new_workflow.yaml
+    context_files: [list_of_files_for_additional_context, optional] # e.g., [schema.txt, examples.yaml]
 ```
+**`generate` Block Attributes:**
+- `model`: (string, optional) Specifies the LLM to use for generation. If omitted, uses the `default_generation_model` configured in Comanda. You can set or update this default model by running `comanda configure` and following the prompts for setting a default generation model.
+- `action`: (string, required) The natural language instruction given to the LLM to guide the workflow generation.
+- `output`: (string, required) The filename where the generated Comanda workflow YAML file will be saved.
+- `context_files`: (list of strings, optional) A list of file paths to provide as additional context to the LLM, beyond the standard Comanda DSL guide (which is implicitly included).
+- **Note:** The `input` field for a `generate` step is optional. If provided (e.g., `STDIN` or a file path), its content will be added to the context for the LLM generating the workflow. If not needed, use `input: NA`.
 
-2. Previous step output:
+## 3. Process Step Definition (`process`)
+
+This step executes another Comanda workflow file.
+
+**Structure:**
 ```yaml
-input: STDIN
+step_name_for_processing:
+  input: [optional_input_source_for_sub_workflow, or NA] # e.g., STDIN to pass data to the sub-workflow
+  process:
+    workflow_file: [path_to_comanda_yaml_to_execute] # e.g., generated_workflow.yaml or existing_flow.yaml
+    inputs: {key1: value1, key2: value2, optional} # Map of inputs to pass to the sub-workflow.
+    # capture_outputs: [list_of_outputs_to_capture, optional] # Future: Define how to capture specific outputs.
 ```
+**`process` Block Attributes:**
+- `workflow_file`: (string, required) The path to the Comanda workflow YAML file to be executed. This can be a statically defined path or the output of a `generate` step.
+- `inputs`: (map, optional) A map of key-value pairs to pass as initial variables to the sub-workflow. These can be accessed within the sub-workflow (e.g., as `$parent.key1`).
+- **Note:** The `input` field for a `process` step is optional. If `input: STDIN` is used, the output of the previous step in the parent workflow will be available as the initial `STDIN` for the *first* step of the sub-workflow if that first step expects `STDIN`.
 
-3. Multiple inputs:
-```yaml
-input: 
-  - file1.txt
-  - file2.txt
-```
+## Common Elements (for Standard Steps)
 
-4. Web scraping:
-```yaml
-input:
-  url: "https://example.com"
-```
+### Input Types
+- File path: `input: path/to/file.txt`
+- Previous step output: `input: STDIN`
+- Multiple file paths: `input: [file1.txt, file2.txt]`
+- Web scraping: `input: { url: "https://example.com" }` (Further scrape config under `scrape_config` map if needed)
+- Database query: `input: { database: { type: "postgres", query: "SELECT * FROM users" } }`
+- No input: `input: NA`
+- Input with alias for variable: `input: path/to/file.txt as $my_var`
+- List with aliases: `input: [file1.txt as $file1_content, file2.txt as $file2_content]`
 
-5. Database queries:
-```yaml
-input:
-  database:
-    type: postgres
-    query: "SELECT * FROM users"
-```
+### Models
+- Single model: `model: gpt-4o-mini`
+- No model (for non-LLM operations): `model: NA`
+- Multiple models (for comparison): `model: [gpt-4o-mini, claude-3-opus-20240229]`
 
-## Models
+### Actions
+- Single instruction: `action: "Summarize this text."`
+- Multiple sequential instructions: `action: ["Action 1", "Action 2"]`
+- Reference variable: `action: "Compare with $previous_data."`
+- Reference markdown file: `action: path/to/prompt.md`
 
-The `model` field specifies which LLM to use:
-
-```yaml
-model: gpt-4o-mini  # OpenAI model
-```
-
-Special values:
-- `NA`: No model needed (for non-LLM operations)
-- Multiple models can be specified for comparison:
-```yaml
-model:
-  - gpt-4o-mini
-  - claude-instant
-```
-
-## Actions
-
-Actions define what to do with the input:
-
-1. Simple instructions:
-```yaml
-action: "Analyze this text and provide a summary"
-```
-
-2. Multiple actions:
-```yaml
-action:
-  - "First analyze the content"
-  - "Then extract key points"
-```
-
-3. Variable references:
-```yaml
-action: "Compare this with $previous_analysis"
-```
-
-## Outputs
-
-Outputs define where to send results:
-
-1. Console output:
-```yaml
-output: STDOUT
-```
-
-2. File output:
-```yaml
-output: results.txt
-```
-
-3. Database output:
-```yaml
-output:
-  database:
-    type: postgres
-    table: results
-```
-
-## Multi-step Example
-
-Here's a complete example that processes a CSV file through multiple steps:
-
-```yaml
-step_one:
-  input: data.csv
-  model: gpt-4o-mini
-  action: "Analyze this CSV data and provide a summary of its contents."
-  output: STDOUT
-
-step_two:
-  input: STDIN
-  model: gpt-4o-mini
-  action: "Based on the analysis, identify the top 5 insights"
-  output: insights.txt
-```
+### Outputs
+- Console: `output: STDOUT`
+- File: `output: results.txt`
+- Database: `output: { database: { type: "postgres", table: "results_table" } }`
+- Output with alias (if supported for variable creation from output): `output: STDOUT as $step_output_var`
 
 ## Variables
+- Definition: `input: data.txt as $initial_data`
+- Reference: `action: "Compare this analysis with $initial_data"`
+- Scope: Variables are typically scoped to the workflow. For `process` steps, parent variables are not directly accessible by default; use the `process.inputs` map to pass data.
 
-You can store and reference values between steps:
+## Validation Rules Summary (for LLM)
 
+1.  A step definition must clearly be one of: Standard, Generate, or Process.
+    *   A step cannot mix top-level keys from different types (e.g., a `generate` step should not have a top-level `model` or `output` key; these belong inside the `generate` block).
+2.  **Standard Step:**
+    *   Must contain `input`, `model`, `action`, `output` (unless `type: openai-responses`, where `action` might be replaced by `instructions`).
+    *   `input` can be `NA`. `model` can be `NA`.
+3.  **Generate Step:**
+    *   Must contain a `generate` block.
+    *   `generate` block must contain `action` (string prompt) and `output` (string filename).
+    *   `generate.model` is optional (uses default if omitted).
+    *   Top-level `input` for the step is optional (can be `NA` or provide context).
+4.  **Process Step:**
+    *   Must contain a `process` block.
+    *   `process` block must contain `workflow_file` (string path).
+    *   `process.inputs` is optional.
+    *   Top-level `input` for the step is optional (can be `NA` or `STDIN` to pipe to sub-workflow).
+
+## Chaining and Examples
+
+(Existing Chaining Workflow Steps and Common Patterns sections can remain largely as-is, but ensure examples are consistent with the three step types if showcasing meta-processing.)
+
+**Meta-Processing Example:**
 ```yaml
-step_one:
-  input: data.txt as $initial_data
-  model: gpt-4o-mini
-  action: "Analyze this text"
-  output: STDOUT
+gather_requirements:
+  input: requirements_document.txt
+  model: claude-3-opus-20240229
+  action: "Based on the input document, define the core tasks for a data processing workflow. Output as a concise list."
+  output: STDOUT as $task_list
 
-step_two:
-  input: STDIN
-  model: gpt-4o-mini
-  action: "Compare this analysis with $initial_data"
-  output: STDOUT
+generate_data_workflow:
+  input: $task_list # Using output from previous step as context
+  generate:
+    model: gpt-4o-mini # LLM to generate the workflow
+    action: "Generate a Comanda workflow YAML to perform the tasks described in the input. The workflow should read 'raw_data.csv', perform transformations, and save to 'processed_data.csv'."
+    output: dynamic_data_processor.yaml # Filename for the generated workflow
+
+execute_data_workflow:
+  input: NA # Or potentially STDIN if dynamic_data_processor.yaml's first step expects it
+  process:
+    workflow_file: dynamic_data_processor.yaml # Execute the generated workflow
+    # inputs: { source_file: "override_data.csv" } # Optional: override inputs for the sub-workflow
+  output: STDOUT # Log output of the process step itself (e.g., success/failure)
 ```
 
-## Validation Rules
-
-1. Each step must have all four main elements: input, model, action, and output
-2. Input tags must be present (can be empty or NA)
-3. At least one model must be specified (can be NA)
-4. At least one action is required
-5. At least one output destination is required
-
-## Best Practices
-
-1. Use meaningful step names that describe their purpose
-2. Break complex workflows into clear, focused steps
-3. Use STDIN to chain step outputs together
-4. Store intermediate results in variables when needed for later comparison
-5. Use STDOUT for debugging and final results
-6. Leverage specialized input types (database, URL) for data acquisition
-
-## Chaining Workflow Steps
-
-Comanda provides several patterns for chaining steps together. Here are the main approaches with examples:
-
-### 1. Using STDIN/STDOUT Chain
-
-The most direct way to chain steps is using STDOUT and STDIN:
-
-```yaml
-extract_data:
-  input: source.txt
-  model: gpt-4o-mini
-  action: "Extract key information from this document"
-  output: STDOUT
-
-analyze_data:
-  input: STDIN  # Uses output from previous step
-  model: gpt-4o-mini
-  action: "Analyze the extracted information and provide insights"
-  output: STDOUT
-
-summarize_insights:
-  input: STDIN  # Uses output from previous step
-  model: gpt-4o-mini
-  action: "Create a concise summary of these insights"
-  output: final_summary.txt
-```
-
-### 2. Using Intermediate Files
-
-When you need to reference intermediate results later or process them separately:
-
-```yaml
-generate_analysis:
-  input: raw_data.txt
-  model: gpt-4o-mini
-  action: "Perform detailed analysis of this data"
-  output: analysis_results.txt  # Saved to file for later use
-
-create_recommendations:
-  input: analysis_results.txt  # Uses file from previous step
-  model: gpt-4o-mini
-  action: "Generate recommendations based on the analysis"
-  output: recommendations.txt
-
-summarize_all:
-  input:  # Using multiple input files
-    - analysis_results.txt
-    - recommendations.txt
-  model: gpt-4o-mini
-  action: "Create an executive summary combining the analysis and recommendations"
-  output: executive_summary.txt
-```
-
-### 3. Hybrid Approach (Files + STDIN)
-
-Combining file-based and STDIN chaining for complex workflows:
-
-```yaml
-initial_analysis:
-  input: data.txt
-  model: gpt-4o-mini
-  action: "Analyze this data and categorize findings"
-  output: categories.txt  # Save categories for later reference
-
-process_categories:
-  input: categories.txt
-  model: gpt-4o-mini
-  action: "Process these categories and suggest improvements"
-  output: STDOUT  # Pass directly to next step
-
-refine_results:
-  input: STDIN
-  model: gpt-4o-mini
-  action: "Refine these suggestions and create action items"
-  output: action_items.txt
-```
-
-### 4. Parallel Processing with File Outputs
-
-When you need to process data in parallel and combine results:
-
-```yaml
-analyze_section_1:
-  input: data_part1.txt
-  model: gpt-4o-mini
-  action: "Analyze this section of data"
-  output: section1_analysis.txt
-
-analyze_section_2:
-  input: data_part2.txt
-  model: gpt-4o-mini
-  action: "Analyze this section of data"
-  output: section2_analysis.txt
-
-combine_analyses:
-  input:
-    - section1_analysis.txt
-    - section2_analysis.txt
-  model: gpt-4o-mini
-  action: "Compare and combine these analyses into a unified report"
-  output: final_report.txt
-```
-
-## Common Patterns
-
-1. Data Analysis:
-```yaml
-analyze:
-  input: data.csv
-  model: gpt-4o-mini
-  action: "Analyze this data and provide insights"
-  output: STDOUT
-```
-
-2. Content Generation:
-```yaml
-generate:
-  input: requirements.txt
-  model: gpt-4o-mini
-  action: "Generate content based on these requirements"
-  output: content.md
-```
-
-3. Multi-model Comparison:
-```yaml
-compare:
-  input: prompt.txt
-  model:
-    - gpt-4o-mini
-    - claude-instant
-  action: "Solve this problem"
-  output: comparison.txt
-```
-
-This guide covers the core concepts and syntax of comanda's YAML DSL. LLMs can use this structure to generate valid workflow files that orchestrate complex operations involving model interactions, file processing, and data handling.
+This guide covers the core concepts and syntax of Comanda's YAML DSL, including meta-processing capabilities. LLMs should use this structure to generate valid workflow files.

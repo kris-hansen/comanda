@@ -257,6 +257,28 @@ Enter new API key: sk-...
 Successfully updated API key for provider 'openai'
 ```
 
+### Setting Default Model for Generation
+
+You can set a default model for the `comanda generate` command, which creates YAML workflows from natural language prompts:
+
+```bash
+# Interactively set default model
+comanda configure --default
+
+# Or set directly
+comanda configure --set-default-generation-model gpt-4
+```
+
+Once set, you can use `comanda generate` without specifying a model:
+
+```bash
+# Uses the default model
+comanda generate my_workflow.yaml "Create a workflow to analyze CSV files"
+
+# Override the default with a specific model
+comanda generate my_workflow.yaml "Create a workflow to analyze CSV files" --model claude-3-opus
+```
+
 When configuring a model that already exists, you'll be prompted to update its mode. This allows you to change a model's capabilities without removing and re-adding it.
 
 Example configuration output:
