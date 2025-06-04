@@ -151,7 +151,7 @@ step_name_for_processing:
 
 ## Chaining and Examples
 
-(Existing Chaining Workflow Steps and Common Patterns sections can remain largely as-is, but ensure examples are consistent with the three step types if showcasing meta-processing.)
+Steps can be "chained together" by either passing STDOUT from one step to STDIN of the next step or by writing to a file and then having subsequent steps take this file as input.
 
 **Meta-Processing Example:**
 ```yaml
@@ -159,10 +159,10 @@ gather_requirements:
   input: requirements_document.txt
   model: claude-3-opus-20240229
   action: "Based on the input document, define the core tasks for a data processing workflow. Output as a concise list."
-  output: STDOUT as $task_list
+  output: STDOUT
 
 generate_data_workflow:
-  input: $task_list # Using output from previous step as context
+  input: STDIN # Using output from previous step as context
   generate:
     model: gpt-4o-mini # LLM to generate the workflow
     action: "Generate a Comanda workflow YAML to perform the tasks described in the input. The workflow should read 'raw_data.csv', perform transformations, and save to 'processed_data.csv'."
