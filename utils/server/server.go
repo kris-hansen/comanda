@@ -378,6 +378,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/process", s.combinedMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		handleProcess(w, r, s.config, s.envConfig)
 	}))
+
+	// Generate endpoint - requires auth
+	s.mux.HandleFunc("/generate", s.combinedMiddleware(s.handleGenerate))
 }
 
 // Run creates and starts the HTTP server with the given configuration

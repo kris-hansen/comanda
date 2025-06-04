@@ -20,6 +20,10 @@ type StepConfig struct {
 	TopP               float64                  `yaml:"top_p"`                // Top-p sampling
 	Stream             bool                     `yaml:"stream"`               // Whether to stream the response
 	ResponseFormat     map[string]interface{}   `yaml:"response_format"`      // Format specification (e.g., JSON)
+
+	// Meta-processing fields
+	Generate *GenerateStepConfig `yaml:"generate,omitempty"` // Configuration for generating a workflow
+	Process  *ProcessStepConfig  `yaml:"process,omitempty"`  // Configuration for processing a sub-workflow
 }
 
 // Step represents a named step in the DSL

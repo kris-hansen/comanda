@@ -20,7 +20,6 @@ components:
       properties:
         success:
           type: boolean
-          enum: [true]
         message:
           type: string
       required:
@@ -31,7 +30,6 @@ components:
       properties:
         success:
           type: boolean
-          enum: [false]
         error:
           type: string
       required:
@@ -66,7 +64,6 @@ components:
       properties:
         success:
           type: boolean
-          enum: [true]
         providers:
           type: array
           items:
@@ -118,7 +115,6 @@ components:
       properties:
         success:
           type: boolean
-          enum: [true]
         models:
           type: array
           items:
@@ -131,7 +127,6 @@ components:
       properties:
         success:
           type: boolean
-          enum: [true]
         models:
           type: array
           items:
@@ -218,7 +213,6 @@ components:
       properties:
         success:
           type: boolean
-          enum: [true]
         files:
           type: array
           items:
@@ -242,9 +236,9 @@ components:
       properties:
         files:
           type: array
+          description: List of file paths to delete
           items:
             type: string
-          description: List of file paths to delete
       required:
         - files
 
@@ -1148,6 +1142,96 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+
+  /generate:
+    post:
+      summary: Generate Workflow YAML
+      description: |
+        Generate a new Comanda workflow YAML file using an LLM based on a natural language prompt.
+        The endpoint uses the specified model or falls back to the default_generation_model from configuration.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                prompt:
+                  type: string
+                  description: Natural language description of the workflow to create
+                model:
+                  type: string
+                  description: Optional model to use for generation (uses default_generation_model if not specified)
+              required:
+                - prompt
+            example:
+              prompt: "Create a workflow to read a CSV file and summarize its contents"
+              model: "gpt-4o-mini"
+      responses:
+        '200':
+          description: Workflow generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  yaml:
+                    type: string
+                    description: Generated YAML workflow content
+                  model:
+                    type: string
+                    description: Model used for generation
+                required:
+                  - success
+                  - yaml
+                  - model
+              example:
+                success: true
+                yaml: |
+                  step_one:
+                    model: gpt-4o-mini
+                    input: FILE
+                    action: Read the CSV file and analyze its structure
+                    output: STDOUT
+                  
+                  step_two:
+                    model: gpt-4o-mini
+                    input: LAST_OUTPUT
+                    action: Summarize the CSV data
+                    output: STDOUT
+                model: "gpt-4o-mini"
+        '400':
+          description: Bad request (e.g., missing prompt or no model configured)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                missing_prompt:
+                  value:
+                    success: false
+                    error: "Prompt is required"
+                no_model:
+                  value:
+                    success: false
+                    error: "No model specified and no default_generation_model configured"
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error (e.g., LLM execution failed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                success: false
+                error: "LLM execution failed: connection timeout"
 
   /process:
     post:
