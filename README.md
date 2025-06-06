@@ -1,20 +1,33 @@
 ![robot image](comanda-small.jpg)
 
-# COMandA (Chain of Models and Actions)
+# COMandA (Chain Of Models and Actions)
 
-Comanda is an inference engine which processes chains of LLM workflow steps.
+Transform and process data with AI-powered workflows. **COMandA** is the command-line LLM orchestration engine that lets you build, chain, and deploy AI processing pipelines using simple YAML configurations.
 
-Think of each step in a YAML file as the equivalent of a Lego block. You can chain these blocks together to create more complex structures which can help solve problems. Steps are composed of inputs, models, actions and outputs and there can be different step types.
+comanda acts as a robust infrastructure layer for your AI tasks, similar to how Docker provides a platform for containerization. It empowers developers to define, manage, and execute complex LLM-based processes directly from the command line, integrating seamlessly into existing development and deployment environments.
 
-Comanda allows you to use the best provider and model for each step and compose workflows that combine the strengths of different LLMs. It supports multiple LLM providers (Anthropic, Deepseek, Google, Local models via Ollama, OpenAI, and X.AI) and offers the ability to chain these models together by passing outputs from one step to inputs in the next step.
+## Why comanda? Key Differentiators
 
-# Getting Started with COMandA
+comanda is engineered to be a powerful and developer-centric LLM orchestration tool. Here's how it stands out:
 
-This guide will walk you through the initial steps to get COMandA up and running.
+*   **🔧 Command-line Native:** Compiles directly into your system PATH. You can pipe to it or from it.
+    *   **Benefit:** Enables seamless integration with your existing scripts, CI/CD pipelines, and development workflows. Manage AI processes with the simplicity of standard command-line utilities.
+*   **🤖 Self-improving Workflows:** Create agentic workflows that can generate and optimize new processing pipelines automatically.
+    *   **Benefit:** Build sophisticated systems that adapt and learn, allowing for dynamic and intelligent automation of complex tasks.
+*   **🌐 Server Mode:** Abstract multiple LLM providers (OpenAI, Anthropic, Google, Ollama, etc.) behind a unified API.
+    *   **Benefit:** Achieve consistent and scalable inference across diverse models. Easily switch providers or integrate new models without overhauling your application logic.
+*   **📄 Declarative YAML Workflows:** Define complex multi-step AI processes using simple, human-readable YAML.
+    *   **Benefit:** Easily version, share, and manage your AI pipelines. Focus on the logic of your workflows, not on boilerplate code.
+*   **🚀 Rapid Prototyping & Generation:** Generate executable comanda YAML workflows from natural language prompts.
+    *   **Benefit:** Quickly bootstrap new AI tasks and iterate faster, significantly reducing development time for new pipelines.
 
-## 1. Installation
+## 🚀 Quick Start
 
-First, you need to get the COMandA binary. You have a few options:
+This guide will walk you through the initial steps to get comanda up and running.
+
+### 1. Installation
+
+First, you need to get the comanda binary. You have a few options:
 
 *   **Download a Pre-built Binary:** The quickest way is to download a binary for your operating system from our [GitHub Releases page](https://github.com/kris-hansen/comanda/releases).
 *   **Install via Go:** If you have Go installed, you can use `go install github.com/kris-hansen/comanda@latest`.
@@ -24,9 +37,9 @@ For detailed instructions, please refer to the [Installation](#installation) sec
 
 ![Comanda Install Demo](comanda-install.gif)
 
-## 2. Initial Configuration
+### 2. Initial Configuration
 
-Once COMandA is installed, you need to configure your LLM providers. This tells COMandA which models you want to use and provides the necessary API keys. These are stored in an .env file which is by default in the current working directory and can be set with the environment variable see the [Configuration](#configuration) section for more information on this.
+Once comanda is installed, you need to configure your LLM providers. This tells comanda which models you want to use and provides the necessary API keys. These are stored in an .env file which is by default in the current working directory and can be set with the environment variable see the [Configuration](#configuration) section for more information on this.
 
 Run the following command in your terminal:
 
@@ -45,9 +58,9 @@ Repeat this for each provider you intend to use. Your configuration, including A
 
 ![Comanda configure demo](comanda-configure.gif)
 
-## 3. Your First COMandA Workflow
+### 3. Your First comanda Workflow
 
-COMandA uses YAML files to define workflows. A workflow consists of one or more steps, where each step performs an action, often involving an LLM.
+comanda uses YAML files to define workflows. A workflow consists of one or more steps, where each step performs an action, often involving an LLM.
 
 Let's create a very simple workflow. Create a file named `hello_world.yaml` with the following content:
 
@@ -75,11 +88,11 @@ To run this workflow, use the `process` command:
 comanda process hello_world.yaml
 ```
 
-You should see the LLM's welcome message printed in your terminal!
+You should see the LLM's haiku printed in your terminal!
 
 ![Comanda process example](comanda-process.gif)
 
-This is just a basic example. COMandA can do much more, including chaining multiple steps, working with files, processing images, and interacting with web content.
+This is just a basic example. comanda can do much more, including chaining multiple steps, working with files, processing images, and interacting with web content.
 
 Build more robust agentic workflows by:
 *  Chaining steps together by having the output of some steps feed the input of other steps
@@ -139,7 +152,7 @@ go build
 
 ### Environment File
 
-COMandA uses an environment file to store provider configurations and API keys. By default, it looks for a `.env` file in the current directory. You can specify a custom path using the `COMANDA_ENV` environment variable:
+comanda uses an environment file to store provider configurations and API keys. By default, it looks for a `.env` file in the current directory. You can specify a custom path using the `COMANDA_ENV` environment variable:
 
 ```bash
 # Use a specific env file
@@ -152,7 +165,7 @@ COMANDA_ENV=/path/to/your/env/file comanda process your-workflow-file.yaml
 
 ### Configuration Encryption
 
-COMandA supports encrypting your configuration file to protect sensitive information like API keys. The encryption uses AES-256-GCM with password-derived keys, providing strong security against unauthorized access.
+comanda supports encrypting your configuration file to protect sensitive information like API keys. The encryption uses AES-256-GCM with password-derived keys, providing strong security against unauthorized access.
 
 To encrypt your configuration:
 ```bash
@@ -191,7 +204,7 @@ This will prompt for the password if the configuration is encrypted.
 
 ### Provider Configuration
 
-Users updating an existing COMandA installation may need to run `comanda configure` to select and enable these new models.
+Users updating an existing comanda installation may need to run `comanda configure` to select and enable these new models.
 A guide for adding new models to existing providers can be found in [docs/adding-new-model-guide.md](docs/adding-new-model-guide.md).
 
 Configure your providers and models using the interactive configuration command:
@@ -331,7 +344,7 @@ anthropic:
   - claude-sonnet-4-20250514 (external)
     Modes: text, vision, multi, file
 
-Users updating an existing COMandA installation may need to run `comanda configure` to select and enable these new models.
+Users updating an existing comanda installation may need to run `comanda configure` to select and enable these new models.
 A guide for adding new models to existing providers can be found in [docs/adding-new-model-guide.md](docs/adding-new-model-guide.md).
 
 deepseek:
@@ -359,7 +372,7 @@ google:
 
 ### Server Configuration
 
-COMandA can run as an HTTP server, allowing you to process chains of models and actions defined in YAML files via HTTP requests. The server is managed using the `server` command:
+comanda can run as an HTTP server, allowing you to process chains of models and actions defined in YAML files via HTTP requests. The server is managed using the `server` command:
 
 ```bash
 # Start the server
@@ -827,7 +840,7 @@ Example server log:
 
 ### Supported File Types
 
-COMandA supports various file types for input:
+comanda supports various file types for input:
 
 - Text files: `.txt`, `.md`, `.yml`, `.yaml`
 - Image files: `.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`
@@ -843,9 +856,9 @@ Images are automatically optimized for processing:
 - PNG compression is applied to reduce token usage while maintaining quality
 - These optimizations help prevent rate limit errors and ensure efficient processing
 
-The screenshot feature allows you to capture the current screen state for analysis. When you specify `screenshot` as the input in your Workflow file, COMandA will automatically capture the entire screen and pass it to the specified model for analysis. This is particularly useful for UI analysis, bug reports, or any scenario where you need to analyze the current screen state.
+The screenshot feature allows you to capture the current screen state for analysis. When you specify `screenshot` as the input in your Workflow file, comanda will automatically capture the entire screen and pass it to the specified model for analysis. This is particularly useful for UI analysis, bug reports, or any scenario where you need to analyze the current screen state.
 
-For URL inputs, COMandA automatically:
+For URL inputs, comanda automatically:
 
 - Detects and validates URLs in input fields
 - Fetches content with appropriate error handling
@@ -958,7 +971,7 @@ analyze:
 
 ### Parallel Processing
 
-Comanda supports parallel processing of independent steps to improve performance. This is particularly useful for tasks that don't depend on each other, such as:
+comanda supports parallel processing of independent steps to improve performance. This is particularly useful for tasks that don't depend on each other, such as:
 
 - Running the same prompt against multiple models for comparison
 - Processing multiple files independently
@@ -1069,7 +1082,7 @@ Certainly! Here are some snappy taglines for each of the company names that coul
 
 ## Database Operations
 
-Comanda supports database operations as input and output in the YAML workflow. Currently, PostgreSQL is supported.
+comanda supports database operations as input and output in the YAML workflow. Currently, PostgreSQL is supported.
 
 ### Database Configuration
 
@@ -1156,13 +1169,13 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Citation
 
-If you use COMandA in your research or academic work, please cite it as follows:
+If you use comanda in your research or academic work, please cite it as follows:
 
 ### BibTeX
 ```bibtex
 @software{comanda2024,
   author       = {Hansen, Kris},
-  title        = {COMandA: Chain of Models and Actions},
+  title        = {comanda: Chain of Models and Actions},
   year         = {2024},
   publisher    = {GitHub},
   url          = {https://github.com/kris-hansen/comanda},
