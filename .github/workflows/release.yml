@@ -1,4 +1,4 @@
-name: Build and Release
+name: Build, Release, and Bottle
 
 on:
   push:
@@ -6,13 +6,16 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: write # Needed for creating releases, tags, and uploading assets to this repo
 
 jobs:
   test-and-release:
     runs-on: ubuntu-latest
+    outputs: # Define job outputs to be used by the next job
+      new_version_val: ${{ steps.tag_version.outputs.new_version_val }}
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -28,33 +31,30 @@ jobs:
         id: get_latest_tag
         run: |
           git fetch --tags
-          latest_tag=$(git describe --tags `git rev-list --tags --max-count=1` 2>/dev/null || echo "v0.0.0")
+          latest_tag=$(git describe --tags $(git rev-list --tags --max-count=1) 2>/dev/null || echo "v0.0.0")
           echo "LATEST_TAG=$latest_tag" >> $GITHUB_ENV
 
       - name: Bump version and push tag
-        id: tag_version
+        id: tag_version # Step ID for output
         run: |
-          # Parse the latest version
           version=${LATEST_TAG#v}
           IFS='.' read -ra ADDR <<< "$version"
           major="${ADDR[0]:-0}"
           minor="${ADDR[1]:-0}"
           patch="${ADDR[2]:-0}"
           
-          # Increment patch version
           patch=$((patch + 1))
-          
-          # Create new version
           new_version="v$major.$minor.$patch"
           
-          # Create and push new tag
           git tag $new_version
           git push origin $new_version
           echo "NEW_VERSION=$new_version" >> $GITHUB_ENV
+          echo "new_version_val=$new_version" >> $GITHUB_OUTPUT # Output for other jobs
 
       - name: Build Release Binaries
         run: |
           platforms=("windows/amd64" "windows/386" "darwin/amd64" "darwin/arm64" "linux/amd64" "linux/386" "linux/arm64")
+          mkdir -p dist # Ensure dist directory exists
           for platform in "${platforms[@]}"
           do
             platform_split=(${platform//\// })
@@ -75,7 +75,7 @@ jobs:
           done
 
       - name: Create Release
-        id: create_release
+        id: create_release # Step ID for output (upload_url)
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ env.NEW_VERSION }}
@@ -90,3 +90,167 @@ jobs:
             dist/comanda-linux-amd64
             dist/comanda-linux-386
             dist/comanda-linux-arm64
+
+  bottle-and-publish-tap:
+    name: Bottle and Publish Tap (darwin/arm64)
+    needs: test-and-release
+    runs-on: macos-14 # ARM-based runner for arm64 bottles
+    env:
+      NEW_VERSION: ${{ needs.test-and-release.outputs.new_version_val }}
+      TAP_OWNER: kris-hansen
+      TAP_REPO_NAME: homebrew-comanda
+      FORMULA_NAME: comanda.rb
+      COMMA_REPO_OWNER: kris-hansen
+      COMMA_REPO_NAME: comanda
+      HOMEBREW_NO_AUTO_UPDATE: 1 # Speed up brew commands
+      HOMEBREW_NO_INSTALL_CLEANUP: 1 # Speed up brew commands
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Install jq (if not present)
+        run: brew install jq
+
+      - name: Checkout Homebrew Tap Repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.TAP_OWNER }}/${{ env.TAP_REPO_NAME }}
+          path: homebrew-tap # Checkout to a specific subdirectory
+          token: ${{ secrets.TAP_GITHUB_TOKEN }} # PAT with repo scope for the tap
+
+      - name: Download Source Tarball and Calculate SHA256
+        run: |
+          SOURCE_TARBALL_URL="https://github.com/${{ env.COMMA_REPO_OWNER }}/${{ env.COMMA_REPO_NAME }}/archive/refs/tags/${{ env.NEW_VERSION }}.tar.gz"
+          echo "Downloading source tarball from $SOURCE_TARBALL_URL"
+          curl -L -o comanda-src.tar.gz "$SOURCE_TARBALL_URL"
+          SOURCE_SHA256=$(shasum -a 256 comanda-src.tar.gz | awk '{ print $1 }')
+          echo "SOURCE_SHA256=$SOURCE_SHA256" >> $GITHUB_ENV
+          echo "Calculated SHA256 for source: $SOURCE_SHA256"
+
+      - name: Update Formula File
+        working-directory: ./homebrew-tap
+        run: |
+          FORMULA_FILE="${{ env.FORMULA_NAME }}"
+          # Remove 'v' prefix for version number
+          VERSION_NO_V=$(echo "${{ env.NEW_VERSION }}" | sed 's/^v//')
+          
+          echo "Updating $FORMULA_FILE for version $VERSION_NO_V"
+          # Update version
+          sed -i.bak "s/^  version .*/  version \"${VERSION_NO_V}\"/" "$FORMULA_FILE"
+          # Update URL
+          sed -i.bak "s|^  url .*|  url \"https://github.com/${{ env.COMMA_REPO_OWNER }}/${{ env.COMMA_REPO_NAME }}/archive/refs/tags/${{ env.NEW_VERSION }}.tar.gz\"|" "$FORMULA_FILE"
+          # Update sha256 for the source tarball
+          sed -i.bak "s/^  sha256 .*/  sha256 \"${{ env.SOURCE_SHA256 }}\"/" "$FORMULA_FILE"
+          # Remove existing bottle block
+          sed -i.bak '/^[[:space:]]*bottle do/,/^[[:space:]]*end/d' "$FORMULA_FILE"
+          rm -f "${FORMULA_FILE}.bak"
+          
+          echo "--- Updated $FORMULA_FILE (Initial) ---"
+          cat "$FORMULA_FILE"
+          echo "---------------------------------------"
+
+      - name: Build and Bottle comanda
+        working-directory: ./homebrew-tap
+        run: |
+          brew uninstall "${{ env.FORMULA_NAME }}" || true # Ensure no old version is present
+          # Install dependencies of the formula, if any, and then the formula itself, building it from source.
+          echo "Installing ${{ env.FORMULA_NAME }} with --build-bottle..."
+          brew install --build-bottle "${{ env.FORMULA_NAME }}"
+          
+          # Create the bottle and JSON manifest.
+          # The root URL points to where bottles will be downloadable from (GitHub Releases).
+          echo "Generating bottle and JSON manifest..."
+          brew bottle --json --root-url "https://github.com/${{ env.COMMA_REPO_OWNER }}/${{ env.COMMA_REPO_NAME }}/releases/download/${{ env.NEW_VERSION }}" "${{ env.FORMULA_NAME }}"
+          
+          echo "Bottling complete. Listing generated files:"
+          ls -l comanda--*.bottle.tar.gz comanda--*.json
+
+      - name: Extract Bottle Information
+        working-directory: ./homebrew-tap
+        id: bottle_info
+        run: |
+          FORMULA_BASENAME="comanda" # Base name of the formula for JSON parsing
+          # Remove 'v' prefix for version number
+          JSON_VERSION=$(echo "${{ env.NEW_VERSION }}" | sed 's/^v//')
+          BOTTLE_JSON_FILE="${FORMULA_BASENAME}--${JSON_VERSION}.json"
+
+          if [ ! -f "$BOTTLE_JSON_FILE" ]; then
+            echo "Error: Bottle JSON file ($BOTTLE_JSON_FILE) not found."
+            ls -la # List files for debugging
+            exit 1
+          fi
+          echo "Found bottle JSON: $BOTTLE_JSON_FILE. Contents:"
+          cat "$BOTTLE_JSON_FILE"
+
+          # Determine the correct bottle tag (e.g., arm64_sonoma for macos-14)
+          BOTTLE_TAG_KEY=$(jq -r ".${FORMULA_BASENAME}.bottle.files | keys_unsorted[] | select(startswith(\"arm64_\"))" "$BOTTLE_JSON_FILE")
+
+          if [ -z "$BOTTLE_TAG_KEY" ]; then
+            echo "Error: Could not find an arm64 bottle tag in $BOTTLE_JSON_FILE"
+            exit 1
+          fi
+          echo "Using bottle tag: $BOTTLE_TAG_KEY"
+
+          # The filename of the actual bottle file generated locally
+          LOCAL_BOTTLE_FILENAME="${FORMULA_BASENAME}--${JSON_VERSION}.${BOTTLE_TAG_KEY}.bottle.tar.gz"
+
+          if [ ! -f "$LOCAL_BOTTLE_FILENAME" ]; then
+            echo "Error: Expected local bottle file $LOCAL_BOTTLE_FILENAME not found."
+            ls -la
+            exit 1
+          fi
+
+          echo "LOCAL_BOTTLE_FILENAME=$LOCAL_BOTTLE_FILENAME" >> $GITHUB_OUTPUT
+          echo "Extracted Local Bottle Filename: $LOCAL_BOTTLE_FILENAME"
+
+      - name: Upload Bottle to GitHub Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Uses the default GITHUB_TOKEN for this repo
+        with:
+          upload_url: ${{ needs.test-and-release.outputs.upload_url }}
+          asset_path: ./homebrew-tap/${{ steps.bottle_info.outputs.LOCAL_BOTTLE_FILENAME }}
+          asset_name: ${{ steps.bottle_info.outputs.LOCAL_BOTTLE_FILENAME }}
+          asset_content_type: application/gzip
+
+      - name: Update Formula File with New Bottle Block
+        working-directory: ./homebrew-tap
+        run: |
+          FORMULA_BASENAME="comanda"
+          # Remove 'v' prefix for version number
+          JSON_VERSION=$(echo "${{ env.NEW_VERSION }}" | sed 's/^v//')
+          BOTTLE_JSON_FILE="${FORMULA_BASENAME}--${JSON_VERSION}.json"
+
+          if [ ! -f "$BOTTLE_JSON_FILE" ]; then
+            echo "Error: Bottle JSON file ($BOTTLE_JSON_FILE) not found for merge."
+            exit 1
+          fi
+          # The --write flag tells brew bottle --merge to modify the formula file in place.
+          echo "Merging bottle information into ${{ env.FORMULA_NAME }} using $BOTTLE_JSON_FILE..."
+          brew bottle --merge --write "$BOTTLE_JSON_FILE"
+          
+          echo "--- Updated ${{ env.FORMULA_NAME }} (with bottle block) ---"
+          cat "${{ env.FORMULA_NAME }}"
+          echo "---------------------------------------------------------"
+
+      - name: Commit and Push Updated Formula to Tap
+        working-directory: ./homebrew-tap
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add "${{ env.FORMULA_NAME }}"
+          
+          # Check if there are changes to commit
+          if git diff --staged --quiet; then
+            echo "No changes to commit to the formula file."
+          else
+            echo "Committing and pushing changes to tap repository..."
+            git commit -m "Add bottle for comanda ${{ env.NEW_VERSION }} (arm64)"
+            # Determine default branch of tap repo (usually main or master)
+            # Pushing to 'main' branch, adjust if your tap uses a different default branch
+            git push origin HEAD:main
+            echo "Pushed updated formula to ${{ env.TAP_OWNER }}/${{ env.TAP_REPO_NAME }}."
+          fi
