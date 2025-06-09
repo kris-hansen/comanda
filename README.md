@@ -134,6 +134,19 @@ The easiest way to get started is to download a pre-built binary from the [GitHu
 
 Download the appropriate binary for your system, extract it if needed, and place it somewhere in your system's PATH.
 
+### Install via Homebrew (macOS arm)
+
+Mac users can install comanda using Homebrew:
+
+```bash
+# Option 1: Tap and install
+brew tap kris-hansen/comanda
+brew install comanda
+
+# Option 2: Install directly
+brew install kris-hansen/comanda/comanda
+```
+
 ### Install via Go
 
 ```bash
