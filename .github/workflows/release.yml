@@ -190,8 +190,24 @@ jobs:
           brew bottle --json --root-url "https://github.com/${{ env.COMMA_REPO_OWNER }}/${{ env.COMMA_REPO_NAME }}/releases/download/${{ env.NEW_VERSION }}" "$FORMULA_FQN"
           
           echo "Bottling complete. Listing generated files:"
-          # The output files should still be named based on 'comanda' (e.g., comanda--<version>.json)
-          ls -l comanda--*.bottle.tar.gz comanda--*.json
+          # The output files might have different naming patterns
+          ls -la
+          # Find all bottle files (they might have different naming patterns)
+          BOTTLE_FILES=$(find . -name "comanda--*.bottle*.tar.gz")
+          if [ -z "$BOTTLE_FILES" ]; then
+            echo "Warning: No bottle files found with standard pattern. Looking for alternative patterns..."
+            BOTTLE_FILES=$(find . -name "*.bottle*.tar.gz")
+            if [ -z "$BOTTLE_FILES" ]; then
+              echo "Error: No bottle files found at all."
+              exit 1
+            fi
+          fi
+          echo "Found bottle files:"
+          echo "$BOTTLE_FILES"
+          # Find all JSON files
+          JSON_FILES=$(find . -name "comanda--*.json")
+          echo "Found JSON files:"
+          echo "$JSON_FILES"
 
       - name: Extract Bottle Information
         working-directory: ./homebrew-tap
@@ -200,13 +216,19 @@ jobs:
           FORMULA_BASENAME="comanda" # Base name of the formula for JSON parsing
           # Remove 'v' prefix for version number
           JSON_VERSION=$(echo "${{ env.NEW_VERSION }}" | sed 's/^v//')
-          BOTTLE_JSON_FILE="${FORMULA_BASENAME}--${JSON_VERSION}.json"
-
-          if [ ! -f "$BOTTLE_JSON_FILE" ]; then
-            echo "Error: Bottle JSON file ($BOTTLE_JSON_FILE) not found."
+          
+          # Find the JSON file - it might not match the expected pattern exactly
+          BOTTLE_JSON_FILES=$(find . -name "${FORMULA_BASENAME}--*.json")
+          if [ -z "$BOTTLE_JSON_FILES" ]; then
+            echo "Error: No bottle JSON files found."
             ls -la # List files for debugging
             exit 1
           fi
+          
+          # Use the first JSON file found (there should only be one)
+          BOTTLE_JSON_FILE=$(echo "$BOTTLE_JSON_FILES" | head -n 1)
+          BOTTLE_JSON_FILE="${BOTTLE_JSON_FILE#./}" # Remove leading ./
+          
           echo "Found bottle JSON: $BOTTLE_JSON_FILE. Contents:"
           cat "$BOTTLE_JSON_FILE"
 
@@ -219,17 +241,26 @@ jobs:
           fi
           echo "Using bottle tag: $BOTTLE_TAG_KEY"
 
-          # The filename of the actual bottle file generated locally
-          LOCAL_BOTTLE_FILENAME="${FORMULA_BASENAME}--${JSON_VERSION}.${BOTTLE_TAG_KEY}.bottle.tar.gz"
-
-          if [ ! -f "$LOCAL_BOTTLE_FILENAME" ]; then
-            echo "Error: Expected local bottle file $LOCAL_BOTTLE_FILENAME not found."
-            ls -la
-            exit 1
+          # Find the actual bottle file - it might have a different naming pattern
+          # First try the expected pattern
+          EXPECTED_BOTTLE_FILENAME="${FORMULA_BASENAME}--${JSON_VERSION}.${BOTTLE_TAG_KEY}.bottle.tar.gz"
+          if [ -f "$EXPECTED_BOTTLE_FILENAME" ]; then
+            LOCAL_BOTTLE_FILENAME="$EXPECTED_BOTTLE_FILENAME"
+          else
+            # If not found, look for any bottle file with the right tag
+            BOTTLE_FILES=$(find . -name "*${BOTTLE_TAG_KEY}*.bottle*.tar.gz")
+            if [ -z "$BOTTLE_FILES" ]; then
+              echo "Error: No bottle files found matching tag $BOTTLE_TAG_KEY."
+              ls -la
+              exit 1
+            fi
+            # Use the first matching file
+            LOCAL_BOTTLE_FILENAME=$(echo "$BOTTLE_FILES" | head -n 1)
+            LOCAL_BOTTLE_FILENAME="${LOCAL_BOTTLE_FILENAME#./}" # Remove leading ./
           fi
-
+          
+          echo "Using bottle file: $LOCAL_BOTTLE_FILENAME"
           echo "LOCAL_BOTTLE_FILENAME=$LOCAL_BOTTLE_FILENAME" >> $GITHUB_OUTPUT
-          echo "Extracted Local Bottle Filename: $LOCAL_BOTTLE_FILENAME"
 
       - name: Upload Bottle to GitHub Release
         uses: actions/upload-release-asset@v1
@@ -245,14 +276,21 @@ jobs:
         working-directory: ./homebrew-tap
         run: |
           FORMULA_BASENAME="comanda"
-          # Remove 'v' prefix for version number
-          JSON_VERSION=$(echo "${{ env.NEW_VERSION }}" | sed 's/^v//')
-          BOTTLE_JSON_FILE="${FORMULA_BASENAME}--${JSON_VERSION}.json"
-
-          if [ ! -f "$BOTTLE_JSON_FILE" ]; then
-            echo "Error: Bottle JSON file ($BOTTLE_JSON_FILE) not found for merge."
+          
+          # Find the JSON file - it might not match the expected pattern exactly
+          BOTTLE_JSON_FILES=$(find . -name "${FORMULA_BASENAME}--*.json")
+          if [ -z "$BOTTLE_JSON_FILES" ]; then
+            echo "Error: No bottle JSON files found for merge."
+            ls -la # List files for debugging
             exit 1
           fi
+          
+          # Use the first JSON file found (there should only be one)
+          BOTTLE_JSON_FILE=$(echo "$BOTTLE_JSON_FILES" | head -n 1)
+          BOTTLE_JSON_FILE="${BOTTLE_JSON_FILE#./}" # Remove leading ./
+          
+          echo "Using bottle JSON file for merge: $BOTTLE_JSON_FILE"
+          
           # The --write flag tells brew bottle --merge to modify the formula file in place.
           echo "Merging bottle information into ${{ env.FORMULA_NAME }} using $BOTTLE_JSON_FILE..."
           brew bottle --merge --write "$BOTTLE_JSON_FILE"
