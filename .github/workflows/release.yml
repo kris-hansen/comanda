@@ -154,17 +154,28 @@ jobs:
       - name: Build and Bottle comanda
         working-directory: ./homebrew-tap
         run: |
-          brew uninstall "${{ env.FORMULA_NAME }}" || true # Ensure no old version is present
-          # Install dependencies of the formula, if any, and then the formula itself, building it from source.
-          echo "Installing ${{ env.FORMULA_NAME }} with --build-bottle..."
-          brew install --build-bottle "${{ env.FORMULA_NAME }}"
+          # Correct uninstall command: use formula name 'comanda' (not the filename)
+          brew uninstall comanda || true 
+
+          # Determine the conventional tap name (e.g., kris-hansen/comanda from homebrew-comanda)
+          LOCAL_TAP_NAME="${{ env.TAP_OWNER }}/$(echo ${{ env.TAP_REPO_NAME }} | sed 's/^homebrew-//')"
           
-          # Create the bottle and JSON manifest.
-          # The root URL points to where bottles will be downloadable from (GitHub Releases).
-          echo "Generating bottle and JSON manifest..."
-          brew bottle --json --root-url "https://github.com/${{ env.COMMA_REPO_OWNER }}/${{ env.COMMA_REPO_NAME }}/releases/download/${{ env.NEW_VERSION }}" "${{ env.FORMULA_NAME }}"
+          echo "Tapping local repository at $(pwd) as $LOCAL_TAP_NAME"
+          # Tap the current directory (which is ./homebrew-tap) using the conventional tap name
+          brew tap "$LOCAL_TAP_NAME" .
+          
+          # Define the fully qualified name of the formula
+          # Assumes the formula file comanda.rb provides the 'comanda' formula
+          FORMULA_FQN="$LOCAL_TAP_NAME/comanda"
+
+          echo "Installing $FORMULA_FQN with --build-bottle..."
+          brew install --build-bottle "$FORMULA_FQN"
+          
+          echo "Generating bottle and JSON manifest for $FORMULA_FQN..."
+          brew bottle --json --root-url "https://github.com/${{ env.COMMA_REPO_OWNER }}/${{ env.COMMA_REPO_NAME }}/releases/download/${{ env.NEW_VERSION }}" "$FORMULA_FQN"
           
           echo "Bottling complete. Listing generated files:"
+          # The output files should still be named based on 'comanda' (e.g., comanda--<version>.json)
           ls -l comanda--*.bottle.tar.gz comanda--*.json
 
       - name: Extract Bottle Information
