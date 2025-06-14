@@ -43,9 +43,24 @@ jobs:
           minor="${ADDR[1]:-0}"
           patch="${ADDR[2]:-0}"
           
+          # Start with patch + 1
           patch=$((patch + 1))
-          new_version="v$major.$minor.$patch"
           
+          # Keep incrementing patch until we find a tag that doesn't exist
+          while true; do
+            new_version="v$major.$minor.$patch"
+            
+            # Check if tag exists
+            if git rev-parse "$new_version" >/dev/null 2>&1; then
+              echo "Tag $new_version already exists, incrementing patch version..."
+              patch=$((patch + 1))
+            else
+              # Tag doesn't exist, we can use this version
+              break
+            fi
+          done
+          
+          echo "Creating new tag: $new_version"
           git tag $new_version
           git push origin $new_version
           echo "NEW_VERSION=$new_version" >> $GITHUB_ENV
