@@ -221,8 +221,7 @@ jobs:
         id: bottle_info
         run: |
           FORMULA_BASENAME="comanda" # Base name of the formula for JSON parsing
-          # Remove 'v' prefix for version number
-          JSON_VERSION=$(echo "${{ env.NEW_VERSION }}" | sed 's/^v//')
+          FORMULA_FQN="kris-hansen/comanda/comanda" # Fully qualified name as it appears in the JSON
           
           # Find the JSON file - it might not match the expected pattern exactly
           BOTTLE_JSON_FILES=$(find . -name "${FORMULA_BASENAME}--*.json")
@@ -239,22 +238,28 @@ jobs:
           echo "Found bottle JSON: $BOTTLE_JSON_FILE. Contents:"
           cat "$BOTTLE_JSON_FILE"
 
-          # Determine the correct bottle tag (e.g., arm64_sonoma for macos-14)
-          BOTTLE_TAG_KEY=$(jq -r ".${FORMULA_BASENAME}.bottle.files | keys_unsorted[] | select(startswith(\"arm64_\"))" "$BOTTLE_JSON_FILE")
+          # Extract the bottle tag directly from the JSON structure
+          # The JSON structure has changed, so we need to adapt our jq query
+          # We're looking for the arm64_sonoma key under tags
+          BOTTLE_TAG_KEY=$(jq -r ".\"${FORMULA_FQN}\".bottle.tags | keys[] | select(startswith(\"arm64_\"))" "$BOTTLE_JSON_FILE")
 
           if [ -z "$BOTTLE_TAG_KEY" ]; then
             echo "Error: Could not find an arm64 bottle tag in $BOTTLE_JSON_FILE"
-            exit 1
+            # Try a more generic approach to find any tag
+            BOTTLE_TAG_KEY=$(jq -r ".\"${FORMULA_FQN}\".bottle.tags | keys[0]" "$BOTTLE_JSON_FILE")
+            if [ -z "$BOTTLE_TAG_KEY" ] || [ "$BOTTLE_TAG_KEY" = "null" ]; then
+              echo "Error: Could not find any bottle tag in $BOTTLE_JSON_FILE"
+              exit 1
+            fi
           fi
           echo "Using bottle tag: $BOTTLE_TAG_KEY"
 
-          # Find the actual bottle file - it might have a different naming pattern
-          # First try the expected pattern
-          EXPECTED_BOTTLE_FILENAME="${FORMULA_BASENAME}--${JSON_VERSION}.${BOTTLE_TAG_KEY}.bottle.tar.gz"
-          if [ -f "$EXPECTED_BOTTLE_FILENAME" ]; then
-            LOCAL_BOTTLE_FILENAME="$EXPECTED_BOTTLE_FILENAME"
-          else
-            # If not found, look for any bottle file with the right tag
+          # Get the local_filename directly from the JSON
+          LOCAL_BOTTLE_FILENAME=$(jq -r ".\"${FORMULA_FQN}\".bottle.tags.\"${BOTTLE_TAG_KEY}\".local_filename" "$BOTTLE_JSON_FILE")
+          
+          if [ -z "$LOCAL_BOTTLE_FILENAME" ] || [ "$LOCAL_BOTTLE_FILENAME" = "null" ]; then
+            echo "Error: Could not extract local_filename from JSON. Falling back to file search."
+            # If not found in JSON, look for any bottle file with the right tag
             BOTTLE_FILES=$(find . -name "*${BOTTLE_TAG_KEY}*.bottle*.tar.gz")
             if [ -z "$BOTTLE_FILES" ]; then
               echo "Error: No bottle files found matching tag $BOTTLE_TAG_KEY."
@@ -283,6 +288,7 @@ jobs:
         working-directory: ./homebrew-tap
         run: |
           FORMULA_BASENAME="comanda"
+          FORMULA_FQN="kris-hansen/comanda/comanda" # Fully qualified name as it appears in the JSON
           
           # Find the JSON file - it might not match the expected pattern exactly
           BOTTLE_JSON_FILES=$(find . -name "${FORMULA_BASENAME}--*.json")
@@ -301,7 +307,7 @@ jobs:
           # Create a temporary modified JSON file with the correct root_url
           TEMP_JSON_FILE="temp_${BOTTLE_JSON_FILE}"
           jq --arg new_root_url "https://github.com/${{ env.COMMA_REPO_OWNER }}/${{ env.COMMA_REPO_NAME }}/releases/download/${{ env.NEW_VERSION }}" \
-             '(.comanda.bottle.root_url) = $new_root_url' \
+             "(.\"${FORMULA_FQN}\".bottle.root_url) = \$new_root_url" \
              "$BOTTLE_JSON_FILE" > "$TEMP_JSON_FILE"
           
           echo "Modified JSON file contents:"
