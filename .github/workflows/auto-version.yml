@@ -76,9 +76,10 @@ jobs:
       
       - name: Commit and push changes
         run: |
+          # Stage the VERSION file first
+          git add VERSION
+          
           # Pull the latest changes to avoid conflicts
           git pull --rebase origin main
-          
-          git add VERSION
           git commit -m "Auto increment version to ${{ steps.increment.outputs.new_version }}"
           git push
