@@ -7,8 +7,34 @@ on:
     paths-ignore:
       - 'VERSION'  # Ignore pushes that only change the VERSION file to avoid infinite loops
 
+# Skip this workflow if the commit message contains "Bump version to" (used by the release workflow)
+# This helps avoid conflicts between the auto-version and release workflows
 jobs:
+  check-commit-message:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2  # Need at least 2 commits to get the commit message
+      
+      - name: Check commit message
+        id: check
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          if [[ "$COMMIT_MSG" == *"Bump version to"* ]]; then
+            echo "Commit message contains 'Bump version to', skipping auto-version workflow"
+            echo "should_run=false" >> $GITHUB_OUTPUT
+          else
+            echo "Commit message does not contain 'Bump version to', proceeding with auto-version workflow"
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          fi
+
   increment-version:
+    needs: check-commit-message
+    if: ${{ needs.check-commit-message.outputs.should_run == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write  # Needed for pushing changes
@@ -50,6 +76,9 @@ jobs:
       
       - name: Commit and push changes
         run: |
+          # Pull the latest changes to avoid conflicts
+          git pull --rebase origin main
+          
           git add VERSION
           git commit -m "Auto increment version to ${{ steps.increment.outputs.new_version }}"
           git push

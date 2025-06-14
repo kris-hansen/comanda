@@ -106,6 +106,10 @@ jobs:
             # Commit the VERSION file change
             git config --global user.name "GitHub Actions Bot"
             git config --global user.email "actions@github.com"
+            
+            # Pull the latest changes to avoid conflicts
+            git pull --rebase origin main
+            
             git add VERSION
             git commit -m "Bump version to $new_version"
             git push origin HEAD:main
