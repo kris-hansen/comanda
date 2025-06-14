@@ -186,6 +186,13 @@ jobs:
           echo "Installing $FORMULA_FQN with --build-bottle..."
           brew install --build-bottle "$FORMULA_FQN"
           
+          # Get the actual version from the installed formula
+          INSTALLED_VERSION=$(brew info --json "$FORMULA_FQN" | jq -r '.[0].versions.stable')
+          echo "Installed formula version: $INSTALLED_VERSION"
+          
+          # Store the installed version for later use
+          echo "INSTALLED_VERSION=$INSTALLED_VERSION" >> $GITHUB_ENV
+          
           echo "Generating bottle and JSON manifest for $FORMULA_FQN..."
           brew bottle --json --root-url "https://github.com/${{ env.COMMA_REPO_OWNER }}/${{ env.COMMA_REPO_NAME }}/releases/download/${{ env.NEW_VERSION }}" "$FORMULA_FQN"
           
@@ -291,9 +298,18 @@ jobs:
           
           echo "Using bottle JSON file for merge: $BOTTLE_JSON_FILE"
           
+          # Create a temporary modified JSON file with the correct root_url
+          TEMP_JSON_FILE="temp_${BOTTLE_JSON_FILE}"
+          jq --arg new_root_url "https://github.com/${{ env.COMMA_REPO_OWNER }}/${{ env.COMMA_REPO_NAME }}/releases/download/${{ env.NEW_VERSION }}" \
+             '(.comanda.bottle.root_url) = $new_root_url' \
+             "$BOTTLE_JSON_FILE" > "$TEMP_JSON_FILE"
+          
+          echo "Modified JSON file contents:"
+          cat "$TEMP_JSON_FILE"
+          
           # The --write flag tells brew bottle --merge to modify the formula file in place.
-          echo "Merging bottle information into ${{ env.FORMULA_NAME }} using $BOTTLE_JSON_FILE..."
-          brew bottle --merge --write "$BOTTLE_JSON_FILE"
+          echo "Merging bottle information into ${{ env.FORMULA_NAME }} using modified JSON..."
+          brew bottle --merge --write "$TEMP_JSON_FILE"
           
           echo "--- Updated ${{ env.FORMULA_NAME }} (with bottle block) ---"
           cat "${{ env.FORMULA_NAME }}"
