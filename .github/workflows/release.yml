@@ -42,24 +42,31 @@ jobs:
       - name: Run Tests
         run: go test -v ./...
 
-      - name: Get latest tag
-        id: get_latest_tag
+      - name: Get current version
+        id: get_current_version
         run: |
-          # Use test_latest_tag input if provided, otherwise get the latest tag from git
+          # Use test_latest_tag input if provided, otherwise read from VERSION file
           if [ -n "${{ github.event.inputs.test_latest_tag }}" ]; then
-            latest_tag="${{ github.event.inputs.test_latest_tag }}"
-            echo "Using test latest tag: $latest_tag"
+            current_version="${{ github.event.inputs.test_latest_tag }}"
+            echo "Using test version: $current_version"
           else
-            git fetch --tags
-            latest_tag=$(git describe --tags $(git rev-list --tags --max-count=1) 2>/dev/null || echo "v0.0.0")
-            echo "Using actual latest tag: $latest_tag"
+            # Read from VERSION file
+            if [ -f "VERSION" ]; then
+              current_version="v$(cat VERSION)"
+              echo "Using version from VERSION file: $current_version"
+            else
+              # Fallback to git tags if VERSION file doesn't exist
+              git fetch --tags
+              current_version=$(git describe --tags $(git rev-list --tags --max-count=1) 2>/dev/null || echo "v0.0.0")
+              echo "VERSION file not found, using latest git tag: $current_version"
+            fi
           fi
-          echo "LATEST_TAG=$latest_tag" >> $GITHUB_ENV
+          echo "CURRENT_VERSION=$current_version" >> $GITHUB_ENV
 
       - name: Bump version and push tag
         id: tag_version # Step ID for output
         run: |
-          version=${LATEST_TAG#v}
+          version=${CURRENT_VERSION#v}
           IFS='.' read -ra ADDR <<< "$version"
           major="${ADDR[0]:-0}"
           minor="${ADDR[1]:-0}"
@@ -71,6 +78,7 @@ jobs:
           # Keep incrementing patch until we find a tag that doesn't exist
           while true; do
             new_version="v$major.$minor.$patch"
+            new_version_no_v="$major.$minor.$patch"
             
             # Check if tag exists
             if git rev-parse "$new_version" >/dev/null 2>&1; then
@@ -85,11 +93,23 @@ jobs:
           echo "NEW_VERSION=$new_version" >> $GITHUB_ENV
           echo "new_version_val=$new_version" >> $GITHUB_OUTPUT # Output for other jobs
           
+          # Update VERSION file
+          echo "$new_version_no_v" > VERSION
+          
           # Check if we're in dry-run mode
           if [ "${{ github.event.inputs.dry_run }}" == "true" ]; then
+            echo "DRY RUN: Would update VERSION file to: $new_version_no_v"
             echo "DRY RUN: Would create tag: $new_version"
             echo "DRY RUN: Would push tag to origin"
           else
+            echo "Updated VERSION file to: $new_version_no_v"
+            # Commit the VERSION file change
+            git config --global user.name "GitHub Actions Bot"
+            git config --global user.email "actions@github.com"
+            git add VERSION
+            git commit -m "Bump version to $new_version"
+            git push origin HEAD:main
+            
             echo "Creating new tag: $new_version"
             git tag $new_version
             git push origin $new_version
@@ -99,6 +119,10 @@ jobs:
         run: |
           platforms=("windows/amd64" "windows/386" "darwin/amd64" "darwin/arm64" "linux/amd64" "linux/386" "linux/arm64")
           mkdir -p dist # Ensure dist directory exists
+          
+          # Copy VERSION file to dist directory
+          cp VERSION dist/
+          
           for platform in "${platforms[@]}"
           do
             platform_split=(${platform//\// })
@@ -111,6 +135,7 @@ jobs:
             
             echo "Building for $GOOS/$GOARCH..."
             echo "Injecting version: ${{ env.NEW_VERSION }}"
+            # Still inject version via ldflags as a fallback mechanism
             GOOS=$GOOS GOARCH=$GOARCH go build -ldflags="-X 'github.com/kris-hansen/comanda/cmd.version=${{ env.NEW_VERSION }}'" -o "dist/$output_name" .
             if [ $? -ne 0 ]; then
               echo "Error building for $GOOS/$GOARCH"
