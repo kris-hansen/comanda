@@ -4,6 +4,20 @@ on:
   push:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      test_latest_tag:
+        description: 'Simulate LATEST_TAG (e.g., v0.0.99) for testing version bumping'
+        required: false
+        type: string
+      dry_run:
+        description: 'Enable dry-run mode (no actual tags, releases, or commits)'
+        required: false
+        type: boolean
+        default: true
+      test_tap_branch:
+        description: 'Branch in tap repo to push formula changes to (e.g., test-workflow)'
+        required: false
+        type: string
 
 permissions:
   contents: write # Needed for creating releases, tags, and uploading assets to this repo
@@ -13,7 +27,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs: # Define job outputs to be used by the next job
       new_version_val: ${{ steps.tag_version.outputs.new_version_val }}
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      upload_url: ${{ github.event.inputs.dry_run == 'true' && steps.dry_run_release.outputs.upload_url || steps.create_release.outputs.upload_url }}
+      is_dry_run: ${{ github.event.inputs.dry_run }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,8 +45,15 @@ jobs:
       - name: Get latest tag
         id: get_latest_tag
         run: |
-          git fetch --tags
-          latest_tag=$(git describe --tags $(git rev-list --tags --max-count=1) 2>/dev/null || echo "v0.0.0")
+          # Use test_latest_tag input if provided, otherwise get the latest tag from git
+          if [ -n "${{ github.event.inputs.test_latest_tag }}" ]; then
+            latest_tag="${{ github.event.inputs.test_latest_tag }}"
+            echo "Using test latest tag: $latest_tag"
+          else
+            git fetch --tags
+            latest_tag=$(git describe --tags $(git rev-list --tags --max-count=1) 2>/dev/null || echo "v0.0.0")
+            echo "Using actual latest tag: $latest_tag"
+          fi
           echo "LATEST_TAG=$latest_tag" >> $GITHUB_ENV
 
       - name: Bump version and push tag
@@ -60,11 +82,18 @@ jobs:
             fi
           done
           
-          echo "Creating new tag: $new_version"
-          git tag $new_version
-          git push origin $new_version
           echo "NEW_VERSION=$new_version" >> $GITHUB_ENV
           echo "new_version_val=$new_version" >> $GITHUB_OUTPUT # Output for other jobs
+          
+          # Check if we're in dry-run mode
+          if [ "${{ github.event.inputs.dry_run }}" == "true" ]; then
+            echo "DRY RUN: Would create tag: $new_version"
+            echo "DRY RUN: Would push tag to origin"
+          else
+            echo "Creating new tag: $new_version"
+            git tag $new_version
+            git push origin $new_version
+          fi
 
       - name: Build Release Binaries
         run: |
@@ -91,6 +120,7 @@ jobs:
 
       - name: Create Release
         id: create_release # Step ID for output (upload_url)
+        if: ${{ github.event.inputs.dry_run != 'true' }}
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ env.NEW_VERSION }}
@@ -105,6 +135,16 @@ jobs:
             dist/comanda-linux-amd64
             dist/comanda-linux-386
             dist/comanda-linux-arm64
+      
+      # Dummy step to provide upload_url output when in dry-run mode
+      - name: Dry Run - Skip Release Creation
+        id: dry_run_release
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: |
+          echo "DRY RUN: Would create release for ${{ env.NEW_VERSION }}"
+          echo "DRY RUN: Would upload binaries to the release"
+          # Provide a dummy upload_url for the next job
+          echo "upload_url=dry-run-no-upload-url" >> $GITHUB_OUTPUT
 
   bottle-and-publish-tap:
     name: Bottle and Publish Tap (darwin/arm64)
@@ -221,8 +261,7 @@ jobs:
         id: bottle_info
         run: |
           FORMULA_BASENAME="comanda" # Base name of the formula for JSON parsing
-          # Remove 'v' prefix for version number
-          JSON_VERSION=$(echo "${{ env.NEW_VERSION }}" | sed 's/^v//')
+          FORMULA_FQN="kris-hansen/comanda/comanda" # Fully qualified name as it appears in the JSON
           
           # Find the JSON file - it might not match the expected pattern exactly
           BOTTLE_JSON_FILES=$(find . -name "${FORMULA_BASENAME}--*.json")
@@ -239,22 +278,28 @@ jobs:
           echo "Found bottle JSON: $BOTTLE_JSON_FILE. Contents:"
           cat "$BOTTLE_JSON_FILE"
 
-          # Determine the correct bottle tag (e.g., arm64_sonoma for macos-14)
-          BOTTLE_TAG_KEY=$(jq -r ".${FORMULA_BASENAME}.bottle.files | keys_unsorted[] | select(startswith(\"arm64_\"))" "$BOTTLE_JSON_FILE")
+          # Extract the bottle tag directly from the JSON structure
+          # The JSON structure has changed, so we need to adapt our jq query
+          # We're looking for the arm64_sonoma key under tags
+          BOTTLE_TAG_KEY=$(jq -r ".\"${FORMULA_FQN}\".bottle.tags | keys[] | select(startswith(\"arm64_\"))" "$BOTTLE_JSON_FILE")
 
           if [ -z "$BOTTLE_TAG_KEY" ]; then
             echo "Error: Could not find an arm64 bottle tag in $BOTTLE_JSON_FILE"
-            exit 1
+            # Try a more generic approach to find any tag
+            BOTTLE_TAG_KEY=$(jq -r ".\"${FORMULA_FQN}\".bottle.tags | keys[0]" "$BOTTLE_JSON_FILE")
+            if [ -z "$BOTTLE_TAG_KEY" ] || [ "$BOTTLE_TAG_KEY" = "null" ]; then
+              echo "Error: Could not find any bottle tag in $BOTTLE_JSON_FILE"
+              exit 1
+            fi
           fi
           echo "Using bottle tag: $BOTTLE_TAG_KEY"
 
-          # Find the actual bottle file - it might have a different naming pattern
-          # First try the expected pattern
-          EXPECTED_BOTTLE_FILENAME="${FORMULA_BASENAME}--${JSON_VERSION}.${BOTTLE_TAG_KEY}.bottle.tar.gz"
-          if [ -f "$EXPECTED_BOTTLE_FILENAME" ]; then
-            LOCAL_BOTTLE_FILENAME="$EXPECTED_BOTTLE_FILENAME"
-          else
-            # If not found, look for any bottle file with the right tag
+          # Get the local_filename directly from the JSON
+          LOCAL_BOTTLE_FILENAME=$(jq -r ".\"${FORMULA_FQN}\".bottle.tags.\"${BOTTLE_TAG_KEY}\".local_filename" "$BOTTLE_JSON_FILE")
+          
+          if [ -z "$LOCAL_BOTTLE_FILENAME" ] || [ "$LOCAL_BOTTLE_FILENAME" = "null" ]; then
+            echo "Error: Could not extract local_filename from JSON. Falling back to file search."
+            # If not found in JSON, look for any bottle file with the right tag
             BOTTLE_FILES=$(find . -name "*${BOTTLE_TAG_KEY}*.bottle*.tar.gz")
             if [ -z "$BOTTLE_FILES" ]; then
               echo "Error: No bottle files found matching tag $BOTTLE_TAG_KEY."
@@ -270,6 +315,7 @@ jobs:
           echo "LOCAL_BOTTLE_FILENAME=$LOCAL_BOTTLE_FILENAME" >> $GITHUB_OUTPUT
 
       - name: Upload Bottle to GitHub Release
+        if: ${{ needs.test-and-release.outputs.is_dry_run != 'true' }}
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Uses the default GITHUB_TOKEN for this repo
@@ -278,11 +324,17 @@ jobs:
           asset_path: ./homebrew-tap/${{ steps.bottle_info.outputs.LOCAL_BOTTLE_FILENAME }}
           asset_name: ${{ steps.bottle_info.outputs.LOCAL_BOTTLE_FILENAME }}
           asset_content_type: application/gzip
+      
+      - name: Dry Run - Skip Upload
+        if: ${{ needs.test-and-release.outputs.is_dry_run == 'true' }}
+        run: |
+          echo "DRY RUN: Would upload bottle file ${{ steps.bottle_info.outputs.LOCAL_BOTTLE_FILENAME }} to release"
 
       - name: Update Formula File with New Bottle Block
         working-directory: ./homebrew-tap
         run: |
           FORMULA_BASENAME="comanda"
+          FORMULA_FQN="kris-hansen/comanda/comanda" # Fully qualified name as it appears in the JSON
           
           # Find the JSON file - it might not match the expected pattern exactly
           BOTTLE_JSON_FILES=$(find . -name "${FORMULA_BASENAME}--*.json")
@@ -301,7 +353,7 @@ jobs:
           # Create a temporary modified JSON file with the correct root_url
           TEMP_JSON_FILE="temp_${BOTTLE_JSON_FILE}"
           jq --arg new_root_url "https://github.com/${{ env.COMMA_REPO_OWNER }}/${{ env.COMMA_REPO_NAME }}/releases/download/${{ env.NEW_VERSION }}" \
-             '(.comanda.bottle.root_url) = $new_root_url' \
+             "(.\"${FORMULA_FQN}\".bottle.root_url) = \$new_root_url" \
              "$BOTTLE_JSON_FILE" > "$TEMP_JSON_FILE"
           
           echo "Modified JSON file contents:"
@@ -327,10 +379,34 @@ jobs:
           if git diff --staged --quiet; then
             echo "No changes to commit to the formula file."
           else
-            echo "Committing and pushing changes to tap repository..."
-            git commit -m "Add bottle for comanda ${{ env.NEW_VERSION }} (arm64)"
-            # Determine default branch of tap repo (usually main or master)
-            # Pushing to 'main' branch, adjust if your tap uses a different default branch
-            git push origin HEAD:main
-            echo "Pushed updated formula to ${{ env.TAP_OWNER }}/${{ env.TAP_REPO_NAME }}."
+            # Determine which branch to push to
+            TARGET_BRANCH="main"
+            if [ -n "${{ github.event.inputs.test_tap_branch }}" ]; then
+              TARGET_BRANCH="${{ github.event.inputs.test_tap_branch }}"
+              
+              # Check if the branch exists, create it if it doesn't
+              if ! git ls-remote --heads origin $TARGET_BRANCH | grep -q $TARGET_BRANCH; then
+                echo "Test branch $TARGET_BRANCH doesn't exist, creating it from current HEAD"
+                git checkout -b $TARGET_BRANCH
+              else
+                echo "Test branch $TARGET_BRANCH exists, checking it out"
+                git fetch origin $TARGET_BRANCH
+                git checkout $TARGET_BRANCH
+                git reset --hard origin/$TARGET_BRANCH
+                git add "${{ env.FORMULA_NAME }}"
+              fi
+            fi
+            
+            # Check if we're in dry-run mode
+            if [ "${{ needs.test-and-release.outputs.is_dry_run }}" == "true" ]; then
+              echo "DRY RUN: Would commit changes with message: Add bottle for comanda ${{ env.NEW_VERSION }} (arm64)"
+              echo "DRY RUN: Would push to branch: $TARGET_BRANCH"
+              echo "DRY RUN: Formula changes that would be committed:"
+              git diff --staged
+            else
+              echo "Committing and pushing changes to tap repository..."
+              git commit -m "Add bottle for comanda ${{ env.NEW_VERSION }} (arm64)"
+              git push origin HEAD:$TARGET_BRANCH
+              echo "Pushed updated formula to ${{ env.TAP_OWNER }}/${{ env.TAP_REPO_NAME }} branch: $TARGET_BRANCH"
+            fi
           fi
