@@ -23,8 +23,9 @@ step_three:
     - NA
   model:
     - o1-pro  # New pro model
-  action:
-    - write a sonnet about network cables
+  type: openai-responses
+  instructions: "You are a professional poet. Write a sonnet about network cables, focusing on their beauty and utility."
+  response_format: { "type": "text" }  # Required for o1-pro with responses API
   output:
     - examples/sonnet3.txt
 
@@ -34,8 +35,8 @@ step_four:
   model:
     - o3-pro  # New pro model
   type: openai-responses
-  action:
-    - write a sonnet about network cables
+  instructions: "You are a professional poet. Write a sonnet about network cables, focusing on their beauty and utility."
+  response_format: { "type": "text" }  # Required for o3-pro with responses API
   output:
     - examples/sonnet4.txt
 
@@ -44,8 +45,10 @@ step_five:
     - NA
   model:
     - o4-mini  # New mini model
+  type: openai-responses
   action:
     - write a sonnet about network cables
+  response_format: { "type": "text" }  # Required for o4-mini with responses API
   output:
     - examples/sonnet5.txt
 
