@@ -14,9 +14,10 @@ const (
 
 // StepInfo contains detailed information about a processing step
 type StepInfo struct {
-	Name   string
-	Model  string
-	Action string
+	Name         string
+	Model        string
+	Action       string
+	Instructions string // For openai-responses steps
 }
 
 // ProgressUpdate represents a progress update from the processor

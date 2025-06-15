@@ -17,15 +17,63 @@ step_two:
   output:
     - examples/sonnet2.txt
 
+# New models added for comparison
 step_three:
+  input:
+    - NA
+  model:
+    - o1-pro  # New pro model
+  type: openai-responses
+  instructions: "You are a professional poet. Write a sonnet about network cables, focusing on their beauty and utility."
+  response_format: { "type": "text" }  # Required for o1-pro with responses API
+  output:
+    - examples/sonnet3.txt
+
+step_four:
+  input:
+    - NA
+  model:
+    - o3-pro  # New pro model
+  type: openai-responses
+  instructions: "You are a professional poet. Write a sonnet about network cables, focusing on their beauty and utility."
+  response_format: { "type": "text" }  # Required for o3-pro with responses API
+  output:
+    - examples/sonnet4.txt
+
+step_five:
+  input:
+    - NA
+  model:
+    - o4-mini  # New mini model
+  type: openai-responses
+  action:
+    - write a sonnet about network cables
+  response_format: { "type": "text" }  # Required for o4-mini with responses API
+  output:
+    - examples/sonnet5.txt
+
+step_six:
+  input:
+    - NA
+  model:
+    - gpt-4.1  # New flagship model
+  action:
+    - write a sonnet about network cables
+  output:
+    - examples/sonnet6.txt
+
+# Compare all sonnets
+step_seven:
   input:
     - examples/sonnet1.txt
     - examples/sonnet2.txt
+    - examples/sonnet3.txt
+    - examples/sonnet4.txt
+    - examples/sonnet5.txt
+    - examples/sonnet6.txt
   model:
-    - gpt-4o-mini
+    - gpt-4o
   action:
-    - of these two sonnets, which one is better and why? Rate them both on a scale of 1-10
+    - compare these sonnets. Which one is the best and why? Rate each on a scale of 1-10
   output:
     - STDOUT
-
-

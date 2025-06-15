@@ -220,6 +220,16 @@ This will prompt for the password if the configuration is encrypted.
 Users updating an existing comanda installation may need to run `comanda configure` to select and enable these new models.
 A guide for adding new models to existing providers can be found in [docs/adding-new-model-guide.md](docs/adding-new-model-guide.md).
 
+#### OpenAI o1 and o3 Models Support
+
+comanda supports OpenAI's reasoning model families including o1-pro, o1-mini, o3-pro, and o4-mini. These models use the OpenAI Responses API format which is different from the standard Chat Completions API.
+
+**Important Notes:**
+- These models may take significantly longer to process requests (up to several minutes for complex prompts)
+- The o1-pro and o3-pro models in particular can be much slower than other models
+- comanda automatically extends timeouts for these models to prevent connection issues
+- When using these models in workflows, expect longer processing times, especially for the first few tokens
+
 Configure your providers and models using the interactive configuration command:
 
 ```bash

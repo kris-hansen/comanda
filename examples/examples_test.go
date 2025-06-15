@@ -145,12 +145,21 @@ func validateStep(t *testing.T, filename, stepName string, stepNode *yaml.Node, 
 	// Check if this is a generate or process step
 	isGenerateStep := false
 	isProcessStep := false
+	isResponsesStep := false
+	stepType := ""
+
 	for i := 0; i < len(stepNode.Content); i += 2 {
 		key := stepNode.Content[i].Value
+		value := stepNode.Content[i+1]
 		if key == "generate" {
 			isGenerateStep = true
 		} else if key == "process" {
 			isProcessStep = true
+		} else if key == "type" && value.Kind == yaml.ScalarNode {
+			stepType = value.Value
+			if stepType == "openai-responses" {
+				isResponsesStep = true
+			}
 		}
 	}
 
@@ -167,13 +176,25 @@ func validateStep(t *testing.T, filename, stepName string, stepNode *yaml.Node, 
 	requiredFields := map[string]bool{
 		"input":  false,
 		"model":  false,
-		"action": false,
 		"output": false,
+	}
+
+	// For responses steps, either action or instructions is required
+	// For standard steps, action is required
+	if isResponsesStep {
+		requiredFields["action or instructions"] = false
+	} else {
+		requiredFields["action"] = false
 	}
 
 	for i := 0; i < len(stepNode.Content); i += 2 {
 		key := stepNode.Content[i].Value
 		value := stepNode.Content[i+1]
+
+		// Special handling for instructions or action in responses steps
+		if isResponsesStep && (key == "instructions" || key == "action") {
+			requiredFields["action or instructions"] = true
+		}
 
 		if _, required := requiredFields[key]; required {
 			requiredFields[key] = true
