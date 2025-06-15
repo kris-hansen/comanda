@@ -171,7 +171,14 @@ var processCmd = &cobra.Command{
 						fmt.Printf("  - Input: %v\n", inputs)
 					}
 					fmt.Printf("  - Model: %v\n", proc.NormalizeStringSlice(step.Config.Model))
-					fmt.Printf("  - Action: %v\n", proc.NormalizeStringSlice(step.Config.Action))
+
+					// Display instructions for openai-responses type steps, otherwise display action
+					if step.Config.Type == "openai-responses" && step.Config.Instructions != "" {
+						fmt.Printf("  - Instructions: %v\n", step.Config.Instructions)
+					} else {
+						fmt.Printf("  - Action: %v\n", proc.NormalizeStringSlice(step.Config.Action))
+					}
+
 					fmt.Printf("  - Output: %v\n", proc.NormalizeStringSlice(step.Config.Output))
 					nextActions := proc.NormalizeStringSlice(step.Config.NextAction)
 					if len(nextActions) > 0 {
@@ -188,7 +195,14 @@ var processCmd = &cobra.Command{
 					fmt.Printf("- Input: %v\n", inputs)
 				}
 				fmt.Printf("- Model: %v\n", proc.NormalizeStringSlice(step.Config.Model))
-				fmt.Printf("- Action: %v\n", proc.NormalizeStringSlice(step.Config.Action))
+
+				// Display instructions for openai-responses type steps, otherwise display action
+				if step.Config.Type == "openai-responses" && step.Config.Instructions != "" {
+					fmt.Printf("- Instructions: %v\n", step.Config.Instructions)
+				} else {
+					fmt.Printf("- Action: %v\n", proc.NormalizeStringSlice(step.Config.Action))
+				}
+
 				fmt.Printf("- Output: %v\n", proc.NormalizeStringSlice(step.Config.Output))
 				nextActions := proc.NormalizeStringSlice(step.Config.NextAction)
 				if len(nextActions) > 0 {

@@ -444,7 +444,31 @@ func (o *OpenAIProvider) prepareResponsesRequestBody(config ResponsesConfig) (ma
 	}
 
 	if config.ResponseFormat != nil {
-		requestBody["text"] = config.ResponseFormat
+		// For the Responses API, the response_format parameter has moved to text.format
+		// Check if the ResponseFormat has a "type" key with value "text"
+		if responseType, ok := config.ResponseFormat["type"].(string); ok && responseType == "text" {
+			// Create a text object with the format
+			requestBody["text"] = map[string]interface{}{
+				"format": map[string]interface{}{
+					"type": "text",
+				},
+			}
+		} else if responseType, ok := config.ResponseFormat["type"].(string); ok && responseType == "json_object" {
+			// For JSON format
+			requestBody["text"] = map[string]interface{}{
+				"format": map[string]interface{}{
+					"type": "json_object",
+				},
+			}
+		} else {
+			// For other formats, create a proper format object
+			requestBody["text"] = map[string]interface{}{
+				"format": config.ResponseFormat,
+			}
+		}
+		// Log the formatted request body for debugging
+		textFormatBytes, _ := json.Marshal(requestBody["text"])
+		o.debugf("Using text format in request body: %s", string(textFormatBytes))
 	}
 
 	return requestBody, nil
@@ -475,7 +499,14 @@ func (o *OpenAIProvider) SendPromptWithResponses(config ResponsesConfig) (string
 	}
 
 	// Create HTTP request with context for timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	// Use a longer timeout for o1-pro, o3, and o4 models which can be slow
+	timeout := 5 * time.Minute
+	if strings.HasPrefix(config.Model, "o1-pro") ||
+		strings.HasPrefix(config.Model, "o3") ||
+		strings.HasPrefix(config.Model, "o4") {
+		timeout = 10 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.openai.com/v1/responses", bytes.NewBuffer(jsonData))
@@ -582,7 +613,14 @@ func (o *OpenAIProvider) SendPromptWithResponsesStream(config ResponsesConfig, h
 	}
 
 	// Create HTTP request with context for timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	// Use a longer timeout for o1-pro, o3, and o4 models which can be slow
+	timeout := 5 * time.Minute
+	if strings.HasPrefix(config.Model, "o1-pro") ||
+		strings.HasPrefix(config.Model, "o3") ||
+		strings.HasPrefix(config.Model, "o4") {
+		timeout = 10 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.openai.com/v1/responses", bytes.NewBuffer(jsonData))

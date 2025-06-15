@@ -360,7 +360,7 @@ func (p *Processor) processResponsesStep(step Step, isParallel bool, parallelID 
 	p.sendProgressUpdate(ProgressUpdate{
 		Type:       ProgressStep,
 		Message:    fmt.Sprintf("Starting responses step: %s", step.Name),
-		Step:       &StepInfo{Name: step.Name},
+		Step:       &StepInfo{Name: step.Name, Instructions: step.Config.Instructions},
 		IsParallel: isParallel,
 		ParallelID: parallelID,
 	})
@@ -376,6 +376,40 @@ func (p *Processor) processResponsesStep(step Step, isParallel bool, parallelID 
 	provider := models.DetectProvider(modelName)
 	if provider == nil || provider.Name() != "openai" {
 		return "", fmt.Errorf("openai-responses step requires an OpenAI model, got: %s", modelName)
+	}
+
+	// Check if this is a model that requires the responses API
+	isResponsesAPIModel := strings.HasPrefix(modelName, "o1-pro") ||
+		strings.HasPrefix(modelName, "o3-") ||
+		strings.HasPrefix(modelName, "o4-")
+
+	// Log a warning if a model requires the responses API but doesn't have a response format
+	if isResponsesAPIModel && step.Config.ResponseFormat == nil {
+		p.debugf("Warning: Model %s requires the responses API but no response_format is specified", modelName)
+	} else if step.Config.ResponseFormat != nil {
+		responseFormatBytes, _ := json.Marshal(step.Config.ResponseFormat)
+		p.debugf("Response format for model %s: %s", modelName, string(responseFormatBytes))
+	}
+
+	// Add more detailed logging about the response format
+	if step.Config.ResponseFormat != nil {
+		p.debugf("Response format type: %T", step.Config.ResponseFormat)
+		p.debugf("Response format value: %+v", step.Config.ResponseFormat)
+
+		// Log each key-value pair in the response format
+		// Get all keys
+		var keys []string
+		for k := range step.Config.ResponseFormat {
+			keys = append(keys, k)
+		}
+		p.debugf("Response format keys: %v", keys)
+
+		// Log each key-value pair
+		for k, v := range step.Config.ResponseFormat {
+			p.debugf("Response format key '%s' has value: %v (type: %T)", k, v, v)
+		}
+	} else {
+		p.debugf("No response_format specified for model %s", modelName)
 	}
 
 	// Configure providers
@@ -399,7 +433,11 @@ func (p *Processor) processResponsesStep(step Step, isParallel bool, parallelID 
 	inputs := p.NormalizeStringSlice(step.Config.Input)
 	p.debugf("Processing inputs for step %s: %v", step.Name, inputs)
 
-	if len(inputs) > 0 {
+	// Check if input is NA, which means we should skip input processing
+	isNAInput := len(inputs) == 1 && inputs[0] == "NA"
+	p.debugf("Input is NA: %v", isNAInput)
+
+	if len(inputs) > 0 && !isNAInput {
 		if err := p.processInputs(inputs); err != nil {
 			return "", fmt.Errorf("input processing error in step %s: %w", step.Name, err)
 		}
@@ -407,7 +445,7 @@ func (p *Processor) processResponsesStep(step Step, isParallel bool, parallelID 
 
 	// Get processed inputs
 	processedInputs := p.handler.GetInputs()
-	if len(processedInputs) == 0 {
+	if len(processedInputs) == 0 && !isNAInput {
 		return "", fmt.Errorf("no inputs provided for openai-responses step")
 	}
 
@@ -418,17 +456,32 @@ func (p *Processor) processResponsesStep(step Step, isParallel bool, parallelID 
 	}
 	combinedInput := strings.Join(inputContents, "\n\n")
 
-	// Get actions
-	actions := p.NormalizeStringSlice(step.Config.Action)
-	if len(actions) == 0 {
-		return "", fmt.Errorf("no actions provided for openai-responses step")
+	// If input is NA, use a default input
+	if isNAInput {
+		combinedInput = "Please follow the instructions."
+		p.debugf("Using default input for NA input: %s", combinedInput)
 	}
 
-	// Combine actions
-	combinedAction := strings.Join(actions, "\n")
+	// Get actions
+	actions := p.NormalizeStringSlice(step.Config.Action)
+
+	// For openai-responses type, instructions can be used instead of actions
+	if len(actions) == 0 && step.Config.Instructions == "" {
+		return "", fmt.Errorf("no actions or instructions provided for openai-responses step")
+	}
 
 	// Create the final prompt
-	prompt := fmt.Sprintf("Input:\n%s\n\nAction: %s", combinedInput, combinedAction)
+	var prompt string
+	if len(actions) > 0 {
+		// Combine actions
+		combinedAction := strings.Join(actions, "\n")
+		prompt = fmt.Sprintf("Input:\n%s\n\nAction: %s", combinedInput, combinedAction)
+		p.debugf("Using action-based prompt format")
+	} else {
+		// Use instructions-only format
+		prompt = combinedInput
+		p.debugf("Using instructions-only prompt format (no actions)")
+	}
 
 	// Create ResponsesConfig
 	config := models.ResponsesConfig{
@@ -443,16 +496,43 @@ func (p *Processor) processResponsesStep(step Step, isParallel bool, parallelID 
 		Tools:              step.Config.Tools,
 	}
 
+	// Log the configuration details for debugging
+	p.debugf("ResponsesConfig details:")
+	p.debugf("- Model: %s", config.Model)
+	p.debugf("- Instructions: %s", config.Instructions)
+	p.debugf("- MaxOutputTokens: %d", config.MaxOutputTokens)
+	p.debugf("- Temperature: %f", config.Temperature)
+	p.debugf("- TopP: %f", config.TopP)
+	p.debugf("- Stream: %v", config.Stream)
+	p.debugf("- Has Tools: %v", config.Tools != nil)
+	p.debugf("- Has PreviousResponseID: %v", config.PreviousResponseID != "")
+
+	// Note: For models that are known to be slow (o1-pro, o3, o4),
+	// the timeout is handled in the OpenAI provider's SendPromptWithResponsesStream
+	// and SendPromptWithResponses methods, which use a 5-minute timeout
+	// for the context when making API requests.
+
 	// If response format is specified, add it
 	if step.Config.ResponseFormat != nil {
 		config.ResponseFormat = step.Config.ResponseFormat
+		responseFormatBytes, _ := json.Marshal(config.ResponseFormat)
+		p.debugf("Setting response_format: %s", string(responseFormatBytes))
+	} else {
+		p.debugf("No response_format specified in config")
 	}
 
 	// Send progress update
+	var actionInfo string
+	if len(actions) > 0 {
+		actionInfo = strings.Join(actions, "\n")
+	} else {
+		actionInfo = "(using instructions only)"
+	}
+
 	p.sendProgressUpdate(ProgressUpdate{
 		Type:       ProgressStep,
 		Message:    fmt.Sprintf("Sending request to %s", modelName),
-		Step:       &StepInfo{Name: step.Name, Model: modelName, Action: combinedAction},
+		Step:       &StepInfo{Name: step.Name, Model: modelName, Action: actionInfo, Instructions: step.Config.Instructions},
 		IsParallel: isParallel,
 		ParallelID: parallelID,
 	})
@@ -509,7 +589,7 @@ func (p *Processor) processResponsesStep(step Step, isParallel bool, parallelID 
 	p.sendProgressUpdate(ProgressUpdate{
 		Type:               ProgressComplete,
 		Message:            fmt.Sprintf("Completed responses step: %s", step.Name),
-		Step:               &StepInfo{Name: step.Name, Model: modelName, Action: combinedAction},
+		Step:               &StepInfo{Name: step.Name, Model: modelName, Action: actionInfo, Instructions: step.Config.Instructions},
 		IsParallel:         isParallel,
 		ParallelID:         parallelID,
 		PerformanceMetrics: metrics,
