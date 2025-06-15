@@ -54,12 +54,12 @@ func (o *OpenAIProvider) SupportsModel(modelName string) bool {
 
 	// Accept any model name that starts with our known prefixes
 	validPrefixes := []string{
-		"gpt-",     // Standard GPT models
-		"o1-",      // Covers o1-pro, o1-preview etc
-		"o3-",      // Support for o3 models
-		"o4-",      // Support for o4-mini series
-		"gpt-4o",   // Support for gpt-4o variants
-		"gpt-4.1-", // Support for gpt-4.1 series (mini, nano)
+		"gpt-",    // Standard GPT models
+		"o1",      // To cover o1, o1-pro, o1-mini
+		"o3",      // To cover o3, o3-pro, o3-mini
+		"o4-",     // Support for o4-mini series
+		"gpt-4o",  // Support for gpt-4o variants
+		"gpt-4.1", // To cover gpt-4.1 and potential gpt-4.1-variants
 	}
 
 	for _, prefix := range validPrefixes {
@@ -87,10 +87,10 @@ func (o *OpenAIProvider) Configure(apiKey string) error {
 // isNewModelSeries checks if the model is part of the newer series (4o, o1, o3, o4)
 func (o *OpenAIProvider) isNewModelSeries(modelName string) bool {
 	modelName = strings.ToLower(modelName)
-	return strings.Contains(modelName, "4o") ||
-		strings.HasPrefix(modelName, "o1-") ||
-		strings.HasPrefix(modelName, "o3-") ||
-		strings.HasPrefix(modelName, "o4-") // Support for o4-mini series
+	return strings.Contains(modelName, "gpt-4o") ||
+		strings.HasPrefix(modelName, "o1") || // Covers o1, o1-pro, o1-mini
+		strings.HasPrefix(modelName, "o3") || // Covers o3, o3-pro, o3-mini
+		strings.HasPrefix(modelName, "o4-") // Covers o4-mini series
 }
 
 // createChatCompletionRequest creates a ChatCompletionRequest with the appropriate parameters
