@@ -33,6 +33,7 @@ step_four:
     - NA
   model:
     - o3-pro  # New pro model
+  type: openai-responses
   action:
     - write a sonnet about network cables
   output:
