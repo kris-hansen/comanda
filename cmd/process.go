@@ -74,73 +74,12 @@ var processCmd = &cobra.Command{
 				continue
 			}
 
-			// Parse YAML while preserving order
-			var node yaml.Node
-			err = yaml.Unmarshal(yamlFile, &node)
+			// Unmarshal YAML into the DSLConfig struct, which will use the custom unmarshaler
+			var dslConfig processor.DSLConfig
+			err = yaml.Unmarshal(yamlFile, &dslConfig)
 			if err != nil {
 				log.Printf("Error parsing YAML file %s: %v\n", file, err)
 				continue
-			}
-
-			// Convert YAML nodes to Steps slice preserving order
-			var dslConfig processor.DSLConfig
-			dslConfig.ParallelSteps = make(map[string][]processor.Step)
-
-			// The document node should have one child which is the mapping
-			if len(node.Content) > 0 && node.Content[0].Kind == yaml.MappingNode {
-				mapping := node.Content[0]
-				// Each pair of nodes in the mapping represents a key and its value
-				for i := 0; i < len(mapping.Content); i += 2 {
-					name := mapping.Content[i].Value
-
-					// Check if this is a parallel-process block
-					if name == "parallel-process" {
-						if verbose {
-							fmt.Printf("[DEBUG] Found parallel-process block\n")
-						}
-
-						// This is a parallel process block, parse its steps
-						if mapping.Content[i+1].Kind == yaml.MappingNode {
-							parallelMapping := mapping.Content[i+1]
-							var parallelSteps []processor.Step
-
-							// Parse each step in the parallel-process block
-							for j := 0; j < len(parallelMapping.Content); j += 2 {
-								parallelStepName := parallelMapping.Content[j].Value
-								var config processor.StepConfig
-								err = parallelMapping.Content[j+1].Decode(&config)
-								if err != nil {
-									log.Printf("Error decoding parallel step %s in %s: %v\n", parallelStepName, file, err)
-									continue
-								}
-
-								parallelSteps = append(parallelSteps, processor.Step{
-									Name:   parallelStepName,
-									Config: config,
-								})
-
-								if verbose {
-									fmt.Printf("[DEBUG] Added parallel step: %s\n", parallelStepName)
-								}
-							}
-
-							// Add the parallel steps to the map with a key of "parallel-process"
-							dslConfig.ParallelSteps["parallel-process"] = parallelSteps
-						}
-					} else {
-						// This is a regular step
-						var config processor.StepConfig
-						err = mapping.Content[i+1].Decode(&config)
-						if err != nil {
-							log.Printf("Error decoding step %s in %s: %v\n", name, file, err)
-							continue
-						}
-						dslConfig.Steps = append(dslConfig.Steps, processor.Step{
-							Name:   name,
-							Config: config,
-						})
-					}
-				}
 			}
 
 			// Create processor

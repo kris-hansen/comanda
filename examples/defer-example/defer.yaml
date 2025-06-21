@@ -1,0 +1,18 @@
+determine_poem_type:
+  input: STDIN
+  model: gpt-4o-mini
+  action: "Analyze the input poem and determine if it is a haiku or a sonnet. Return the result as a simple JSON object with the format: {\"step\": \"analyze_haiku\", \"input\": \"poem text\"} for a haiku or {\"step\": \"analyze_sonnet\", \"input\": \"poem text\"} for a sonnet. Do not include any markdown formatting, backticks, or labels."
+  output: STDOUT
+
+defer:
+  analyze_haiku:
+    input: STDIN
+    model: gpt-4o-mini
+    action: "If $poem_type is 'haiku', analyze the haiku for its seasonal reference (kigo), cutting word (kireji), and syllable pattern (5-7-5). If not a haiku, output 'Not applicable: This is not a haiku'."
+    output: STDOUT
+
+  analyze_sonnet:
+    input: STDIN
+    model: gpt-4o-mini
+    action: "If $poem_type is 'sonnet', analyze the sonnet's rhyme scheme, meter (iambic pentameter), and thematic structure including the volta. If not a sonnet, output 'Not applicable: This is not a sonnet'."
+    output: STDOUT
