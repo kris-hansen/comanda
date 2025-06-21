@@ -73,6 +73,15 @@ func (c *DSLConfig) UnmarshalYAML(node *yaml.Node) error {
 			if err := valueNode.Decode(&deferredSteps); err != nil {
 				return fmt.Errorf("failed to decode deferred steps: %w", err)
 			}
+
+			// Check for duplicate step names before assigning
+			for stepName := range deferredSteps {
+				if _, exists := c.Defer[stepName]; exists {
+					return fmt.Errorf("duplicate step name '%s' found in defer block: step names must be unique", stepName)
+				}
+			}
+
+			// Assign deferred steps to the config
 			c.Defer = deferredSteps
 		default:
 			var stepConfig StepConfig

@@ -425,6 +425,39 @@ defer:
 	}
 }
 
+func TestUnmarshalYAMLWithDuplicateDeferSteps(t *testing.T) {
+	// Define a YAML with duplicate step names in the defer block
+	deferYAML := `
+determine_poem_type:
+  input: STDIN
+  model: gpt-4o-mini
+  action: "Analyze the input poem"
+  output: STDOUT
+
+defer:
+  analyze_haiku:
+    input: STDIN
+    model: gpt-4o-mini
+    action: "This is the haiku analysis."
+    output: STDOUT
+  analyze_haiku:
+    input: STDIN
+    model: gpt-4o-mini
+    action: "This is another haiku analysis."
+    output: STDOUT
+`
+	// Try to unmarshal the YAML
+	var dslConfig DSLConfig
+	err := yaml.Unmarshal([]byte(deferYAML), &dslConfig)
+
+	// Verify that an error was returned
+	if err == nil {
+		t.Error("Expected error for duplicate step names in defer block, but got nil")
+	} else if !strings.Contains(err.Error(), "already defined") {
+		t.Errorf("Expected error message to contain 'already defined', but got: %v", err)
+	}
+}
+
 func TestProcessWithUncalledDefer(t *testing.T) {
 	// Define a YAML where the deferred step should NOT be called
 	deferYAML := `
