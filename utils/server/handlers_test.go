@@ -277,7 +277,7 @@ summarize:
 	assert.NotNil(t, serverProc, "Server processor should be created successfully")
 }
 
-// Test that direct DSLConfig parsing fails for our YAML format
+// Test that direct DSLConfig parsing works for our YAML format
 func TestDirectDSLConfigParsing(t *testing.T) {
 	yamlContent := []byte(`
 analyze_text:
@@ -287,14 +287,18 @@ analyze_text:
   output: STDOUT
 `)
 
-	// Try parsing directly into DSLConfig (the old way that caused the bug)
+	// Try parsing directly into DSLConfig
 	var dslConfig processor.DSLConfig
 	err := yaml.Unmarshal(yamlContent, &dslConfig)
 
-	// This should result in a DSLConfig with no steps
+	// This should result in a DSLConfig with one step
 	assert.NoError(t, err, "Parsing should not error")
-	assert.Empty(t, dslConfig.Steps,
-		"Direct parsing into DSLConfig should result in no steps due to YAML structure mismatch")
+	assert.Len(t, dslConfig.Steps, 1, "Direct parsing into DSLConfig should result in one step")
+	assert.Equal(t, "analyze_text", dslConfig.Steps[0].Name, "Step name should be 'analyze_text'")
+	assert.Equal(t, "STDIN", dslConfig.Steps[0].Config.Input, "Step input should be 'STDIN'")
+	assert.Equal(t, "gpt-4o", dslConfig.Steps[0].Config.Model, "Step model should be 'gpt-4o'")
+	assert.Equal(t, "Test action", dslConfig.Steps[0].Config.Action, "Step action should be 'Test action'")
+	assert.Equal(t, "STDOUT", dslConfig.Steps[0].Config.Output, "Step output should be 'STDOUT'")
 }
 
 func TestHandleProcessStreaming(t *testing.T) {
