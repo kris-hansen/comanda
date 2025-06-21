@@ -93,22 +93,21 @@ jobs:
           echo "NEW_VERSION=$new_version" >> $GITHUB_ENV
           echo "new_version_val=$new_version" >> $GITHUB_OUTPUT # Output for other jobs
           
-          # Update VERSION file
-          echo "$new_version_no_v" > VERSION
-          
           # Check if we're in dry-run mode
           if [ "${{ github.event.inputs.dry_run }}" == "true" ]; then
             echo "DRY RUN: Would update VERSION file to: $new_version_no_v"
             echo "DRY RUN: Would create tag: $new_version"
             echo "DRY RUN: Would push tag to origin"
           else
-            echo "Updated VERSION file to: $new_version_no_v"
             # Commit the VERSION file change
             git config --global user.name "GitHub Actions Bot"
             git config --global user.email "actions@github.com"
             
             # Pull the latest changes
             git pull origin main
+
+            # Update VERSION file
+            echo "$new_version_no_v" > VERSION
             
             # Stage the VERSION file
             git add VERSION
