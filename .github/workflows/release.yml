@@ -66,53 +66,63 @@ jobs:
       - name: Bump version and push tag
         id: tag_version # Step ID for output
         run: |
-          version=${CURRENT_VERSION#v}
-          IFS='.' read -ra ADDR <<< "$version"
-          major="${ADDR[0]:-0}"
-          minor="${ADDR[1]:-0}"
-          patch="${ADDR[2]:-0}"
-          
-          # Start with patch + 1
-          patch=$((patch + 1))
-          
-          # Keep incrementing patch until we find a tag that doesn't exist
-          while true; do
-            new_version="v$major.$minor.$patch"
-            new_version_no_v="$major.$minor.$patch"
-            
-            # Check if tag exists
-            if git rev-parse "$new_version" >/dev/null 2>&1; then
-              echo "Tag $new_version already exists, incrementing patch version..."
-              patch=$((patch + 1))
-            else
-              # Tag doesn't exist, we can use this version
-              break
-            fi
-          done
-          
-          echo "NEW_VERSION=$new_version" >> $GITHUB_ENV
-          echo "new_version_val=$new_version" >> $GITHUB_OUTPUT # Output for other jobs
-          
           # Check if we're in dry-run mode
           if [ "${{ github.event.inputs.dry_run }}" == "true" ]; then
+            version=${CURRENT_VERSION#v}
+            IFS='.' read -ra ADDR <<< "$version"
+            major="${ADDR[0]:-0}"
+            minor="${ADDR[1]:-0}"
+            patch="${ADDR[2]:-0}"
+            patch=$((patch + 1))
+            new_version="v$major.$minor.$patch"
+            new_version_no_v="$major.$minor.$patch"
+
             echo "DRY RUN: Would update VERSION file to: $new_version_no_v"
             echo "DRY RUN: Would create tag: $new_version"
             echo "DRY RUN: Would push tag to origin"
+            echo "NEW_VERSION=$new_version" >> $GITHUB_ENV
+            echo "new_version_val=$new_version" >> $GITHUB_OUTPUT
           else
-            # Commit the VERSION file change
             git config --global user.name "GitHub Actions Bot"
             git config --global user.email "actions@github.com"
             
-            # Pull the latest changes
+            # Pull the latest changes to get the most up-to-date state
             git pull origin main
-
+            
+            # Now, read the version from the file
+            current_version="v$(cat VERSION)"
+            version=${current_version#v}
+            IFS='.' read -ra ADDR <<< "$version"
+            major="${ADDR[0]:-0}"
+            minor="${ADDR[1]:-0}"
+            patch="${ADDR[2]:-0}"
+            
+            # Start with patch + 1
+            patch=$((patch + 1))
+            
+            # Keep incrementing patch until we find a tag that doesn't exist
+            while true; do
+              new_version="v$major.$minor.$patch"
+              new_version_no_v="$major.$minor.$patch"
+              
+              # Check if tag exists
+              if git rev-parse "$new_version" >/dev/null 2>&1; then
+                echo "Tag $new_version already exists, incrementing patch version..."
+                patch=$((patch + 1))
+              else
+                # Tag doesn't exist, we can use this version
+                break
+              fi
+            done
+            
+            echo "NEW_VERSION=$new_version" >> $GITHUB_ENV
+            echo "new_version_val=$new_version" >> $GITHUB_OUTPUT
+            
             # Update VERSION file
             echo "$new_version_no_v" > VERSION
             
-            # Stage the VERSION file
+            # Stage, commit, and push
             git add VERSION
-            
-            # Commit and push
             git commit -m "Bump version to $new_version"
             git push origin HEAD:main
             
