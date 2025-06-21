@@ -35,7 +35,8 @@ type Step struct {
 // DSLConfig represents the structure of the DSL configuration
 type DSLConfig struct {
 	Steps         []Step
-	ParallelSteps map[string][]Step // Steps that can be executed in parallel
+	ParallelSteps map[string][]Step     // Steps that can be executed in parallel
+	Defer         map[string]StepConfig `yaml:"defer,omitempty"`
 }
 
 // StepDependency represents a dependency between steps

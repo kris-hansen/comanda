@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -43,6 +44,46 @@ type Processor struct {
 	variables    map[string]string // Store variables from STDIN
 	progress     ProgressWriter    // Progress writer for streaming updates
 	runtimeDir   string            // Runtime directory for file operations
+}
+
+// UnmarshalYAML is a custom unmarshaler for DSLConfig to handle mixed types at the root level
+func (c *DSLConfig) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind != yaml.MappingNode {
+		return fmt.Errorf("expected a mapping node but got %v", node.Kind)
+	}
+
+	c.Steps = []Step{}
+	c.ParallelSteps = make(map[string][]Step)
+	c.Defer = make(map[string]StepConfig)
+
+	for i := 0; i < len(node.Content); i += 2 {
+		keyNode := node.Content[i]
+		valueNode := node.Content[i+1]
+		stepName := keyNode.Value
+
+		switch stepName {
+		case "parallel":
+			var parallelSteps map[string][]Step
+			if err := valueNode.Decode(&parallelSteps); err != nil {
+				return fmt.Errorf("failed to decode parallel steps: %w", err)
+			}
+			c.ParallelSteps = parallelSteps
+		case "defer":
+			var deferredSteps map[string]StepConfig
+			if err := valueNode.Decode(&deferredSteps); err != nil {
+				return fmt.Errorf("failed to decode deferred steps: %w", err)
+			}
+			c.Defer = deferredSteps
+		default:
+			var stepConfig StepConfig
+			if err := valueNode.Decode(&stepConfig); err != nil {
+				return fmt.Errorf("failed to decode step '%s': %w", stepName, err)
+			}
+			c.Steps = append(c.Steps, Step{Name: stepName, Config: stepConfig})
+		}
+	}
+
+	return nil
 }
 
 // isTestMode checks if the code is running in test mode
@@ -594,6 +635,11 @@ func (p *Processor) Process() error {
 
 		p.spinner.Stop()
 		p.debugf("Successfully processed step: %s", step.Name)
+
+		// Check for deferred step execution
+		if err := p.handleDeferredStep(); err != nil {
+			return err
+		}
 
 		// Clear the handler's contents for the next step
 		p.handler = input.NewHandler()
@@ -1300,6 +1346,62 @@ func (p *Processor) validateGeneratedWorkflow(yamlContent string) error {
 	}
 
 	p.debugf("Generated workflow validation successful - all %d model references are valid", len(referencedModels))
+	return nil
+}
+
+// handleDeferredStep checks the last output for a deferred step call and executes it.
+func (p *Processor) handleDeferredStep() error {
+	var deferredCall struct {
+		StepName string `json:"step"`
+		Input    string `json:"input"`
+	}
+
+	// Trim whitespace and check if the output is a JSON object
+	trimmedOutput := strings.TrimSpace(p.lastOutput)
+	if !strings.HasPrefix(trimmedOutput, "{") || !strings.HasSuffix(trimmedOutput, "}") {
+		return nil // Not a JSON object, so no deferred step to process
+	}
+
+	// Try to parse as JSON using encoding/json
+	if err := json.Unmarshal([]byte(p.lastOutput), &deferredCall); err != nil {
+		// Not a valid deferred call, so just continue
+		p.debugf("Output is not a valid deferred step call: %v", err)
+		return nil
+	}
+
+	p.debugf("Parsed deferred call: step=%s, input=%s", deferredCall.StepName, deferredCall.Input)
+
+	if deferredCall.StepName == "" {
+		return nil // No step name provided
+	}
+
+	deferredStepConfig, ok := p.config.Defer[deferredCall.StepName]
+	if !ok {
+		p.debugf("Deferred step '%s' not found in configuration", deferredCall.StepName)
+		return nil // Step not found in defer block
+	}
+
+	p.debugf("Executing deferred step: %s", deferredCall.StepName)
+
+	// Set the input for the deferred step
+	p.lastOutput = deferredCall.Input
+
+	// Create a Step object to process
+	deferredStep := Step{
+		Name:   deferredCall.StepName,
+		Config: deferredStepConfig,
+	}
+
+	// Process the deferred step
+	response, err := p.processStep(deferredStep, false, "")
+	if err != nil {
+		return fmt.Errorf("error processing deferred step '%s': %w", deferredCall.StepName, err)
+	}
+
+	// The output of the deferred step becomes the new lastOutput
+	p.lastOutput = response
+
+	p.debugf("Successfully processed deferred step: %s", deferredCall.StepName)
 	return nil
 }
 

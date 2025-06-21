@@ -112,6 +112,7 @@ Explore the [Features](#features) and [Examples](examples/README.md) to learn mo
 - 🕷️ Advanced web scraping capabilities with configurable options
 - 🛠️ Support for specialty steps such as OpenAI Responses
 - 🚀 Parallel processing of independent steps for improved performance
+- 🔀 Conditional branching with deferred steps for dynamic workflows
 - 🔒 HTTP server mode: use it as a multi-LLM workflow wrapper
 - 🔐 Secure configuration encryption for protecting API keys and secrets
 - 📁 Multi-file input support with content consolidation
@@ -999,6 +1000,45 @@ comanda supports parallel processing of independent steps to improve performance
 - Running the same prompt against multiple models for comparison
 - Processing multiple files independently
 - Performing different analyses on the same input
+
+### Conditional Branching with Deferred Steps
+
+comanda supports conditional branching through the `defer:` tag in the YAML DSL. This feature allows you to define steps that are excluded from execution unless they are explicitly called from the output of another step.
+
+```yaml
+# Basic structure of a workflow with deferred steps
+determine_type:
+  input: STDIN
+  model: gpt-4o-mini
+  action: "Analyze this input and return a JSON response with format: {\"step\": \"next_step_name\", \"input\": \"data to pass\"}"
+  output: STDOUT
+
+defer:
+  process_type_a:
+    input: STDIN
+    model: gpt-4o-mini
+    action: "Process this as type A..."
+    output: STDOUT
+
+  process_type_b:
+    input: STDIN
+    model: gpt-4o-mini
+    action: "Process this as type B..."
+    output: STDOUT
+```
+
+In this example:
+1. The `determine_type` step analyzes the input and returns a JSON response with the name of the deferred step to execute.
+2. The system then executes the specified deferred step with the provided input.
+3. After the deferred step completes, processing continues with any subsequent steps.
+
+This feature enables:
+- Dynamic workflow paths based on content analysis
+- Conditional processing based on classification results
+- Error handling with specialized steps
+- Recursive workflows by having steps call themselves with modified input
+
+For a complete example, see the [defer example](examples/defer-example/README.md).
 
 To use parallel processing, define steps under a `parallel-process` block in your YAML file:
 

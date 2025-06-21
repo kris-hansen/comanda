@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/kris-hansen/comanda/utils/config"
+	"github.com/kris-hansen/comanda/utils/models"
+	"gopkg.in/yaml.v3"
 )
 
 func createTestServerConfig() *config.ServerConfig {
@@ -329,6 +331,155 @@ func TestDebugf(t *testing.T) {
 			// In a real scenario, you might want to capture stdout and verify the output
 			processor.debugf("test message %s", "arg")
 		})
+	}
+}
+
+// CustomMockProvider extends MockProvider with custom response handling
+type CustomMockProvider struct {
+	MockProvider
+	responses map[string]string
+}
+
+func (m *CustomMockProvider) SendPrompt(model, prompt string) (string, error) {
+	// First check if we have a custom response for this prompt
+	for key, response := range m.responses {
+		if strings.Contains(prompt, key) {
+			return response, nil
+		}
+	}
+
+	// Fall back to the parent implementation
+	return "mock response", nil
+}
+
+// Override SendPromptWithFile to use our custom responses
+func (m *CustomMockProvider) SendPromptWithFile(model, prompt string, file models.FileInput) (string, error) {
+	// First check if we have a custom response for this prompt
+	for key, response := range m.responses {
+		if strings.Contains(prompt, key) {
+			return response, nil
+		}
+	}
+
+	// Fall back to the parent implementation
+	return "mock response", nil
+}
+
+func TestProcessWithDefer(t *testing.T) {
+	// Create a temporary defer.yaml file for the test
+	deferYAML := `
+determine_poem_type:
+  input: STDIN
+  model: gpt-4o-mini
+  action: "Analyze the input poem"
+  output: STDOUT
+
+defer:
+  analyze_haiku:
+    input: STDIN
+    model: gpt-4o-mini
+    action: "This is the haiku analysis."
+    output: STDOUT
+`
+	// Load the DSL config from the string
+	var dslConfig DSLConfig
+	if err := yaml.Unmarshal([]byte(deferYAML), &dslConfig); err != nil {
+		t.Fatalf("Failed to unmarshal yaml: %v", err)
+	}
+
+	// Create a custom mock provider for this test
+	customMockProvider := &CustomMockProvider{
+		MockProvider: *NewMockProvider("openai"),
+		responses: map[string]string{
+			"Analyze the input poem":      `{"step":"analyze_haiku","input":"a test haiku"}`,
+			"This is the haiku analysis.": "Haiku analysis complete.",
+		},
+	}
+	customMockProvider.Configure("test-key")
+
+	// Store the original DetectProvider function
+	originalDetect := models.DetectProvider
+
+	// Override the DetectProvider function to return our custom mock provider
+	models.DetectProvider = func(modelName string) models.Provider {
+		return customMockProvider
+	}
+
+	// Restore the original function when the test is done
+	defer func() { models.DetectProvider = originalDetect }()
+
+	// Create a processor with the default environment config
+	processor := NewProcessor(&dslConfig, createTestEnvConfig(), createTestServerConfig(), true, "")
+	processor.SetLastOutput("An old silent pond...") // Initial STDIN
+
+	// Process the workflow
+	err := processor.Process()
+	if err != nil {
+		t.Fatalf("Process() failed: %v", err)
+	}
+
+	// Check the final output
+	expectedOutput := "Haiku analysis complete."
+	if processor.LastOutput() != expectedOutput {
+		t.Errorf("Expected final output to be '%s', but got '%s'", expectedOutput, processor.LastOutput())
+	}
+}
+
+func TestProcessWithUncalledDefer(t *testing.T) {
+	// Define a YAML where the deferred step should NOT be called
+	deferYAML := `
+determine_poem_type:
+  input: STDIN
+  model: gpt-4o-mini
+  action: "Analyze the input poem"
+  output: STDOUT
+
+defer:
+  analyze_sonnet:
+    input: STDIN
+    model: gpt-4o-mini
+    action: "This is the sonnet analysis."
+    output: STDOUT
+`
+	var dslConfig DSLConfig
+	if err := yaml.Unmarshal([]byte(deferYAML), &dslConfig); err != nil {
+		t.Fatalf("Failed to unmarshal yaml: %v", err)
+	}
+
+	// Create a custom mock provider for this test
+	customMockProvider := &CustomMockProvider{
+		MockProvider: *NewMockProvider("openai"),
+		responses: map[string]string{
+			"Analyze the input poem":       "Just a regular string output.",
+			"This is the sonnet analysis.": "THIS_SHOULD_NOT_BE_RETURNED",
+		},
+	}
+	customMockProvider.Configure("test-key")
+
+	// Store the original DetectProvider function
+	originalDetect := models.DetectProvider
+
+	// Override the DetectProvider function to return our custom mock provider
+	models.DetectProvider = func(modelName string) models.Provider {
+		return customMockProvider
+	}
+
+	// Restore the original function when the test is done
+	defer func() { models.DetectProvider = originalDetect }()
+
+	// Create a processor with the default environment config
+	processor := NewProcessor(&dslConfig, createTestEnvConfig(), createTestServerConfig(), true, "")
+	processor.SetLastOutput("An old silent pond...")
+
+	err := processor.Process()
+	if err != nil {
+		t.Fatalf("Process() failed: %v", err)
+	}
+
+	// The final output should be from the first step, as the defer step is never called.
+	expectedOutput := "Just a regular string output."
+	if processor.LastOutput() != expectedOutput {
+		t.Errorf("Expected final output to be '%s', but got '%s'", expectedOutput, processor.LastOutput())
 	}
 }
 
