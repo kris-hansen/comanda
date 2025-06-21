@@ -107,15 +107,15 @@ jobs:
             git config --global user.name "GitHub Actions Bot"
             git config --global user.email "actions@github.com"
             
-            # Pull latest changes with rebase
-            git pull --rebase origin main
+            # Pull the latest changes
+            git pull origin main
             
             # Stage the VERSION file
             git add VERSION
             
             # Commit and push
             git commit -m "Bump version to $new_version"
-            git push --force-with-lease origin HEAD:main
+            git push origin HEAD:main
             
             echo "Creating new tag: $new_version"
             git tag $new_version
