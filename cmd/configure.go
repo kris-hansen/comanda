@@ -194,6 +194,8 @@ func getXAIModels() []string {
 	return []string{
 		"grok-beta",
 		"grok-vision-beta",
+		"grok-4",
+		"grok-4-heavy",
 	}
 }
 

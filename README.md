@@ -355,6 +355,10 @@ xai:
     Modes: text, file
   - grok-vision-beta (external)
     Modes: vision
+  - grok-4 (external)
+    Modes: text, file
+  - grok-4-heavy (external)
+    Modes: text, file
 
 anthropic:
   - claude-3-5-sonnet-20241022 (external)
