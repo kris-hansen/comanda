@@ -54,9 +54,13 @@ func WithRetry(operation func() (interface{}, error), shouldRetry func(error) bo
 			retryWait = retryTime
 		}
 
-		// Log the retry attempt
+		// Log the retry attempt - detailed in debug mode, brief otherwise
 		config.DebugLog("Received retryable error: %v. Retrying in %v (attempt %d/%d)",
 			err, retryWait, attempt+1, config.MaxRetries)
+
+		// Also print a brief message in non-debug mode
+		fmt.Printf("Rate limit detected, retrying in %v (attempt %d/%d)...\n",
+			retryWait, attempt+1, config.MaxRetries)
 
 		// Wait before next retry
 		time.Sleep(retryWait)
@@ -119,4 +123,9 @@ func extractRetryTime(errMsg string) time.Duration {
 // DebugLog logs debug information if verbose mode is enabled
 func (c RetryConfig) DebugLog(format string, args ...interface{}) {
 	config.DebugLog("[Retry] "+format, args...)
+}
+
+// Log prints a message regardless of debug mode
+func (c RetryConfig) Log(format string, args ...interface{}) {
+	fmt.Printf(format+"\n", args...)
 }
