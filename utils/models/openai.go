@@ -7,12 +7,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/kris-hansen/comanda/utils/fileutil"
+	"github.com/kris-hansen/comanda/utils/retry"
 	openai "github.com/sashabaranov/go-openai"
 )
 
@@ -138,31 +138,62 @@ func (o *OpenAIProvider) SendPrompt(modelName string, prompt string) (string, er
 
 	// Check if this is a vision input by looking for base64 image data
 	if strings.HasPrefix(modelName, "gpt-4") && strings.Contains(prompt, ";base64,") {
-		return o.handleVisionPrompt(client, prompt, modelName)
+		return o.handleVisionPromptWithRetry(client, prompt, modelName)
 	}
 
-	messages := []openai.ChatCompletionMessage{
-		{
-			Role:    openai.ChatMessageRoleUser,
-			Content: prompt,
+	// Use retry mechanism for API calls
+	result, err := retry.WithRetry(
+		func() (interface{}, error) {
+			messages := []openai.ChatCompletionMessage{
+				{
+					Role:    openai.ChatMessageRoleUser,
+					Content: prompt,
+				},
+			}
+
+			req := o.createChatCompletionRequest(modelName, messages)
+			resp, err := client.CreateChatCompletion(context.Background(), req)
+
+			if err != nil {
+				return "", fmt.Errorf("OpenAI API error: %v", err)
+			}
+
+			if len(resp.Choices) == 0 {
+				return "", fmt.Errorf("no response choices returned from OpenAI")
+			}
+
+			return resp.Choices[0].Message.Content, nil
 		},
-	}
-
-	req := o.createChatCompletionRequest(modelName, messages)
-	resp, err := client.CreateChatCompletion(context.Background(), req)
+		retry.Is429Error,
+		retry.DefaultRetryConfig,
+	)
 
 	if err != nil {
-		return "", fmt.Errorf("OpenAI API error: %v", err)
+		return "", err
 	}
 
-	if len(resp.Choices) == 0 {
-		return "", fmt.Errorf("no response choices returned from OpenAI")
-	}
-
-	response := resp.Choices[0].Message.Content
+	response := result.(string)
 	o.debugf("API call completed, response length: %d characters", len(response))
 
 	return response, nil
+}
+
+// handleVisionPromptWithRetry processes a vision model request with image data and retry logic
+func (o *OpenAIProvider) handleVisionPromptWithRetry(client *openai.Client, prompt string, modelName string) (string, error) {
+	// Use retry mechanism for API calls
+	result, err := retry.WithRetry(
+		func() (interface{}, error) {
+			return o.handleVisionPrompt(client, prompt, modelName)
+		},
+		retry.Is429Error,
+		retry.DefaultRetryConfig,
+	)
+
+	if err != nil {
+		return "", err
+	}
+
+	return result.(string), nil
 }
 
 // SendPromptWithFile sends a prompt along with a file to the specified model and returns the response
@@ -178,7 +209,7 @@ func (o *OpenAIProvider) SendPromptWithFile(modelName string, prompt string, fil
 		return "", fmt.Errorf("invalid OpenAI model: %s", modelName)
 	}
 
-	// Read the file content with size check
+	// Read the file content with size check - do this outside the retry loop
 	fileData, err := fileutil.SafeReadFile(file.Path)
 	if err != nil {
 		return "", fmt.Errorf("failed to read file: %v", err)
@@ -188,35 +219,66 @@ func (o *OpenAIProvider) SendPromptWithFile(modelName string, prompt string, fil
 
 	// For GPT-4 Vision, handle image files
 	if strings.HasPrefix(modelName, "gpt-4") && strings.HasPrefix(file.MimeType, "image/") {
-		return o.handleFileAsVision(client, prompt, fileData, file.MimeType, modelName)
+		return o.handleFileAsVisionWithRetry(client, prompt, fileData, file.MimeType, modelName)
 	}
 
 	// For other files, include the content as part of the prompt
 	fileContent := string(fileData)
 	combinedPrompt := fmt.Sprintf("File content:\n%s\n\nUser prompt: %s", fileContent, prompt)
 
-	messages := []openai.ChatCompletionMessage{
-		{
-			Role:    openai.ChatMessageRoleUser,
-			Content: combinedPrompt,
-		},
-	}
+	// Use retry mechanism for API calls
+	result, err := retry.WithRetry(
+		func() (interface{}, error) {
+			messages := []openai.ChatCompletionMessage{
+				{
+					Role:    openai.ChatMessageRoleUser,
+					Content: combinedPrompt,
+				},
+			}
 
-	req := o.createChatCompletionRequest(modelName, messages)
-	resp, err := client.CreateChatCompletion(context.Background(), req)
+			req := o.createChatCompletionRequest(modelName, messages)
+			resp, err := client.CreateChatCompletion(context.Background(), req)
+
+			if err != nil {
+				return "", fmt.Errorf("OpenAI API error: %v", err)
+			}
+
+			if len(resp.Choices) == 0 {
+				return "", fmt.Errorf("no response choices returned from OpenAI")
+			}
+
+			return resp.Choices[0].Message.Content, nil
+		},
+		retry.Is429Error,
+		retry.DefaultRetryConfig,
+	)
 
 	if err != nil {
-		return "", fmt.Errorf("OpenAI API error: %v", err)
+		return "", err
 	}
 
-	if len(resp.Choices) == 0 {
-		return "", fmt.Errorf("no response choices returned from OpenAI")
-	}
-
-	response := resp.Choices[0].Message.Content
+	response := result.(string)
 	o.debugf("API call completed, response length: %d characters", len(response))
 
 	return response, nil
+}
+
+// handleFileAsVisionWithRetry processes a file as a vision model request with retry logic
+func (o *OpenAIProvider) handleFileAsVisionWithRetry(client *openai.Client, prompt string, fileData []byte, mimeType string, modelName string) (string, error) {
+	// Use retry mechanism for API calls
+	result, err := retry.WithRetry(
+		func() (interface{}, error) {
+			return o.handleFileAsVision(client, prompt, fileData, mimeType, modelName)
+		},
+		retry.Is429Error,
+		retry.DefaultRetryConfig,
+	)
+
+	if err != nil {
+		return "", err
+	}
+
+	return result.(string), nil
 }
 
 // handleFileAsVision processes a file as a vision model request
@@ -509,70 +571,64 @@ func (o *OpenAIProvider) SendPromptWithResponses(config ResponsesConfig) (string
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.openai.com/v1/responses", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return "", fmt.Errorf("failed to create HTTP request: %w", err)
-	}
-
-	// Set headers
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", o.apiKey))
-
-	// Implement retry logic
-	maxRetries := 3
-	var lastErr error
-	var responseData map[string]interface{}
-
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		if attempt > 0 {
-			// Exponential backoff
-			backoffDuration := time.Duration(math.Pow(2, float64(attempt))) * time.Second
-			time.Sleep(backoffDuration)
-			o.debugf("Retrying request (attempt %d/%d) after %v", attempt+1, maxRetries, backoffDuration)
-		}
-
-		// Send request
-		client := &http.Client{}
-		resp, err := client.Do(req)
-		if err != nil {
-			lastErr = fmt.Errorf("failed to send HTTP request (attempt %d/%d): %w", attempt+1, maxRetries, err)
-			continue // Retry
-		}
-
-		// Read response body
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			lastErr = fmt.Errorf("failed to read response body (attempt %d/%d): %w", attempt+1, maxRetries, err)
-			continue // Retry
-		}
-
-		// Check for error status code
-		if resp.StatusCode != http.StatusOK {
-			// Don't retry on 4xx errors (client errors)
-			if resp.StatusCode >= 400 && resp.StatusCode < 500 {
-				return "", fmt.Errorf("OpenAI API error: %s (status code: %d)", string(body), resp.StatusCode)
+	// Use our generic retry mechanism instead of custom implementation
+	result, err := retry.WithRetry(
+		func() (interface{}, error) {
+			req, err := http.NewRequestWithContext(ctx, "POST", "https://api.openai.com/v1/responses", bytes.NewBuffer(jsonData))
+			if err != nil {
+				return nil, fmt.Errorf("failed to create HTTP request: %w", err)
 			}
 
-			lastErr = fmt.Errorf("OpenAI API error (attempt %d/%d): %s (status code: %d)",
-				attempt+1, maxRetries, string(body), resp.StatusCode)
-			continue // Retry on 5xx errors
-		}
+			// Set headers
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", o.apiKey))
 
-		// Parse response
-		if err := json.Unmarshal(body, &responseData); err != nil {
-			lastErr = fmt.Errorf("failed to parse response body (attempt %d/%d): %w", attempt+1, maxRetries, err)
-			continue // Retry
-		}
+			// Send request
+			client := &http.Client{}
+			resp, err := client.Do(req)
+			if err != nil {
+				return nil, fmt.Errorf("failed to send HTTP request: %w", err)
+			}
+			defer resp.Body.Close()
 
-		// If we get here, the request was successful
-		break
+			// Read response body
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read response body: %w", err)
+			}
+
+			// Check for rate limit errors (429)
+			if resp.StatusCode == http.StatusTooManyRequests {
+				return nil, fmt.Errorf("API request failed with status 429: %s", string(body))
+			}
+
+			// Check for error status code
+			if resp.StatusCode != http.StatusOK {
+				// Don't retry on 4xx errors (client errors) except 429
+				if resp.StatusCode >= 400 && resp.StatusCode < 500 && resp.StatusCode != 429 {
+					return nil, fmt.Errorf("OpenAI API error: %s (status code: %d)", string(body), resp.StatusCode)
+				}
+
+				return nil, fmt.Errorf("OpenAI API error: %s (status code: %d)", string(body), resp.StatusCode)
+			}
+
+			// Parse response
+			var responseData map[string]interface{}
+			if err := json.Unmarshal(body, &responseData); err != nil {
+				return nil, fmt.Errorf("failed to parse response body: %w", err)
+			}
+
+			return responseData, nil
+		},
+		retry.Is429Error,
+		retry.DefaultRetryConfig,
+	)
+
+	if err != nil {
+		return "", err
 	}
 
-	// Check if all retries failed
-	if responseData == nil {
-		return "", fmt.Errorf("all retry attempts failed: %w", lastErr)
-	}
+	responseData := result.(map[string]interface{})
 
 	// Extract output text
 	output, err := o.extractOutputText(responseData)

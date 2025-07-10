@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kris-hansen/comanda/utils/fileutil"
+	"github.com/kris-hansen/comanda/utils/retry"
 	openai "github.com/sashabaranov/go-openai"
 )
 
@@ -112,38 +113,51 @@ func (x *XAIProvider) SendPrompt(modelName string, prompt string) (string, error
 	config.BaseURL = "https://api.x.ai/v1"
 	client := openai.NewClientWithConfig(config)
 
-	// Create context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
-	defer cancel()
+	// Use retry mechanism for API calls
+	result, err := retry.WithRetry(
+		func() (interface{}, error) {
+			// Create context with timeout
+			ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+			defer cancel()
 
-	resp, err := client.CreateChatCompletion(
-		ctx,
-		openai.ChatCompletionRequest{
-			Model: modelName,
-			Messages: []openai.ChatCompletionMessage{
-				{
-					Role:    openai.ChatMessageRoleUser,
-					Content: prompt,
+			resp, err := client.CreateChatCompletion(
+				ctx,
+				openai.ChatCompletionRequest{
+					Model: modelName,
+					Messages: []openai.ChatCompletionMessage{
+						{
+							Role:    openai.ChatMessageRoleUser,
+							Content: prompt,
+						},
+					},
+					Temperature: float32(x.config.Temperature),
+					MaxTokens:   x.config.MaxTokens,
+					TopP:        float32(x.config.TopP),
 				},
-			},
-			Temperature: float32(x.config.Temperature),
-			MaxTokens:   x.config.MaxTokens,
-			TopP:        float32(x.config.TopP),
+			)
+
+			if err != nil {
+				if ctx.Err() == context.DeadlineExceeded {
+					return "", fmt.Errorf("request timed out after %v", defaultTimeout)
+				}
+				return "", fmt.Errorf("X.AI API error: %v", err)
+			}
+
+			if len(resp.Choices) == 0 {
+				return "", fmt.Errorf("no response choices returned from X.AI")
+			}
+
+			return resp.Choices[0].Message.Content, nil
 		},
+		retry.Is429Error,
+		retry.DefaultRetryConfig,
 	)
 
 	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			return "", fmt.Errorf("request timed out after %v", defaultTimeout)
-		}
-		return "", fmt.Errorf("X.AI API error: %v", err)
+		return "", err
 	}
 
-	if len(resp.Choices) == 0 {
-		return "", fmt.Errorf("no response choices returned from X.AI")
-	}
-
-	response := resp.Choices[0].Message.Content
+	response := result.(string)
 	x.debugf("API call completed, response length: %d characters", len(response))
 
 	return response, nil
@@ -162,7 +176,7 @@ func (x *XAIProvider) SendPromptWithFile(modelName string, prompt string, file F
 		return "", fmt.Errorf("invalid X.AI model: %s", modelName)
 	}
 
-	// Read the file content with size check
+	// Read the file content with size check - do this outside the retry loop
 	fileData, err := fileutil.SafeReadFile(file.Path)
 	if err != nil {
 		return "", fmt.Errorf("failed to read file: %v", err)
@@ -172,52 +186,66 @@ func (x *XAIProvider) SendPromptWithFile(modelName string, prompt string, file F
 	config.BaseURL = "https://api.x.ai/v1"
 	client := openai.NewClientWithConfig(config)
 
-	// Create context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
-	defer cancel()
-
 	// For image files, use MultiContent approach similar to OpenAI
 	if strings.HasPrefix(file.MimeType, "image/") {
 		base64Data := fmt.Sprintf("data:%s;base64,%s", file.MimeType, string(fileData))
-		content := []openai.ChatMessagePart{
-			{
-				Type: openai.ChatMessagePartTypeText,
-				Text: prompt,
-			},
-			{
-				Type: openai.ChatMessagePartTypeImageURL,
-				ImageURL: &openai.ChatMessageImageURL{
-					URL: base64Data,
-				},
-			},
-		}
 
-		resp, err := client.CreateChatCompletion(
-			ctx,
-			openai.ChatCompletionRequest{
-				Model: modelName,
-				Messages: []openai.ChatCompletionMessage{
+		// Use retry mechanism for API calls with image
+		result, err := retry.WithRetry(
+			func() (interface{}, error) {
+				// Create context with timeout
+				ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+				defer cancel()
+
+				content := []openai.ChatMessagePart{
 					{
-						Role:         openai.ChatMessageRoleUser,
-						MultiContent: content,
+						Type: openai.ChatMessagePartTypeText,
+						Text: prompt,
 					},
-				},
-				MaxTokens: x.config.MaxTokens,
+					{
+						Type: openai.ChatMessagePartTypeImageURL,
+						ImageURL: &openai.ChatMessageImageURL{
+							URL: base64Data,
+						},
+					},
+				}
+
+				resp, err := client.CreateChatCompletion(
+					ctx,
+					openai.ChatCompletionRequest{
+						Model: modelName,
+						Messages: []openai.ChatCompletionMessage{
+							{
+								Role:         openai.ChatMessageRoleUser,
+								MultiContent: content,
+							},
+						},
+						MaxTokens: x.config.MaxTokens,
+					},
+				)
+
+				if err != nil {
+					if ctx.Err() == context.DeadlineExceeded {
+						return "", fmt.Errorf("request timed out after %v", defaultTimeout)
+					}
+					return "", fmt.Errorf("X.AI API error: %v", err)
+				}
+
+				if len(resp.Choices) == 0 {
+					return "", fmt.Errorf("no response choices returned from X.AI")
+				}
+
+				return resp.Choices[0].Message.Content, nil
 			},
+			retry.Is429Error,
+			retry.DefaultRetryConfig,
 		)
 
 		if err != nil {
-			if ctx.Err() == context.DeadlineExceeded {
-				return "", fmt.Errorf("request timed out after %v", defaultTimeout)
-			}
-			return "", fmt.Errorf("X.AI API error: %v", err)
+			return "", err
 		}
 
-		if len(resp.Choices) == 0 {
-			return "", fmt.Errorf("no response choices returned from X.AI")
-		}
-
-		response := resp.Choices[0].Message.Content
+		response := result.(string)
 		x.debugf("API call completed, response length: %d characters", len(response))
 
 		return response, nil
@@ -233,34 +261,51 @@ func (x *XAIProvider) SendPromptWithFile(modelName string, prompt string, file F
 		return "", fmt.Errorf("combined prompt likely exceeds maximum token limit of %d (estimated tokens: %d)", maxPromptTokens, estimatedTokens)
 	}
 
-	resp, err := client.CreateChatCompletion(
-		ctx,
-		openai.ChatCompletionRequest{
-			Model: modelName,
-			Messages: []openai.ChatCompletionMessage{
-				{
-					Role:    openai.ChatMessageRoleUser,
-					Content: combinedPrompt,
+	// Use retry mechanism for API calls with text file
+	result, err := retry.WithRetry(
+		func() (interface{}, error) {
+			// Create context with timeout
+			ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+			defer cancel()
+
+			resp, err := client.CreateChatCompletion(
+				ctx,
+				openai.ChatCompletionRequest{
+					Model: modelName,
+					Messages: []openai.ChatCompletionMessage{
+						{
+							Role:    openai.ChatMessageRoleUser,
+							Content: combinedPrompt,
+						},
+					},
+					Temperature: float32(x.config.Temperature),
+					MaxTokens:   x.config.MaxTokens,
+					TopP:        float32(x.config.TopP),
 				},
-			},
-			Temperature: float32(x.config.Temperature),
-			MaxTokens:   x.config.MaxTokens,
-			TopP:        float32(x.config.TopP),
+			)
+
+			if err != nil {
+				if ctx.Err() == context.DeadlineExceeded {
+					return "", fmt.Errorf("request timed out after %v", defaultTimeout)
+				}
+				return "", fmt.Errorf("X.AI API error: %v", err)
+			}
+
+			if len(resp.Choices) == 0 {
+				return "", fmt.Errorf("no response choices returned from X.AI")
+			}
+
+			return resp.Choices[0].Message.Content, nil
 		},
+		retry.Is429Error,
+		retry.DefaultRetryConfig,
 	)
 
 	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			return "", fmt.Errorf("request timed out after %v", defaultTimeout)
-		}
-		return "", fmt.Errorf("X.AI API error: %v", err)
+		return "", err
 	}
 
-	if len(resp.Choices) == 0 {
-		return "", fmt.Errorf("no response choices returned from X.AI")
-	}
-
-	response := resp.Choices[0].Message.Content
+	response := result.(string)
 	x.debugf("API call completed, response length: %d characters", len(response))
 
 	return response, nil

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/kris-hansen/comanda/utils/fileutil"
+	"github.com/kris-hansen/comanda/utils/retry"
 )
 
 // AnthropicProvider handles Anthropic family of models
@@ -113,6 +114,7 @@ func (a *AnthropicProvider) SendPrompt(modelName string, prompt string) (string,
 	a.debugf("Using configuration: Temperature=%.2f, MaxTokens=%d, TopP=%.2f",
 		a.config.Temperature, a.config.MaxTokens, a.config.TopP)
 
+	// Prepare the request body outside the retry loop
 	reqBody := anthropicRequest{
 		Model: modelName,
 		Messages: []anthropicMessage{
@@ -136,48 +138,71 @@ func (a *AnthropicProvider) SendPrompt(modelName string, prompt string) (string,
 		return "", fmt.Errorf("failed to marshal request: %v", err)
 	}
 
-	req, err := http.NewRequest("POST", "https://api.anthropic.com/v1/messages", bytes.NewBuffer(jsonData))
+	// Use retry mechanism for API calls
+	result, err := retry.WithRetry(
+		func() (interface{}, error) {
+			req, err := http.NewRequest("POST", "https://api.anthropic.com/v1/messages", bytes.NewBuffer(jsonData))
+			if err != nil {
+				return "", fmt.Errorf("failed to create request: %v", err)
+			}
+
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("x-api-key", a.apiKey)
+			req.Header.Set("anthropic-version", "2023-06-01")
+
+			client := &http.Client{}
+			resp, err := client.Do(req)
+			if err != nil {
+				return "", fmt.Errorf("failed to send request: %v", err)
+			}
+			defer resp.Body.Close()
+
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return "", fmt.Errorf("failed to read response: %v", err)
+			}
+
+			// Check for rate limit errors (429)
+			if resp.StatusCode == http.StatusTooManyRequests {
+				return "", fmt.Errorf("API request failed with status 429: %s", string(body))
+			}
+
+			if resp.StatusCode != http.StatusOK {
+				return "", fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+			}
+
+			var response anthropicResponse
+			if err := json.Unmarshal(body, &response); err != nil {
+				return "", fmt.Errorf("failed to unmarshal response: %v", err)
+			}
+
+			if response.Error != nil {
+				// Check if the error is related to rate limiting
+				if strings.Contains(strings.ToLower(response.Error.Message), "rate limit") ||
+					strings.Contains(strings.ToLower(response.Error.Message), "quota") {
+					return "", fmt.Errorf("API rate limit error: %s", response.Error.Message)
+				}
+				return "", fmt.Errorf("API error: %s", response.Error.Message)
+			}
+
+			if len(response.Content) == 0 {
+				return "", fmt.Errorf("no response content returned from Anthropic")
+			}
+
+			return response.Content[0].Text, nil
+		},
+		retry.Is429Error,
+		retry.DefaultRetryConfig,
+	)
+
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %v", err)
+		return "", err
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", a.apiKey)
-	req.Header.Set("anthropic-version", "2023-06-01")
+	responseText := result.(string)
+	a.debugf("API call completed, response length: %d characters", len(responseText))
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("failed to send request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read response: %v", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var response anthropicResponse
-	if err := json.Unmarshal(body, &response); err != nil {
-		return "", fmt.Errorf("failed to unmarshal response: %v", err)
-	}
-
-	if response.Error != nil {
-		return "", fmt.Errorf("API error: %s", response.Error.Message)
-	}
-
-	if len(response.Content) == 0 {
-		return "", fmt.Errorf("no response content returned from Anthropic")
-	}
-
-	result := response.Content[0].Text
-	a.debugf("API call completed, response length: %d characters", len(result))
-
-	return result, nil
+	return responseText, nil
 }
 
 // SendPromptWithFile sends a prompt along with a file to the specified model and returns the response
@@ -193,7 +218,7 @@ func (a *AnthropicProvider) SendPromptWithFile(modelName string, prompt string, 
 		return "", fmt.Errorf("invalid Anthropic model: %s", modelName)
 	}
 
-	// Read the file content with size check
+	// Read the file content with size check - do this outside the retry loop
 	fileData, err := fileutil.SafeReadFile(file.Path)
 	if err != nil {
 		return "", fmt.Errorf("failed to read file: %v", err)
@@ -266,53 +291,76 @@ func (a *AnthropicProvider) SendPromptWithFile(modelName string, prompt string, 
 		return "", fmt.Errorf("failed to marshal request: %v", err)
 	}
 
-	req, err := http.NewRequest("POST", "https://api.anthropic.com/v1/messages", bytes.NewBuffer(jsonData))
+	// Use retry mechanism for API calls
+	result, err := retry.WithRetry(
+		func() (interface{}, error) {
+			req, err := http.NewRequest("POST", "https://api.anthropic.com/v1/messages", bytes.NewBuffer(jsonData))
+			if err != nil {
+				return "", fmt.Errorf("failed to create request: %v", err)
+			}
+
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("x-api-key", a.apiKey)
+			req.Header.Set("anthropic-version", "2023-06-01")
+
+			// Add beta header for PDF support when sending PDF files
+			if file.MimeType == "application/pdf" {
+				req.Header.Set("anthropic-beta", "pdfs-2024-09-25")
+			}
+
+			client := &http.Client{}
+			resp, err := client.Do(req)
+			if err != nil {
+				return "", fmt.Errorf("failed to send request: %v", err)
+			}
+			defer resp.Body.Close()
+
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return "", fmt.Errorf("failed to read response: %v", err)
+			}
+
+			// Check for rate limit errors (429)
+			if resp.StatusCode == http.StatusTooManyRequests {
+				return "", fmt.Errorf("API request failed with status 429: %s", string(body))
+			}
+
+			if resp.StatusCode != http.StatusOK {
+				return "", fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+			}
+
+			var response anthropicResponse
+			if err := json.Unmarshal(body, &response); err != nil {
+				return "", fmt.Errorf("failed to unmarshal response: %v", err)
+			}
+
+			if response.Error != nil {
+				// Check if the error is related to rate limiting
+				if strings.Contains(strings.ToLower(response.Error.Message), "rate limit") ||
+					strings.Contains(strings.ToLower(response.Error.Message), "quota") {
+					return "", fmt.Errorf("API rate limit error: %s", response.Error.Message)
+				}
+				return "", fmt.Errorf("API error: %s", response.Error.Message)
+			}
+
+			if len(response.Content) == 0 {
+				return "", fmt.Errorf("no response content returned from Anthropic")
+			}
+
+			return response.Content[0].Text, nil
+		},
+		retry.Is429Error,
+		retry.DefaultRetryConfig,
+	)
+
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %v", err)
+		return "", err
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", a.apiKey)
-	req.Header.Set("anthropic-version", "2023-06-01")
+	responseText := result.(string)
+	a.debugf("API call completed, response length: %d characters", len(responseText))
 
-	// Add beta header for PDF support when sending PDF files
-	if file.MimeType == "application/pdf" {
-		req.Header.Set("anthropic-beta", "pdfs-2024-09-25")
-	}
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("failed to send request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read response: %v", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var response anthropicResponse
-	if err := json.Unmarshal(body, &response); err != nil {
-		return "", fmt.Errorf("failed to unmarshal response: %v", err)
-	}
-
-	if response.Error != nil {
-		return "", fmt.Errorf("API error: %s", response.Error.Message)
-	}
-
-	if len(response.Content) == 0 {
-		return "", fmt.Errorf("no response content returned from Anthropic")
-	}
-
-	result := response.Content[0].Text
-	a.debugf("API call completed, response length: %d characters", len(result))
-
-	return result, nil
+	return responseText, nil
 }
 
 // ValidateModel checks if the specific Anthropic model variant is valid

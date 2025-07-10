@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/generative-ai-go/genai"
 	"github.com/kris-hansen/comanda/utils/fileutil"
+	"github.com/kris-hansen/comanda/utils/retry"
 	"google.golang.org/api/option"
 )
 
@@ -112,37 +113,51 @@ func (g *GoogleProvider) SendPrompt(modelName string, prompt string) (string, er
 	g.debugf("Using configuration: Temperature=%.2f, MaxTokens=%d, TopP=%.2f",
 		g.config.Temperature, g.config.MaxTokens, g.config.TopP)
 
-	ctx := context.Background()
-	client, err := genai.NewClient(ctx, option.WithAPIKey(g.apiKey))
+	// Use retry mechanism for API calls
+	result, err := retry.WithRetry(
+		func() (interface{}, error) {
+			ctx := context.Background()
+			client, err := genai.NewClient(ctx, option.WithAPIKey(g.apiKey))
+			if err != nil {
+				return "", fmt.Errorf("failed to create Google AI client: %v", err)
+			}
+			defer client.Close()
+
+			// Initialize the model
+			model := client.GenerativeModel(modelName)
+			model.SetTemperature(float32(g.config.Temperature))
+			model.SetTopP(float32(g.config.TopP))
+			model.SetMaxOutputTokens(int32(g.config.MaxTokens))
+
+			// Generate content
+			resp, err := model.GenerateContent(ctx, genai.Text(prompt))
+			if err != nil {
+				return "", fmt.Errorf("Google AI API error: %v", err)
+			}
+
+			if len(resp.Candidates) == 0 {
+				return "", fmt.Errorf("no response candidates returned from Google AI")
+			}
+
+			// Extract the response text from the first candidate
+			var response string
+			for _, part := range resp.Candidates[0].Content.Parts {
+				if text, ok := part.(genai.Text); ok {
+					response += string(text)
+				}
+			}
+
+			return response, nil
+		},
+		retry.Is429Error,
+		retry.DefaultRetryConfig,
+	)
+
 	if err != nil {
-		return "", fmt.Errorf("failed to create Google AI client: %v", err)
-	}
-	defer client.Close()
-
-	// Initialize the model
-	model := client.GenerativeModel(modelName)
-	model.SetTemperature(float32(g.config.Temperature))
-	model.SetTopP(float32(g.config.TopP))
-	model.SetMaxOutputTokens(int32(g.config.MaxTokens))
-
-	// Generate content
-	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
-	if err != nil {
-		return "", fmt.Errorf("Google AI API error: %v", err)
+		return "", err
 	}
 
-	if len(resp.Candidates) == 0 {
-		return "", fmt.Errorf("no response candidates returned from Google AI")
-	}
-
-	// Extract the response text from the first candidate
-	var response string
-	for _, part := range resp.Candidates[0].Content.Parts {
-		if text, ok := part.(genai.Text); ok {
-			response += string(text)
-		}
-	}
-
+	response := result.(string)
 	g.debugf("API call completed, response length: %d characters", len(response))
 
 	return response, nil
@@ -161,52 +176,66 @@ func (g *GoogleProvider) SendPromptWithFile(modelName string, prompt string, fil
 		return "", fmt.Errorf("invalid Google model: %s", modelName)
 	}
 
-	ctx := context.Background()
-	client, err := genai.NewClient(ctx, option.WithAPIKey(g.apiKey))
-	if err != nil {
-		return "", fmt.Errorf("failed to create Google AI client: %v", err)
-	}
-	defer client.Close()
-
-	// Read the file content with size check
+	// Read the file content with size check - do this outside the retry loop
 	fileData, err := fileutil.SafeReadFile(file.Path)
 	if err != nil {
 		return "", fmt.Errorf("failed to read file: %v", err)
 	}
 
-	// Initialize the model
-	model := client.GenerativeModel(modelName)
-	model.SetTemperature(float32(g.config.Temperature))
-	model.SetTopP(float32(g.config.TopP))
-	model.SetMaxOutputTokens(int32(g.config.MaxTokens))
+	// Use retry mechanism for API calls
+	result, err := retry.WithRetry(
+		func() (interface{}, error) {
+			ctx := context.Background()
+			client, err := genai.NewClient(ctx, option.WithAPIKey(g.apiKey))
+			if err != nil {
+				return "", fmt.Errorf("failed to create Google AI client: %v", err)
+			}
+			defer client.Close()
 
-	// Generate content with file
-	resp, err := model.GenerateContent(ctx,
-		genai.Text(prompt),
-		genai.Blob{
-			MIMEType: file.MimeType,
-			Data:     fileData,
-		})
+			// Initialize the model
+			model := client.GenerativeModel(modelName)
+			model.SetTemperature(float32(g.config.Temperature))
+			model.SetTopP(float32(g.config.TopP))
+			model.SetMaxOutputTokens(int32(g.config.MaxTokens))
+
+			// Generate content with file
+			resp, err := model.GenerateContent(ctx,
+				genai.Text(prompt),
+				genai.Blob{
+					MIMEType: file.MimeType,
+					Data:     fileData,
+				})
+			if err != nil {
+				// Check if it's an encoding error
+				if strings.Contains(err.Error(), "invalid UTF-8") {
+					return "", fmt.Errorf("encoding error in file %s: invalid UTF-8 characters detected", file.Path)
+				}
+				return "", fmt.Errorf("Google AI API error: %v", err)
+			}
+
+			if len(resp.Candidates) == 0 {
+				return "", fmt.Errorf("no response candidates returned from Google AI")
+			}
+
+			// Extract the response text from the first candidate
+			var response string
+			for _, part := range resp.Candidates[0].Content.Parts {
+				if text, ok := part.(genai.Text); ok {
+					response += string(text)
+				}
+			}
+
+			return response, nil
+		},
+		retry.Is429Error,
+		retry.DefaultRetryConfig,
+	)
+
 	if err != nil {
-		// Check if it's an encoding error
-		if strings.Contains(err.Error(), "invalid UTF-8") {
-			return "", fmt.Errorf("encoding error in file %s: invalid UTF-8 characters detected", file.Path)
-		}
-		return "", fmt.Errorf("Google AI API error: %v", err)
+		return "", err
 	}
 
-	if len(resp.Candidates) == 0 {
-		return "", fmt.Errorf("no response candidates returned from Google AI")
-	}
-
-	// Extract the response text from the first candidate
-	var response string
-	for _, part := range resp.Candidates[0].Content.Parts {
-		if text, ok := part.(genai.Text); ok {
-			response += string(text)
-		}
-	}
-
+	response := result.(string)
 	g.debugf("API call completed, response length: %d characters", len(response))
 
 	return response, nil

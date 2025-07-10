@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/kris-hansen/comanda/utils/fileutil"
+	"github.com/kris-hansen/comanda/utils/retry"
 	openai "github.com/sashabaranov/go-openai"
 )
 
@@ -112,25 +113,38 @@ func (d *DeepseekProvider) SendPrompt(modelName string, prompt string) (string, 
 	config.BaseURL = "https://api.deepseek.com/v1"
 	client := openai.NewClientWithConfig(config)
 
-	messages := []openai.ChatCompletionMessage{
-		{
-			Role:    openai.ChatMessageRoleUser,
-			Content: prompt,
-		},
-	}
+	// Use retry mechanism for API calls
+	result, err := retry.WithRetry(
+		func() (interface{}, error) {
+			messages := []openai.ChatCompletionMessage{
+				{
+					Role:    openai.ChatMessageRoleUser,
+					Content: prompt,
+				},
+			}
 
-	req := d.createChatCompletionRequest(modelName, messages)
-	resp, err := client.CreateChatCompletion(context.Background(), req)
+			req := d.createChatCompletionRequest(modelName, messages)
+			resp, err := client.CreateChatCompletion(context.Background(), req)
+
+			if err != nil {
+				return "", fmt.Errorf("Deepseek API error: %v", err)
+			}
+
+			if len(resp.Choices) == 0 {
+				return "", fmt.Errorf("no response choices returned from Deepseek")
+			}
+
+			return resp.Choices[0].Message.Content, nil
+		},
+		retry.Is429Error,
+		retry.DefaultRetryConfig,
+	)
 
 	if err != nil {
-		return "", fmt.Errorf("Deepseek API error: %v", err)
+		return "", err
 	}
 
-	if len(resp.Choices) == 0 {
-		return "", fmt.Errorf("no response choices returned from Deepseek")
-	}
-
-	response := resp.Choices[0].Message.Content
+	response := result.(string)
 	d.debugf("API call completed, response length: %d characters", len(response))
 
 	return response, nil
@@ -149,7 +163,7 @@ func (d *DeepseekProvider) SendPromptWithFile(modelName string, prompt string, f
 		return "", fmt.Errorf("invalid Deepseek model: %s", modelName)
 	}
 
-	// Read the file content with size check
+	// Read the file content with size check - do this outside the retry loop
 	fileData, err := fileutil.SafeReadFile(file.Path)
 	if err != nil {
 		return "", fmt.Errorf("failed to read file: %v", err)
@@ -161,35 +175,66 @@ func (d *DeepseekProvider) SendPromptWithFile(modelName string, prompt string, f
 
 	// For image files, handle them using vision capabilities
 	if strings.HasPrefix(file.MimeType, "image/") {
-		return d.handleFileAsVision(client, prompt, fileData, file.MimeType, modelName)
+		return d.handleFileAsVisionWithRetry(client, prompt, fileData, file.MimeType, modelName)
 	}
 
 	// For other files, include the content as part of the prompt
 	fileContent := string(fileData)
 	combinedPrompt := fmt.Sprintf("File content:\n%s\n\nUser prompt: %s", fileContent, prompt)
 
-	messages := []openai.ChatCompletionMessage{
-		{
-			Role:    openai.ChatMessageRoleUser,
-			Content: combinedPrompt,
-		},
-	}
+	// Use retry mechanism for API calls
+	result, err := retry.WithRetry(
+		func() (interface{}, error) {
+			messages := []openai.ChatCompletionMessage{
+				{
+					Role:    openai.ChatMessageRoleUser,
+					Content: combinedPrompt,
+				},
+			}
 
-	req := d.createChatCompletionRequest(modelName, messages)
-	resp, err := client.CreateChatCompletion(context.Background(), req)
+			req := d.createChatCompletionRequest(modelName, messages)
+			resp, err := client.CreateChatCompletion(context.Background(), req)
+
+			if err != nil {
+				return "", fmt.Errorf("Deepseek API error: %v", err)
+			}
+
+			if len(resp.Choices) == 0 {
+				return "", fmt.Errorf("no response choices returned from Deepseek")
+			}
+
+			return resp.Choices[0].Message.Content, nil
+		},
+		retry.Is429Error,
+		retry.DefaultRetryConfig,
+	)
 
 	if err != nil {
-		return "", fmt.Errorf("Deepseek API error: %v", err)
+		return "", err
 	}
 
-	if len(resp.Choices) == 0 {
-		return "", fmt.Errorf("no response choices returned from Deepseek")
-	}
-
-	response := resp.Choices[0].Message.Content
+	response := result.(string)
 	d.debugf("API call completed, response length: %d characters", len(response))
 
 	return response, nil
+}
+
+// handleFileAsVisionWithRetry processes a file as a vision model request with retry logic
+func (d *DeepseekProvider) handleFileAsVisionWithRetry(client *openai.Client, prompt string, fileData []byte, mimeType string, modelName string) (string, error) {
+	// Use retry mechanism for API calls
+	result, err := retry.WithRetry(
+		func() (interface{}, error) {
+			return d.handleFileAsVision(client, prompt, fileData, mimeType, modelName)
+		},
+		retry.Is429Error,
+		retry.DefaultRetryConfig,
+	)
+
+	if err != nil {
+		return "", err
+	}
+
+	return result.(string), nil
 }
 
 // handleFileAsVision processes a file as a vision model request
