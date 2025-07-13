@@ -1,0 +1,24 @@
+# Example workflow using the new grok-4 and grok-4-heavy models
+# This example demonstrates how to use both models in a workflow
+
+step_one:
+  input:
+    - examples/example_filename.txt
+  model:
+    - grok-4
+  action:
+    - analyze these company names and identify which ones have the strongest brand potential
+    - provide a brief explanation for each of your top 3 choices
+  output:
+    - STDOUT
+
+step_two:
+  input:
+    - STDIN  # Takes the output from step_one
+  model:
+    - grok-4-heavy
+  action:
+    - for the top 3 company names identified, create a detailed brand strategy outline
+    - include target audience, key messaging, and potential marketing channels
+  output:
+    - STDOUT

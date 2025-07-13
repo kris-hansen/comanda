@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/kris-hansen/comanda/utils/fileutil"
+	"github.com/kris-hansen/comanda/utils/retry"
 )
 
 // OllamaProvider handles Ollama family of models
@@ -95,43 +96,63 @@ func (o *OllamaProvider) SendPrompt(modelName string, prompt string) (string, er
 	}
 
 	o.debugf("Sending request to Ollama API: %s", string(jsonData))
-	client := &http.Client{Timeout: 30 * time.Second} // Add a 30-second timeout
-	resp, err := client.Post("http://localhost:11434/api/generate", "application/json", bytes.NewBuffer(jsonData))
-	if err != nil {
-		o.debugf("Error calling Ollama API: %v", err)
-		return "", fmt.Errorf("error calling Ollama API: %v (is Ollama running?)", err)
-	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		o.debugf("Ollama API returned non-200 status: %d, body: %s", resp.StatusCode, string(bodyBytes))
-		return "", fmt.Errorf("Ollama API error (status %d): %s", resp.StatusCode, string(bodyBytes))
-	}
-	o.debugf("Ollama API request successful, reading response")
-
-	// Read and accumulate all responses
-	var fullResponse strings.Builder
-	decoder := json.NewDecoder(resp.Body)
-	for {
-		var ollamaResp OllamaResponse
-		if err := decoder.Decode(&ollamaResp); err != nil {
-			if err == io.EOF {
-				break
+	// Use retry mechanism for API calls
+	result, err := retry.WithRetry(
+		func() (interface{}, error) {
+			client := &http.Client{Timeout: 30 * time.Second} // Add a 30-second timeout
+			resp, err := client.Post("http://localhost:11434/api/generate", "application/json", bytes.NewBuffer(jsonData))
+			if err != nil {
+				o.debugf("Error calling Ollama API: %v", err)
+				return "", fmt.Errorf("error calling Ollama API: %v (is Ollama running?)", err)
 			}
-			o.debugf("Error decoding response: %v", err)
-			return "", fmt.Errorf("error decoding response: %v", err)
-		}
-		o.debugf("Received response chunk: done=%v length=%d", ollamaResp.Done, len(ollamaResp.Response))
-		fullResponse.WriteString(ollamaResp.Response)
-		if ollamaResp.Done {
-			break
-		}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				bodyBytes, _ := io.ReadAll(resp.Body)
+				o.debugf("Ollama API returned non-200 status: %d, body: %s", resp.StatusCode, string(bodyBytes))
+
+				// Check for rate limit errors (429)
+				if resp.StatusCode == http.StatusTooManyRequests {
+					return "", fmt.Errorf("API request failed with status 429: %s", string(bodyBytes))
+				}
+
+				return "", fmt.Errorf("Ollama API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+			}
+			o.debugf("Ollama API request successful, reading response")
+
+			// Read and accumulate all responses
+			var fullResponse strings.Builder
+			decoder := json.NewDecoder(resp.Body)
+			for {
+				var ollamaResp OllamaResponse
+				if err := decoder.Decode(&ollamaResp); err != nil {
+					if err == io.EOF {
+						break
+					}
+					o.debugf("Error decoding response: %v", err)
+					return "", fmt.Errorf("error decoding response: %v", err)
+				}
+				o.debugf("Received response chunk: done=%v length=%d", ollamaResp.Done, len(ollamaResp.Response))
+				fullResponse.WriteString(ollamaResp.Response)
+				if ollamaResp.Done {
+					break
+				}
+			}
+
+			return fullResponse.String(), nil
+		},
+		retry.Is429Error,
+		retry.DefaultRetryConfig,
+	)
+
+	if err != nil {
+		return "", err
 	}
 
-	result := fullResponse.String()
-	o.debugf("API call completed, response length: %d characters", len(result))
-	return result, nil
+	response := result.(string)
+	o.debugf("API call completed, response length: %d characters", len(response))
+	return response, nil
 }
 
 // SendPromptWithFile sends a prompt along with a file to the specified model and returns the response
@@ -139,7 +160,7 @@ func (o *OllamaProvider) SendPromptWithFile(modelName string, prompt string, fil
 	o.debugf("Preparing to send prompt with file to model: %s", modelName)
 	o.debugf("File path: %s", file.Path)
 
-	// Read the file content with size check
+	// Read the file content with size check - do this outside the retry loop
 	fileData, err := fileutil.SafeReadFile(file.Path)
 	if err != nil {
 		return "", fmt.Errorf("failed to read file: %v", err)
@@ -160,38 +181,57 @@ func (o *OllamaProvider) SendPromptWithFile(modelName string, prompt string, fil
 		return "", fmt.Errorf("error marshaling request: %v", err)
 	}
 
-	client := &http.Client{Timeout: 30 * time.Second} // Add a 30-second timeout
-	resp, err := client.Post("http://localhost:11434/api/generate", "application/json", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return "", fmt.Errorf("error calling Ollama API: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("Ollama API error (status %d): %s", resp.StatusCode, string(bodyBytes))
-	}
-
-	// Read and accumulate all responses
-	var fullResponse strings.Builder
-	decoder := json.NewDecoder(resp.Body)
-	for {
-		var ollamaResp OllamaResponse
-		if err := decoder.Decode(&ollamaResp); err != nil {
-			if err == io.EOF {
-				break
+	// Use retry mechanism for API calls
+	result, err := retry.WithRetry(
+		func() (interface{}, error) {
+			client := &http.Client{Timeout: 30 * time.Second} // Add a 30-second timeout
+			resp, err := client.Post("http://localhost:11434/api/generate", "application/json", bytes.NewBuffer(jsonData))
+			if err != nil {
+				return "", fmt.Errorf("error calling Ollama API: %v", err)
 			}
-			return "", fmt.Errorf("error decoding response: %v", err)
-		}
-		fullResponse.WriteString(ollamaResp.Response)
-		if ollamaResp.Done {
-			break
-		}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				bodyBytes, _ := io.ReadAll(resp.Body)
+
+				// Check for rate limit errors (429)
+				if resp.StatusCode == http.StatusTooManyRequests {
+					return "", fmt.Errorf("API request failed with status 429: %s", string(bodyBytes))
+				}
+
+				return "", fmt.Errorf("Ollama API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+			}
+
+			// Read and accumulate all responses
+			var fullResponse strings.Builder
+			decoder := json.NewDecoder(resp.Body)
+			for {
+				var ollamaResp OllamaResponse
+				if err := decoder.Decode(&ollamaResp); err != nil {
+					if err == io.EOF {
+						break
+					}
+					return "", fmt.Errorf("error decoding response: %v", err)
+				}
+				fullResponse.WriteString(ollamaResp.Response)
+				if ollamaResp.Done {
+					break
+				}
+			}
+
+			return fullResponse.String(), nil
+		},
+		retry.Is429Error,
+		retry.DefaultRetryConfig,
+	)
+
+	if err != nil {
+		return "", err
 	}
 
-	result := fullResponse.String()
-	o.debugf("API call completed, response length: %d characters", len(result))
-	return result, nil
+	response := result.(string)
+	o.debugf("API call completed, response length: %d characters", len(response))
+	return response, nil
 }
 
 // SetVerbose enables or disables verbose mode
