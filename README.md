@@ -27,15 +27,21 @@ This guide will walk you through the initial steps to get comanda up and running
 
 ### 1. Installation
 
-First, you need to get the comanda binary. You have a few options:
+Choose the installation method that works best for you:
 
-*   **Download a Pre-built Binary:** The quickest way is to download a binary for your operating system from our [GitHub Releases page](https://github.com/kris-hansen/comanda/releases).
-*   **Install via Go:** If you have Go installed, you can use `go install github.com/kris-hansen/comanda@latest`.
-*   **Build from Source:** Clone the repository and build it yourself with `go build .` in the repository directory.
+*   **macOS users (recommended):** Install with Homebrew:
+    ```bash
+    brew install kris-hansen/comanda/comanda
+    ```
 
-For detailed instructions, please refer to the [Installation](#installation) section below.
+*   **Download a Pre-built Binary:** Download a binary for your operating system from our [GitHub Releases page](https://github.com/kris-hansen/comanda/releases).
 
-![Comanda Install Demo](comanda-install.gif)
+*   **Install via Go:** If you have Go installed, you can use:
+    ```bash
+    go install github.com/kris-hansen/comanda@latest
+    ```
+
+![Grok haiku example](grok-haiku.gif)
 
 ### 2. Initial Configuration
 
@@ -126,35 +132,39 @@ Explore the [Features](#features) and [Examples](examples/README.md) to learn mo
 
 ## Installation
 
+### Install via Homebrew (macOS)
+
+The easiest way for macOS users to install comanda is with Homebrew:
+
+```bash
+# Install directly (recommended)
+brew install kris-hansen/comanda/comanda
+
+# Alternative: Tap and install
+brew tap kris-hansen/comanda
+brew install comanda
+```
+
 ### Download Pre-built Binary
 
-The easiest way to get started is to download a pre-built binary from the [GitHub Releases page](https://github.com/kris-hansen/comanda/releases). Binaries are available for:
+Download a pre-built binary from the [GitHub Releases page](https://github.com/kris-hansen/comanda/releases). Binaries are available for:
 - Windows (x86, amd64)
 - macOS (amd64, arm64)
 - Linux (x86, amd64, arm64)
 
 Download the appropriate binary for your system, extract it if needed, and place it somewhere in your system's PATH.
 
-### Install via Homebrew (macOS arm)
-
-Mac users can install comanda using Homebrew:
-
-```bash
-# Option 1: Tap and install
-brew tap kris-hansen/comanda
-brew install comanda
-
-# Option 2: Install directly
-brew install kris-hansen/comanda/comanda
-```
-
 ### Install via Go
+
+If you have Go installed:
 
 ```bash
 go install github.com/kris-hansen/comanda@latest
 ```
 
 ### Build from Source
+
+For developers who want to build from source:
 
 ```bash
 git clone https://github.com/kris-hansen/comanda.git
