@@ -227,6 +227,45 @@ execute_data_workflow:
   output: STDOUT # Log output of the process step itself (e.g., success/failure)
 ` + "```" + `
 
+### Advanced Chaining: Enabling Independent Analysis with Files
+
+The standard ` + "`STDIN`" + `/` + "`STDOUT`" + ` chain is designed for sequential processing, where each step receives the output of the one immediately before it. However, many workflows require a downstream step to **independently analyze outputs from multiple, potentially non-sequential, upstream steps.**
+
+To enable this, you must use files to store intermediate results. This pattern ensures that each output is preserved and can be accessed directly by any subsequent step, rather than being lost in a pipeline.
+
+**The recommended pattern is:**
+1.  Each upstream step saves its result to a distinct file (e.g., ` + "`step1_output.txt`" + `, ` + "`step2_output.txt`" + `).
+2.  The downstream step that needs to perform the independent analysis lists these files as its ` + "`input`" + `.
+
+**Example: A 3-Step Workflow with a Final Review**
+
+In this scenario, the third step needs to review the outputs of both the first and second steps independently.
+
+` + "```yaml" + `
+# Step 1: Initial analysis
+analyze_introductions:
+  input: introductions.md
+  model: gpt-4o-mini
+  action: "Perform a detailed analysis of the introductions document. Focus on key themes, writing style, and effectiveness."
+  output: step1_analysis.txt
+
+# Step 2: Quality assessment of the original document
+quality_assessment:
+  input: introductions.md
+  model: gpt-4o-mini
+  action: "Perform a quality assessment on the original document. Identify strengths and potential gaps."
+  output: step2_qa.txt
+
+# Step 3: Final summary based on both outputs
+final_summary:
+  input: [step1_analysis.txt, step2_qa.txt]
+  model: gpt-4o-mini
+  action: "Review the results from the analysis (step1_analysis.txt) and the QA (step2_qa.txt). Provide a comprehensive summary that synthesizes the findings from both."
+  output: final_summary.md
+` + "```" + `
+
+This file-based approach is the correct way to handle any workflow where a step's logic depends on having discrete access to multiple prior outputs.
+
 This guide covers the core concepts and syntax of Comanda's YAML DSL, including meta-processing capabilities. LLMs should use this structure to generate valid workflow files.`
 
 // embeddedLLMGuideTemplate is the template for the Comanda YAML DSL Guide
@@ -411,5 +450,44 @@ execute_data_workflow:
     # inputs: { source_file: "override_data.csv" } # Optional: override inputs for the sub-workflow
   output: STDOUT # Log output of the process step itself (e.g., success/failure)
 ` + "```" + `
+
+### Advanced Chaining: Enabling Independent Analysis with Files
+
+The standard ` + "`STDIN`" + `/` + "`STDOUT`" + ` chain is designed for sequential processing, where each step receives the output of the one immediately before it. However, many workflows require a downstream step to **independently analyze outputs from multiple, potentially non-sequential, upstream steps.**
+
+To enable this, you must use files to store intermediate results. This pattern ensures that each output is preserved and can be accessed directly by any subsequent step, rather than being lost in a pipeline.
+
+**The recommended pattern is:**
+1.  Each upstream step saves its result to a distinct file (e.g., ` + "`step1_output.txt`" + `, ` + "`step2_output.txt`" + `).
+2.  The downstream step that needs to perform the independent analysis lists these files as its ` + "`input`" + `.
+
+**Example: A 3-Step Workflow with a Final Review**
+
+In this scenario, the third step needs to review the outputs of both the first and second steps independently.
+
+` + "```yaml" + `
+# Step 1: Initial analysis
+analyze_introductions:
+  input: introductions.md
+  model: gpt-4o-mini
+  action: "Perform a detailed analysis of the introductions document. Focus on key themes, writing style, and effectiveness."
+  output: step1_analysis.txt
+
+# Step 2: Quality assessment of the original document
+quality_assessment:
+  input: introductions.md
+  model: gpt-4o-mini
+  action: "Perform a quality assessment on the original document. Identify strengths and potential gaps."
+  output: step2_qa.txt
+
+# Step 3: Final summary based on both outputs
+final_summary:
+  input: [step1_analysis.txt, step2_qa.txt]
+  model: gpt-4o-mini
+  action: "Review the results from the analysis (step1_analysis.txt) and the QA (step2_qa.txt). Provide a comprehensive summary that synthesizes the findings from both."
+  output: final_summary.md
+` + "```" + `
+
+This file-based approach is the correct way to handle any workflow where a step's logic depends on having discrete access to multiple prior outputs.
 
 This guide covers the core concepts and syntax of Comanda's YAML DSL, including meta-processing capabilities. LLMs should use this structure to generate valid workflow files.`
