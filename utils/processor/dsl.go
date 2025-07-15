@@ -985,8 +985,8 @@ func (p *Processor) processGenerateStep(step Step, isParallel bool, parallelID s
 
 	// 2. Prepare the prompt for the LLM
 	//    This includes the Comanda DSL guide and the user's action.
-	// Use the embedded guide instead of reading from file
-	dslGuide := []byte(EmbeddedLLMGuide)
+	// Use the embedded guide with injected model names instead of reading from file
+	dslGuide := []byte(GetEmbeddedLLMGuide())
 
 	userAction := ""
 	if actions := p.NormalizeStringSlice(step.Config.Generate.Action); len(actions) > 0 {

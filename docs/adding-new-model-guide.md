@@ -10,55 +10,51 @@ This guide outlines the steps for adding support for a new Large Language Model 
 
 ## Steps
 
-1.  **Update the Model List in `cmd/configure.go`:**
+1.  **Update the Central Model Registry in `utils/models/registry.go`:**
 
-    *   Locate the provider's model list function. These functions are typically named `get<ProviderName>Models()` (e.g., `getAnthropicModels()`, `getOpenAIModels()`).
-    *   Add the new model's name to the string slice returned by this function. This will make the model selectable in the `comanda configure` wizard.
-
-    Example (adding a new Anthropic model):
-
-    ```go
-    func getAnthropicModels() []string {
-        return []string{
-            "claude-3-opus-20240514",
-            "claude-3-sonnet-20240514",
-            // Add the new model here:
-            "claude-new-model-20250101",
-        }
-    }
-    ```
-
-2.  **Update the Provider's Validation Logic in `utils/models/<provider_name>.go`:**
-
-    *   Find the provider's implementation in the `utils/models/` directory (e.g., `anthropic.go`, `openai.go`).
-    *   Locate the `ValidateModel` function. This function determines whether a given model name is valid for that provider.
-    *   Add the new model to the validation logic. This usually involves adding the model name to a list of allowed models or creating a pattern that matches the new model.
+    *   Locate the `initializeDefaultModels` method in the `ModelRegistry` struct.
+    *   Add the new model's name to the appropriate provider's model list using the `RegisterModels` method.
+    *   If the model belongs to a new model family (prefix), add it to the provider's family list using the `RegisterFamilies` method.
 
     Example (adding a new Anthropic model):
 
     ```go
-    func (a *AnthropicProvider) ValidateModel(modelName string) bool {
-        validModels := []string{
-            "claude-3-opus-20240514",
-            "claude-3-sonnet-20240514",
-            // Add the new model here:
-            "claude-new-model-20250101",
-        }
-
-        // ... other validation logic ...
-    }
+    // In utils/models/registry.go, inside initializeDefaultModels method
+    r.RegisterModels("anthropic", []string{
+        "claude-3-5-sonnet-20241022",
+        "claude-3-5-sonnet-latest",
+        "claude-3-5-haiku-latest",
+        "claude-3-7-sonnet-20250219",
+        "claude-3-7-sonnet-latest",
+        "claude-3-5-haiku-20241022",
+        "claude-opus-4-20250514",
+        "claude-sonnet-4-20250514",
+        // Add the new model here:
+        "claude-new-model-20250101",
+    })
+    
+    // If the model belongs to a new family, add it here:
+    r.RegisterFamilies("anthropic", []string{
+        "claude-3-5-sonnet",
+        "claude-3-5-haiku",
+        "claude-3-7-sonnet",
+        "claude-opus-4",
+        "claude-sonnet-4",
+        // Add the new family here if needed:
+        "claude-new-family",
+    })
     ```
 
-3.  **Update the Main `README.md` (Optional):**
+2.  **Update the Main `README.md` (Optional):**
 
     *   In the "Provider Configuration" section, add the new model to the list of configured models for the relevant provider.
 
-4.  **Create a New Example YAML File (Recommended):**
+3.  **Create a New Example YAML File (Recommended):**
 
     *   Create a new YAML file in the `examples/model-examples/` directory that demonstrates how to use the new model in a COMandA workflow.
     *   This helps users understand how to use the model and provides a working example for testing.
 
-5.  **Inform Users to Run `comanda configure`:**
+4.  **Inform Users to Run `comanda configure`:**
 
     *   After making these code changes, users updating an existing COMandA installation will need to run `comanda configure`, select the relevant provider, and then select the new model to enable it in their local configuration.
 

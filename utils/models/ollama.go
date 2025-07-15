@@ -52,16 +52,30 @@ func (o *OllamaProvider) debugf(format string, args ...interface{}) {
 // if this function is reached, we assume the model *should* be handled by Ollama.
 // The actual check for whether the model tag exists locally will happen later during validation.
 func (o *OllamaProvider) SupportsModel(modelName string) bool {
-	o.debugf("Ollama provider assuming responsibility for model: %s (as fallback)", modelName)
+	o.debugf("Checking if model is supported: %s", modelName)
+	modelNameLower := strings.ToLower(modelName)
+
+	// Register known prefixes for other providers if not already done
+	registry := GetRegistry()
+
 	// Basic sanity check: don't claim models that clearly belong to others if DetectProvider logic changes
 	knownPrefixes := []string{"claude-", "gpt-", "gemini-", "grok-", "deepseek-"}
-	modelNameLower := strings.ToLower(modelName)
 	for _, prefix := range knownPrefixes {
 		if strings.HasPrefix(modelNameLower, prefix) {
 			o.debugf("Model %s has a known prefix for another provider (%s), Ollama will not claim it.", modelName, prefix)
 			return false // Should not happen with current DetectProvider order, but good safeguard
 		}
 	}
+
+	// Check if the model is in the registry
+	for _, model := range registry.GetModels("ollama") {
+		if modelNameLower == strings.ToLower(model) {
+			o.debugf("Model %s is supported (exact match in registry)", modelName)
+			return true
+		}
+	}
+
+	o.debugf("Ollama provider assuming responsibility for model: %s (as fallback)", modelName)
 	return true // Assume it's an Ollama model if no other provider claimed it
 }
 
@@ -232,6 +246,27 @@ func (o *OllamaProvider) SendPromptWithFile(modelName string, prompt string, fil
 	response := result.(string)
 	o.debugf("API call completed, response length: %d characters", len(response))
 	return response, nil
+}
+
+// ValidateModel checks if the specific Ollama model variant is valid
+func (o *OllamaProvider) ValidateModel(modelName string) bool {
+	o.debugf("Validating model: %s", modelName)
+
+	// Use the central model registry for validation
+	isValid := GetRegistry().ValidateModel("ollama", modelName)
+
+	// If not found in registry, fall back to SupportsModel for backward compatibility
+	if !isValid {
+		isValid = o.SupportsModel(modelName)
+	}
+
+	if isValid {
+		o.debugf("Model %s validation succeeded", modelName)
+	} else {
+		o.debugf("Model %s validation failed", modelName)
+	}
+
+	return isValid
 }
 
 // SetVerbose enables or disables verbose mode

@@ -366,48 +366,17 @@ func (a *AnthropicProvider) SendPromptWithFile(modelName string, prompt string, 
 // ValidateModel checks if the specific Anthropic model variant is valid
 func (a *AnthropicProvider) ValidateModel(modelName string) bool {
 	a.debugf("Validating model: %s", modelName)
-	validModels := []string{
-		"claude-3-5-sonnet-20241022",
-		"claude-3-5-sonnet-latest",
-		"claude-3-5-haiku-latest",
-		"claude-3-7-sonnet-20250219",
-		"claude-3-7-sonnet-latest",
-		"claude-3-5-haiku-20241022",
-		"claude-opus-4-20250514",
-		"claude-sonnet-4-20250514",
+
+	// Use the central model registry for validation
+	isValid := GetRegistry().ValidateModel("anthropic", modelName)
+
+	if isValid {
+		a.debugf("Model %s validation succeeded", modelName)
+	} else {
+		a.debugf("Model %s validation failed - no matches found", modelName)
 	}
 
-	// Trim whitespace and convert to lowercase
-	modelName = strings.TrimSpace(strings.ToLower(modelName))
-
-	// Add extra debug logging
-	a.debugf("Checking model '%s' against valid models: %v", modelName, validModels)
-	// Check exact matches
-	for _, valid := range validModels {
-		if modelName == valid {
-			a.debugf("Found exact model match: %s", modelName)
-			return true
-		}
-	}
-
-	// Check model families for flexibility
-	modelFamilies := []string{
-		"claude-3-5-sonnet",
-		"claude-3-5-haiku",
-		"claude-3-7-sonnet",
-		"claude-opus-4",
-		"claude-sonnet-4",
-	}
-
-	for _, family := range modelFamilies {
-		if strings.HasPrefix(modelName, family) {
-			a.debugf("Model %s matches family: %s", modelName, family)
-			return true
-		}
-	}
-
-	a.debugf("Model %s validation failed - no matches found", modelName)
-	return false
+	return isValid
 }
 
 // SetConfig updates the provider configuration

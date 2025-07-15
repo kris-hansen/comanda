@@ -52,24 +52,36 @@ func (o *OpenAIProvider) SupportsModel(modelName string) bool {
 	o.debugf("Checking if model is supported: %s", modelName)
 	modelName = strings.ToLower(modelName)
 
-	// Accept any model name that starts with our known prefixes
-	validPrefixes := []string{
-		"gpt-",    // Standard GPT models
-		"o1",      // To cover o1, o1-pro, o1-mini
-		"o3",      // To cover o3, o3-pro, o3-mini
-		"o4-",     // Support for o4-mini series
-		"gpt-4o",  // Support for gpt-4o variants
-		"gpt-4.1", // To cover gpt-4.1 and potential gpt-4.1-variants
+	// Register OpenAI model families if not already done
+	registry := GetRegistry()
+	if len(registry.GetFamilies("openai")) == 0 {
+		registry.RegisterFamilies("openai", []string{
+			"gpt-",    // Standard GPT models
+			"o1",      // To cover o1, o1-pro, o1-mini
+			"o3",      // To cover o3, o3-pro, o3-mini
+			"o4-",     // Support for o4-mini series
+			"gpt-4o",  // Support for gpt-4o variants
+			"gpt-4.1", // To cover gpt-4.1 and potential gpt-4.1-variants
+		})
 	}
 
-	for _, prefix := range validPrefixes {
+	// Use the central model registry for validation
+	for _, prefix := range registry.GetFamilies("openai") {
 		if strings.HasPrefix(modelName, prefix) {
 			o.debugf("Model %s is supported (matches prefix %s)", modelName, prefix)
 			return true
 		}
 	}
 
-	o.debugf("Model %s is not supported (no matching prefix)", modelName)
+	// Also check exact matches in the registry
+	for _, model := range registry.GetModels("openai") {
+		if modelName == model {
+			o.debugf("Model %s is supported (exact match)", modelName)
+			return true
+		}
+	}
+
+	o.debugf("Model %s is not supported (no matching prefix or exact match)", modelName)
 	return false
 }
 
@@ -383,7 +395,23 @@ func (o *OpenAIProvider) handleVisionPrompt(client *openai.Client, prompt string
 
 // ValidateModel checks if the specific OpenAI model variant is valid
 func (o *OpenAIProvider) ValidateModel(modelName string) bool {
-	return o.SupportsModel(modelName)
+	o.debugf("Validating model: %s", modelName)
+
+	// Use the central model registry for validation
+	isValid := GetRegistry().ValidateModel("openai", modelName)
+
+	// If not found in registry, fall back to SupportsModel for backward compatibility
+	if !isValid {
+		isValid = o.SupportsModel(modelName)
+	}
+
+	if isValid {
+		o.debugf("Model %s validation succeeded", modelName)
+	} else {
+		o.debugf("Model %s validation failed", modelName)
+	}
+
+	return isValid
 }
 
 // SetConfig updates the provider configuration

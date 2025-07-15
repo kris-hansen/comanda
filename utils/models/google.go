@@ -44,40 +44,17 @@ func (g *GoogleProvider) debugf(format string, args ...interface{}) {
 // ValidateModel checks if the specific Google model variant is valid
 func (g *GoogleProvider) ValidateModel(modelName string) bool {
 	g.debugf("Validating model: %s", modelName)
-	// List based on user input and existing models
-	validModels := []string{
-		// From user input
-		"gemini-2.5-pro-exp-03-25",
-		"gemini-2.0-flash",
-		"gemini-2.0-flash-lite",
-		"gemini-1.5-flash",             // Also existing
-		"gemini-1.5-flash-8b",          // Also existing
-		"gemini-1.5-pro",               // Also existing
-		"gemini-2.5-pro-preview-03-25", // Added new model
-		"gemini-2.5-pro-preview-05-06", // Added new model
-		"gemini-embedding-exp",
 
-		// Existing models not explicitly in user list but kept for compatibility/completeness
-		"gemini-1.0-pro",
-		"gemini-2.0-flash-exp",                // Experimental version
-		"gemini-2.0-flash-001",                // Specific version
-		"gemini-2.0-pro-exp-02-05",            // Experimental version
-		"gemini-2.0-flash-lite-preview-02-05", // Preview version
-		"gemini-2.0-flash-thinking-exp-01-21", // Experimental version
-		"aqa",                                 // Attributed Question Answering model
+	// Use the central model registry for validation
+	isValid := GetRegistry().ValidateModel("google", modelName)
+
+	if isValid {
+		g.debugf("Model %s validation succeeded", modelName)
+	} else {
+		g.debugf("Model %s validation failed - no matches found", modelName)
 	}
 
-	modelName = strings.ToLower(modelName)
-	// Check exact matches
-	for _, valid := range validModels {
-		if modelName == valid {
-			g.debugf("Found exact model match: %s", modelName)
-			return true
-		}
-	}
-
-	g.debugf("Model %s validation failed - no matches found", modelName)
-	return false
+	return isValid
 }
 
 // SupportsModel checks if the given model name is supported by Google

@@ -178,59 +178,27 @@ func getOpenAIModels(apiKey string) ([]string, error) {
 }
 
 func getAnthropicModels() []string {
-	return []string{
-		"claude-3-5-sonnet-20241022",
-		"claude-3-5-sonnet-latest",
-		"claude-3-5-haiku-latest",
-		"claude-3-7-sonnet-20250219",
-		"claude-3-7-sonnet-latest",
-		"claude-3-5-haiku-20241022",
-		"claude-opus-4-20250514",
-		"claude-sonnet-4-20250514",
-	}
+	// Get models from the central registry
+	registry := models.GetRegistry()
+	return registry.GetModels("anthropic")
 }
 
 func getXAIModels() []string {
-	return []string{
-		"grok-beta",
-		"grok-vision-beta",
-		"grok-4",
-		"grok-4-heavy",
-	}
+	// Get models from the central registry
+	registry := models.GetRegistry()
+	return registry.GetModels("xai")
 }
 
 func getDeepseekModels() []string {
-	return []string{
-		"deepseek-chat",
-		"deepseek-coder",
-		"deepseek-vision",
-		"deepseek-reasoner",
-	}
+	// Get models from the central registry
+	registry := models.GetRegistry()
+	return registry.GetModels("deepseek")
 }
 
 func getGoogleModels() []string {
-	// List based on user input and existing models, matching utils/models/google.go
-	return []string{
-		// From user input
-		"gemini-2.5-pro-exp-03-25",
-		"gemini-2.0-flash",
-		"gemini-2.0-flash-lite",
-		"gemini-1.5-flash",
-		"gemini-1.5-flash-8b",
-		"gemini-1.5-pro",
-		"gemini-2.5-pro-preview-03-25", // Added new model
-		"gemini-2.5-pro-preview-05-06", // Added new model
-		"gemini-embedding-exp",
-
-		// Existing models not explicitly in user list but kept for compatibility/completeness
-		"gemini-1.0-pro",
-		"gemini-2.0-flash-exp",                // Experimental version
-		"gemini-2.0-flash-001",                // Specific version
-		"gemini-2.0-pro-exp-02-05",            // Experimental version
-		"gemini-2.0-flash-lite-preview-02-05", // Preview version
-		"gemini-2.0-flash-thinking-exp-01-21", // Experimental version
-		"aqa",                                 // Attributed Question Answering model
-	}
+	// Get models from the central registry
+	registry := models.GetRegistry()
+	return registry.GetModels("google")
 }
 
 func getOllamaModels() ([]OllamaModel, error) {
