@@ -46,6 +46,14 @@ func (d *DeepseekProvider) SupportsModel(modelName string) bool {
 	d.debugf("Checking if model is supported: %s", modelName)
 	modelName = strings.ToLower(modelName)
 
+	// Register Deepseek model families if not already done
+	registry := GetRegistry()
+	if len(registry.GetFamilies("deepseek")) == 0 {
+		registry.RegisterFamilies("deepseek", []string{
+			"deepseek-",
+		})
+	}
+
 	// Special case for deepseek-r1: only support if API key is configured
 	if strings.HasPrefix(modelName, "deepseek-r1") {
 		if d.apiKey == "" {
@@ -56,13 +64,23 @@ func (d *DeepseekProvider) SupportsModel(modelName string) bool {
 		return true
 	}
 
-	// Accept any other model name that starts with deepseek-
-	if strings.HasPrefix(modelName, "deepseek-") {
-		d.debugf("Model %s is supported", modelName)
-		return true
+	// Use the central model registry for validation
+	for _, prefix := range registry.GetFamilies("deepseek") {
+		if strings.HasPrefix(modelName, prefix) {
+			d.debugf("Model %s is supported (matches prefix %s)", modelName, prefix)
+			return true
+		}
 	}
 
-	d.debugf("Model %s is not supported", modelName)
+	// Also check exact matches in the registry
+	for _, model := range registry.GetModels("deepseek") {
+		if modelName == model {
+			d.debugf("Model %s is supported (exact match)", modelName)
+			return true
+		}
+	}
+
+	d.debugf("Model %s is not supported (no matching prefix or exact match)", modelName)
 	return false
 }
 
@@ -290,6 +308,27 @@ func (d *DeepseekProvider) SetConfig(config ModelConfig) {
 // GetConfig returns the current provider configuration
 func (d *DeepseekProvider) GetConfig() ModelConfig {
 	return d.config
+}
+
+// ValidateModel checks if the specific Deepseek model variant is valid
+func (d *DeepseekProvider) ValidateModel(modelName string) bool {
+	d.debugf("Validating model: %s", modelName)
+
+	// Use the central model registry for validation
+	isValid := GetRegistry().ValidateModel("deepseek", modelName)
+
+	// If not found in registry, fall back to SupportsModel for backward compatibility
+	if !isValid {
+		isValid = d.SupportsModel(modelName)
+	}
+
+	if isValid {
+		d.debugf("Model %s validation succeeded", modelName)
+	} else {
+		d.debugf("Model %s validation failed", modelName)
+	}
+
+	return isValid
 }
 
 // SetVerbose enables or disables verbose mode

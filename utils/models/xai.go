@@ -54,19 +54,31 @@ func (x *XAIProvider) SupportsModel(modelName string) bool {
 	x.debugf("Checking if model is supported: %s", modelName)
 	modelName = strings.ToLower(modelName)
 
-	// Accept any model name that starts with our known prefixes
-	validPrefixes := []string{
-		"grok-",
+	// Register XAI model families if not already done
+	registry := GetRegistry()
+	if len(registry.GetFamilies("xai")) == 0 {
+		registry.RegisterFamilies("xai", []string{
+			"grok-",
+		})
 	}
 
-	for _, prefix := range validPrefixes {
+	// Use the central model registry for validation
+	for _, prefix := range registry.GetFamilies("xai") {
 		if strings.HasPrefix(modelName, prefix) {
 			x.debugf("Model %s is supported (matches prefix %s)", modelName, prefix)
 			return true
 		}
 	}
 
-	x.debugf("Model %s is not supported (no matching prefix)", modelName)
+	// Also check exact matches in the registry
+	for _, model := range registry.GetModels("xai") {
+		if modelName == model {
+			x.debugf("Model %s is supported (exact match)", modelName)
+			return true
+		}
+	}
+
+	x.debugf("Model %s is not supported (no matching prefix or exact match)", modelName)
 	return false
 }
 
@@ -313,7 +325,23 @@ func (x *XAIProvider) SendPromptWithFile(modelName string, prompt string, file F
 
 // ValidateModel checks if the specific X.AI model variant is valid
 func (x *XAIProvider) ValidateModel(modelName string) bool {
-	return x.SupportsModel(modelName)
+	x.debugf("Validating model: %s", modelName)
+
+	// Use the central model registry for validation
+	isValid := GetRegistry().ValidateModel("xai", modelName)
+
+	// If not found in registry, fall back to SupportsModel for backward compatibility
+	if !isValid {
+		isValid = x.SupportsModel(modelName)
+	}
+
+	if isValid {
+		x.debugf("Model %s validation succeeded", modelName)
+	} else {
+		x.debugf("Model %s validation failed", modelName)
+	}
+
+	return isValid
 }
 
 // SetConfig updates the provider configuration
