@@ -829,7 +829,13 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 			inputs = chunkResult.ChunkPaths
 
 			// Ensure cleanup of temporary files when the step is done
-			defer chunker.CleanupChunks(chunkResult)
+			defer func() {
+				if err := chunker.CleanupChunks(chunkResult); err != nil {
+					p.debugf("Error cleaning up chunks for step '%s': %v", step.Name, err)
+					// Log the error but don't fail the step - cleanup errors are non-fatal
+					fmt.Printf("Warning: Failed to clean up temporary chunk files: %v\n", err)
+				}
+			}()
 		}
 	}
 
