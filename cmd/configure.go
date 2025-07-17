@@ -642,12 +642,8 @@ var configureCmd = &cobra.Command{
 			}
 		}
 
-		// Load existing configuration
-		envConfig, err := config.LoadEnvConfigWithPassword(configPath)
-		if err != nil {
-			fmt.Printf("Error loading configuration: %v\n", err)
-			return
-		}
+		// The environment configuration is already loaded in rootCmd's PersistentPreRunE
+		// and available in the package-level envConfig variable
 
 		if updateKeyFlag != "" {
 			reader := bufio.NewReader(os.Stdin)
@@ -924,23 +920,39 @@ var configureCmd = &cobra.Command{
 	},
 }
 
+// listConfiguration displays the current configuration
+// It can be called either from the command (using the package-level envConfig)
+// or directly from tests (with a provided config)
 func listConfiguration() {
-	configPath := config.GetEnvPath()
-	envConfig, err := config.LoadEnvConfigWithPassword(configPath)
-	if err != nil {
-		fmt.Printf("Error loading configuration: %v\n", err)
-		return
+	// For tests that call this function directly, we need to load the config
+	// since the package-level envConfig won't be initialized
+	var cfg *config.EnvConfig
+	var err error
+
+	if envConfig == nil {
+		// We're being called from a test, load the config
+		configPath := config.GetEnvPath()
+		cfg, err = config.LoadEnvConfigWithPassword(configPath)
+		if err != nil {
+			fmt.Printf("Error loading configuration: %v\n", err)
+			return
+		}
+	} else {
+		// We're being called from the command, use the package-level config
+		cfg = envConfig
 	}
 
+	// Get the config path for display purposes
+	configPath := config.GetEnvPath()
 	fmt.Printf("Configuration from %s:\n\n", configPath)
 
 	// List default generation model
-	if envConfig.DefaultGenerationModel != "" {
-		fmt.Printf("Default Generation Model: %s\n\n", envConfig.DefaultGenerationModel)
+	if cfg.DefaultGenerationModel != "" {
+		fmt.Printf("Default Generation Model: %s\n\n", cfg.DefaultGenerationModel)
 	}
 
 	// List server configuration if it exists
-	if server := envConfig.GetServerConfig(); server != nil {
+	if server := cfg.GetServerConfig(); server != nil {
 		fmt.Println("Server Configuration:")
 		fmt.Printf("Port: %d\n", server.Port)
 		fmt.Printf("Data Directory: %s\n", server.DataDir)
@@ -952,9 +964,9 @@ func listConfiguration() {
 	}
 
 	// List databases if they exist
-	if len(envConfig.Databases) > 0 {
+	if len(cfg.Databases) > 0 {
 		fmt.Println("Database Configurations:")
-		for name, db := range envConfig.Databases {
+		for name, db := range cfg.Databases {
 			fmt.Printf("\n%s:\n", name)
 			fmt.Printf("  Type: %s\n", db.Type)
 			fmt.Printf("  Host: %s\n", db.Host)
@@ -966,13 +978,13 @@ func listConfiguration() {
 	}
 
 	// List providers
-	if len(envConfig.Providers) == 0 {
+	if len(cfg.Providers) == 0 {
 		fmt.Println("No providers configured.")
 		return
 	}
 
 	fmt.Println("Configured Providers:")
-	for name, provider := range envConfig.Providers {
+	for name, provider := range cfg.Providers {
 		fmt.Printf("\n%s:\n", name)
 		if len(provider.Models) == 0 {
 			fmt.Println("  No models configured")

@@ -24,21 +24,11 @@ var processCmd = &cobra.Command{
 	Long:  `Process one or more workflow files and execute the specified actions.`,
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		// Get environment file path
-		envPath := config.GetEnvPath()
-
-		// Load environment configuration
-		if verbose {
-			fmt.Printf("[DEBUG] Loading environment configuration from %s\n", envPath)
-		}
-
-		envConfig, err := config.LoadEnvConfigWithPassword(envPath)
-		if err != nil {
-			log.Fatalf("Error loading environment configuration: %v", err)
-		}
+		// The environment configuration is already loaded in rootCmd's PersistentPreRunE
+		// and available in the package-level envConfig variable
 
 		if verbose {
-			fmt.Println("[DEBUG] Environment configuration loaded successfully")
+			fmt.Println("[DEBUG] Using centralized environment configuration")
 		}
 
 		// Check if there's data on STDIN
