@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kris-hansen/comanda/utils/chunker"
 	"github.com/kris-hansen/comanda/utils/config"
 	"github.com/kris-hansen/comanda/utils/input"
 	"github.com/kris-hansen/comanda/utils/models"
@@ -795,6 +796,43 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 		}
 	}
 
+	// Check if chunking is enabled for this step
+	var chunkResult *chunker.ChunkResult
+	if step.Config.Chunk != nil && len(inputs) == 1 {
+		// Only apply chunking to a single file input
+		inputFile := inputs[0]
+
+		// Skip chunking for special inputs like STDIN
+		if inputFile != "STDIN" && inputFile != "NA" {
+			p.debugf("Chunking enabled for step '%s', input file: %s", step.Name, inputFile)
+
+			// Convert the ChunkConfig from the YAML to the chunker's ChunkConfig
+			chunkConfig := chunker.ChunkConfig{
+				By:        step.Config.Chunk.By,
+				Size:      step.Config.Chunk.Size,
+				Overlap:   step.Config.Chunk.Overlap,
+				MaxChunks: step.Config.Chunk.MaxChunks,
+			}
+
+			// Split the file into chunks
+			var err error
+			chunkResult, err = chunker.SplitFile(inputFile, chunkConfig)
+			if err != nil {
+				errMsg := fmt.Sprintf("Failed to chunk file '%s' for step '%s': %v", inputFile, step.Name, err)
+				p.debugf(errMsg)
+				return "", fmt.Errorf(errMsg)
+			}
+
+			p.debugf("Successfully chunked file '%s' into %d chunks", inputFile, chunkResult.TotalChunks)
+
+			// Replace the original input with the chunk paths
+			inputs = chunkResult.ChunkPaths
+
+			// Ensure cleanup of temporary files when the step is done
+			defer chunker.CleanupChunks(chunkResult)
+		}
+	}
+
 	// Process inputs for this step
 	if len(inputs) > 0 {
 		p.debugf("Processing inputs for step %s...", step.Name)
@@ -848,6 +886,27 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 	for i, action := range actions {
 		original := action
 		substituted := p.substituteVariables(action)
+
+		// If we're processing chunks, add chunk-specific placeholders
+		if chunkResult != nil && len(p.handler.GetInputs()) > 0 {
+			// Get the current chunk index from the input path
+			currentInput := p.handler.GetInputs()[0]
+			chunkIndex := -1
+			for i, chunkPath := range chunkResult.ChunkPaths {
+				if chunkPath == currentInput.Path {
+					chunkIndex = i
+					break
+				}
+			}
+
+			if chunkIndex >= 0 {
+				// Replace placeholders with actual values
+				substituted = strings.ReplaceAll(substituted, "{{ chunk_index }}", fmt.Sprintf("%d", chunkIndex+1))
+				substituted = strings.ReplaceAll(substituted, "{{ total_chunks }}", fmt.Sprintf("%d", chunkResult.TotalChunks))
+				substituted = strings.ReplaceAll(substituted, "{{ current_chunk }}", string(currentInput.Contents))
+			}
+		}
+
 		substitutedActions[i] = substituted
 		if original != substituted {
 			p.debugf("Variable substitution: original='%s' substituted='%s'", original, substituted)

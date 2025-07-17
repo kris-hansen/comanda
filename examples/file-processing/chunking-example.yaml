@@ -1,0 +1,18 @@
+# This example demonstrates the chunking feature for processing large files
+# It splits a large text file into smaller chunks and processes each chunk individually
+
+process_large_file:
+  input: "examples/file-processing/harvey1.txt"  
+  chunk:
+    by: lines
+    size: 10
+    overlap: 2
+    max_chunks: 5
+  batch_mode: individual
+  model: gpt-4o-mini
+  action: "Summarize the following content in 1-2 sentences: {{ current_chunk }}"
+  output: "STDOUT"
+
+# Note: In a real-world scenario, you would typically use larger chunk sizes
+# (e.g., 1000-10000 lines) and process much larger files.
+# This example uses small values to demonstrate the feature with minimal resources.

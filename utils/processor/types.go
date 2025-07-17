@@ -1,15 +1,24 @@
 package processor
 
+// ChunkConfig represents the configuration for chunking a large file
+type ChunkConfig struct {
+	By        string `yaml:"by"`         // How to split the file: "lines", "bytes", or "tokens"
+	Size      int    `yaml:"size"`       // Chunk size (e.g., 10000 lines)
+	Overlap   int    `yaml:"overlap"`    // Lines/bytes to overlap between chunks for context
+	MaxChunks int    `yaml:"max_chunks"` // Limit total chunks to prevent overload
+}
+
 // StepConfig represents the configuration for a single step
 type StepConfig struct {
-	Type       string      `yaml:"type"`        // Step type (default is standard LLM step)
-	Input      interface{} `yaml:"input"`       // Can be string or map[string]interface{}
-	Model      interface{} `yaml:"model"`       // Can be string or []string
-	Action     interface{} `yaml:"action"`      // Can be string or []string
-	Output     interface{} `yaml:"output"`      // Can be string or []string
-	NextAction interface{} `yaml:"next-action"` // Can be string or []string
-	BatchMode  string      `yaml:"batch_mode"`  // How to process multiple files: "combined" (default) or "individual"
-	SkipErrors bool        `yaml:"skip_errors"` // Whether to continue processing if some files fail
+	Type       string       `yaml:"type"`            // Step type (default is standard LLM step)
+	Input      interface{}  `yaml:"input"`           // Can be string or map[string]interface{}
+	Model      interface{}  `yaml:"model"`           // Can be string or []string
+	Action     interface{}  `yaml:"action"`          // Can be string or []string
+	Output     interface{}  `yaml:"output"`          // Can be string or []string
+	NextAction interface{}  `yaml:"next-action"`     // Can be string or []string
+	BatchMode  string       `yaml:"batch_mode"`      // How to process multiple files: "combined" (default) or "individual"
+	SkipErrors bool         `yaml:"skip_errors"`     // Whether to continue processing if some files fail
+	Chunk      *ChunkConfig `yaml:"chunk,omitempty"` // Configuration for chunking large files
 
 	// OpenAI Responses API specific fields
 	Instructions       string                   `yaml:"instructions"`         // System message
