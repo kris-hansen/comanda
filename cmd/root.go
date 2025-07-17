@@ -20,14 +20,37 @@ var verbose bool
 var debug bool
 var generateModelName string // Flag for specifying model in generateCmd
 
+// envConfig holds the loaded environment configuration, available to all commands
+var envConfig *config.EnvConfig
+
 var rootCmd = &cobra.Command{
 	Use:   "comanda",
 	Short: "A workflow processor for handling model interactions",
 	Long: `comanda is a command line tool that processes workflow configurations
 for model interactions and executes the specified actions.`,
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		// Set global verbose and debug flags
 		config.Verbose = verbose
 		config.Debug = debug
+
+		// Get environment file path from COMANDA_ENV or default
+		envPath := config.GetEnvPath()
+		if verbose {
+			fmt.Printf("[DEBUG] Loading environment configuration from %s\n", envPath)
+		}
+
+		// Load environment configuration
+		var err error
+		envConfig, err = config.LoadEnvConfigWithPassword(envPath)
+		if err != nil {
+			return fmt.Errorf("error loading environment configuration: %w", err)
+		}
+
+		if verbose {
+			fmt.Println("[DEBUG] Environment configuration loaded successfully")
+		}
+
+		return nil
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		cmd.Help()
@@ -50,11 +73,8 @@ You can optionally specify a model to use for generation, otherwise the default_
 		outputFilename := args[0]
 		userPrompt := args[1]
 
-		configPath := config.GetEnvPath()
-		envConfig, err := config.LoadEnvConfigWithPassword(configPath)
-		if err != nil {
-			return fmt.Errorf("error loading configuration: %w", err)
-		}
+		// Use the centralized configuration that was loaded in PersistentPreRunE
+		// No need to load it again
 
 		modelForGeneration := generateModelName // From flag
 		if modelForGeneration == "" {
