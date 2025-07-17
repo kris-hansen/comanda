@@ -1,0 +1,26 @@
+# This example demonstrates chunking with result consolidation
+# It splits a large file into chunks, processes each chunk, and then combines the results
+
+# First step: Process the large file in chunks
+process_chunks:
+  input: "examples/file-processing/harvey1.txt"
+  chunk:
+    by: lines
+    size: 10
+    overlap: 2
+  batch_mode: individual
+  model: gpt-4o-mini
+  action: "Extract the key points from this text: {{ current_chunk }}"
+  output: "examples/file-processing/chunk_{{ chunk_index }}_summary.txt"
+
+# Second step: Consolidate the chunk summaries
+consolidate_results:
+  input: "examples/file-processing/chunk_*.txt"
+  model: gpt-4o-mini
+  action: "Consolidate these summaries into a single coherent summary that captures all the important information."
+  output: "examples/file-processing/consolidated_summary.txt"
+
+# Note: This example demonstrates a common pattern for processing large documents:
+# 1. Split into manageable chunks
+# 2. Process each chunk independently
+# 3. Consolidate the results into a final output

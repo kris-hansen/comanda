@@ -126,6 +126,7 @@ Explore the [Features](#features) and [Examples](examples/README.md) to learn mo
 - 🗄️ Database integration for read/write operations for inputs and outputs
 - 🔍 Wildcard pattern support for processing multiple files (e.g., `*.pdf`, `data/*.txt`)
 - 🛡️ Resilient batch processing with error handling for multiple files
+- 📄 Built-in chunking for processing large files with automatic splitting
 - 📂 Runtime directory support for organizing uploads and YAML processing scripts
 - ✨ YAML workflow generation from natural language prompts
 
@@ -995,6 +996,43 @@ Individual batch mode is particularly useful when:
 - Processing files that might contain encoding issues
 - Working with large numbers of files
 - Needing to identify which specific files might be problematic
+
+#### File Chunking
+
+For large files that exceed an LLM's context window, you can use the built-in chunking feature to automatically split the file into smaller, manageable pieces:
+
+```yaml
+# chunking-example.yaml
+process_large_file:
+  input: "large.txt"
+  chunk:
+    by: lines
+    size: 10000
+    overlap: 100
+    max_chunks: 50
+  batch_mode: individual
+  model: gpt-4o
+  action: "Summarize the following content: {{ current_chunk }}"
+  output: "summaries/chunk_{{ chunk_index }}.txt"
+```
+
+The chunking configuration includes:
+
+- `by`: How to split the file - `lines` (by line count), `bytes` (by byte size), or `tokens` (by approximate token count)
+- `size`: The size of each chunk (e.g., 10,000 lines)
+- `overlap`: Optional number of lines/bytes/tokens to overlap between chunks for context (default: 0)
+- `max_chunks`: Optional maximum number of chunks to process (default: 100)
+
+When using chunking, you can use these placeholders in your `action` and `output` fields:
+- `{{ current_chunk }}`: The content of the current chunk
+- `{{ chunk_index }}`: The index of the current chunk (1-based)
+- `{{ total_chunks }}`: The total number of chunks
+
+Chunking is particularly useful for:
+- Processing large documents that exceed model context windows
+- Analyzing log files with thousands of lines
+- Breaking down large codebases for analysis
+- Summarizing lengthy research papers or books
 
 For image analysis:
 
