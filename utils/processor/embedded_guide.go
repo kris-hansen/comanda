@@ -160,6 +160,57 @@ step_name_for_processing:
 - Input with alias for variable: ` + "`input: path/to/file.txt as $my_var`" + `
 - List with aliases: ` + "`input: [file1.txt as $file1_content, file2.txt as $file2_content]`" + `
 
+### Chunking
+For processing large files, you can use the ` + "`chunk`" + ` configuration to split the input into manageable pieces:
+
+**Basic Structure:**
+` + "```yaml" + `
+step_name:
+  input: "large_file.txt"
+  chunk:
+    by: lines  # or "tokens"
+    size: 1000  # number of lines or tokens per chunk
+    overlap: 50  # optional: number of lines or tokens to overlap between chunks
+    max_chunks: 10  # optional: limit the total number of chunks processed
+  batch_mode: individual  # required for chunking to process each chunk separately
+  model: gpt-4o-mini
+  action: "Process this chunk of text: {{ current_chunk }}"
+  output: "chunk_{{ chunk_index }}_result.txt"  # can use chunk_index in output path
+` + "```" + `
+
+**Key Elements:**
+- ` + "`chunk`" + `: (Optional) Configuration block for chunking a large input file.
+  - ` + "`by`" + `: (Required) Chunking method - either ` + "`lines`" + ` or ` + "`tokens`" + `.
+  - ` + "`size`" + `: (Required) Number of lines or tokens per chunk.
+  - ` + "`overlap`" + `: (Optional) Number of lines or tokens to include from the previous chunk, providing context continuity.
+  - ` + "`max_chunks`" + `: (Optional) Maximum number of chunks to process, useful for testing or limiting processing.
+- ` + "`batch_mode: individual`" + `: Required when using chunking to process each chunk as a separate LLM call.
+- ` + "`{{ current_chunk }}`" + `: Template variable that gets replaced with the current chunk content in the action.
+- ` + "`{{ chunk_index }}`" + `: Template variable for the current chunk number (0-based), useful in output paths.
+
+**Consolidation Pattern:**
+A common pattern is to process chunks individually and then consolidate the results:
+
+` + "```yaml" + `
+# Step 1: Process chunks
+process_chunks:
+  input: "large_document.txt"
+  chunk:
+    by: lines
+    size: 1000
+  batch_mode: individual
+  model: gpt-4o-mini
+  action: "Extract key points from: {{ current_chunk }}"
+  output: "chunk_{{ chunk_index }}_summary.txt"
+
+# Step 2: Consolidate results
+consolidate_results:
+  input: "chunk_*.txt"  # Use wildcard to collect all chunk outputs
+  model: gpt-4o-mini
+  action: "Combine these summaries into one coherent document."
+  output: "final_summary.txt"
+` + "```" + `
+
 ### Models
 - Single model: ` + "`model: gpt-4o-mini`" + `
 - No model (for non-LLM operations): ` + "`model: NA`" + `
