@@ -436,6 +436,7 @@ step_name_for_processing:
 - Single model: ` + "`model: gpt-4o-mini`" + `
 - No model (for non-LLM operations): ` + "`model: NA`" + `
 - Multiple models (for comparison): ` + "`model: [gpt-4o-mini, claude-3-opus-20240229]`" + `
+- **IMPORTANT**: When specifying a model, you **must** use one of the supported models listed below. Do not use model names that are not in this list.
 
 ### Supported Models
 {{SUPPORTED_MODELS}}
@@ -459,7 +460,8 @@ step_name_for_processing:
 
 ## Validation Rules Summary (for LLM)
 
-1.  A step definition must clearly be one of: Standard, Generate, or Process.
+1.  When specifying a model name, you **must** use one of the supported models listed in the "Supported Models" section. Do not use model names that are not explicitly listed as supported.
+2.  A step definition must clearly be one of: Standard, Generate, or Process.
     *   A step cannot mix top-level keys from different types (e.g., a ` + "`generate`" + ` step should not have a top-level ` + "`model`" + ` or ` + "`output`" + ` key; these belong inside the ` + "`generate`" + ` block).
 2.  **Standard Step:**
     *   Must contain ` + "`input`" + `, ` + "`model`" + `, ` + "`action`" + `, ` + "`output`" + ` (unless ` + "`type: openai-responses`" + `, where ` + "`action`" + ` might be replaced by ` + "`instructions`" + `).
