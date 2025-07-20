@@ -201,6 +201,12 @@ func getGoogleModels() []string {
 	return registry.GetModels("google")
 }
 
+func getMoonshotModels() []string {
+	// Get models from the central registry
+	registry := models.GetRegistry()
+	return registry.GetModels("moonshot")
+}
+
 func getOllamaModels() ([]OllamaModel, error) {
 	resp, err := http.Get("http://localhost:11434/api/tags")
 	if err != nil {
@@ -708,13 +714,13 @@ var configureCmd = &cobra.Command{
 			// Prompt for provider
 			var provider string
 			for {
-				fmt.Print("Enter provider (openai/anthropic/ollama/google/xai/deepseek): ")
+				fmt.Print("Enter provider (openai/anthropic/ollama/google/xai/deepseek/moonshot): ")
 				provider, _ = reader.ReadString('\n')
 				provider = strings.TrimSpace(provider)
-				if provider == "openai" || provider == "anthropic" || provider == "ollama" || provider == "google" || provider == "xai" || provider == "deepseek" {
+				if provider == "openai" || provider == "anthropic" || provider == "ollama" || provider == "google" || provider == "xai" || provider == "deepseek" || provider == "moonshot" {
 					break
 				}
-				fmt.Println("Invalid provider. Please enter 'openai', 'anthropic', 'ollama', 'google', 'xai', or 'deepseek'")
+				fmt.Println("Invalid provider. Please enter 'openai', 'anthropic', 'ollama', 'google', 'xai', 'deepseek', or 'moonshot'")
 			}
 
 			// Special handling for ollama provider
@@ -809,6 +815,18 @@ var configureCmd = &cobra.Command{
 					return
 				}
 				models := getGoogleModels()
+				selectedModels, err = promptForModelSelection(models)
+				if err != nil {
+					fmt.Printf("Error selecting models: %v\n", err)
+					return
+				}
+
+			case "moonshot":
+				if apiKey == "" {
+					fmt.Println("Error: API key is required for Moonshot")
+					return
+				}
+				models := getMoonshotModels()
 				selectedModels, err = promptForModelSelection(models)
 				if err != nil {
 					fmt.Printf("Error selecting models: %v\n", err)

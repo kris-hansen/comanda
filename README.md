@@ -111,7 +111,7 @@ Explore the [Features](#features) and [Examples](examples/README.md) to learn mo
 ## Features
 
 - 🔗 Chain multiple LLM operations together using simple YAML configuration
-- 🤖 Support for multiple LLM providers (OpenAI, Anthropic, Google, X.AI, Ollama)
+- 🤖 Support for multiple LLM providers (OpenAI, Anthropic, Google, X.AI, Ollama, Moonshot)
 - 📄 File-based operations and transformations
 - 🖼️ Support for image analysis with vision models (screenshots and common image formats)
 - 🌐 Direct URL input support for web content analysis
@@ -250,7 +250,7 @@ comanda configure
 
 This will prompt you to:
 
-1. Select a provider (OpenAI/Anthropic/Google/X.AI/Ollama)
+1. Select a provider (OpenAI/Anthropic/Google/X.AI/Ollama/Moonshot)
 2. Enter API key (for OpenAI/Anthropic/Google/X.AI)
 3. Specify model name
 4. Select model mode:

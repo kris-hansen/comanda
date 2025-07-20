@@ -100,6 +100,17 @@ func (r *ModelRegistry) initializeDefaultModels() {
 		"gemini-2.0-flash-thinking-exp-01-21",
 		"aqa",
 	})
+
+	// Moonshot models
+	r.RegisterModels("moonshot", []string{
+		"moonshot-v1-8k",
+		"moonshot-v1-32k",
+		"moonshot-v1-128k",
+		"moonshot-v1-auto",
+	})
+	r.RegisterFamilies("moonshot", []string{
+		"moonshot-",
+	})
 }
 
 // RegisterModels adds models to the registry for a specific provider
