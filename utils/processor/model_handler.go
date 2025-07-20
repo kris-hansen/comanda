@@ -203,6 +203,8 @@ func (p *Processor) configureProviders() error {
 			providerConfig, err = p.envConfig.GetProviderConfig("xai")
 		case "deepseek":
 			providerConfig, err = p.envConfig.GetProviderConfig("deepseek")
+		case "moonshot":
+			providerConfig, err = p.envConfig.GetProviderConfig("moonshot")
 		default:
 			return fmt.Errorf("unknown provider: %s", providerName)
 		}
