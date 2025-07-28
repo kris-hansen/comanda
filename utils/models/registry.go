@@ -83,22 +83,17 @@ func (r *ModelRegistry) initializeDefaultModels() {
 
 	// Google models
 	r.RegisterModels("google", []string{
-		"gemini-2.5-pro-exp-03-25",
-		"gemini-2.0-flash",
-		"gemini-2.0-flash-lite",
+		"gemini-2.5-pro",
+		"gemini-2.5-flash",
+		"gemini-2.5-flash-lite",
 		"gemini-1.5-flash",
-		"gemini-1.5-flash-8b",
 		"gemini-1.5-pro",
-		"gemini-2.5-pro-preview-03-25",
-		"gemini-2.5-pro-preview-05-06",
-		"gemini-embedding-exp",
 		"gemini-1.0-pro",
-		"gemini-2.0-flash-exp",
-		"gemini-2.0-flash-001",
-		"gemini-2.0-pro-exp-02-05",
-		"gemini-2.0-flash-lite-preview-02-05",
-		"gemini-2.0-flash-thinking-exp-01-21",
 		"aqa",
+	})
+	r.RegisterFamilies("google", []string{
+		"gemini-1.5",
+		"gemini-2.5",
 	})
 
 	// Moonshot models

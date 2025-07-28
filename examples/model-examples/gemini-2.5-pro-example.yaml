@@ -1,10 +1,11 @@
-# Example using Gemini 2.5 Pro Experimental model
-# This demonstrates a basic text generation task.
+# This example demonstrates how to use the new Gemini 2.5 Pro model with a prompt.
+#
+# To run this example, execute the following command from the project root:
+# comanda process -f examples/model-examples/gemini-2.5-pro-example.yaml
 
-generate_story_idea:
-  input: NA # No file input needed, as this is a generative prompt
-  model: gemini-2.5-pro-preview-05-06
-  action: |
-    Generate a short, compelling story idea based on the following theme:
-    "A world where gravity occasionally reverses for brief, unpredictable moments."
-  output: STDOUT # Output the generated story idea to the console
+gemini_2_5_pro_example:
+  input: NA
+  model: gemini-2.5-pro
+  action:
+    - "What are the key features of the Gemini 2.5 Pro model?"
+  output: STDOUT
