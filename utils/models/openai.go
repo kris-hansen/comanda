@@ -57,6 +57,7 @@ func (o *OpenAIProvider) SupportsModel(modelName string) bool {
 	if len(registry.GetFamilies("openai")) == 0 {
 		registry.RegisterFamilies("openai", []string{
 			"gpt-",    // Standard GPT models
+			"gpt-5",   // New GPT-5 models
 			"o1",      // To cover o1, o1-pro, o1-mini
 			"o3",      // To cover o3, o3-pro, o3-mini
 			"o4-",     // Support for o4-mini series

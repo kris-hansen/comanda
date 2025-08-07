@@ -1,0 +1,32 @@
+gpt5_example:
+  type: openai-responses
+  input:
+    - examples/example_filename.txt
+  model: gpt-5
+  instructions: "You are a helpful assistant specialized in business analysis."
+  action:
+    - analyze these company names and identify which are in the HVAC industry
+  output:
+    - STDOUT
+
+gpt5_mini_example:
+  type: openai-responses
+  input:
+    - examples/example_filename.txt
+  model: gpt-5-mini
+  instructions: "You are a helpful assistant specialized in business analysis."
+  action:
+    - analyze these company names and identify which are in the HVAC industry
+  output:
+    - STDOUT
+
+gpt5_nano_example:
+  type: openai-responses
+  input:
+    - examples/example_filename.txt
+  model: gpt-5-nano
+  instructions: "You are a helpful assistant specialized in business analysis."
+  action:
+    - analyze these company names and identify which are in the HVAC industry
+  output:
+    - STDOUT

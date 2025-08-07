@@ -1480,35 +1480,46 @@ func (p *Processor) handleDeferredStep() error {
 }
 
 // getProviderForModel retrieves a model provider based on the model name
-// TODO: Implement actual logic to select provider based on model name and envConfig
 func (p *Processor) getProviderForModel(modelName string) (models.Provider, error) {
-	// For now, return the first configured provider or an error if none exist
-	// This is a placeholder and needs to be replaced with actual provider selection logic
+	// First, check if the provider is already initialized
 	for _, provider := range p.providers {
-		// This simple logic just returns the first provider.
-		// A real implementation would look up the provider that supports `modelName`.
-		return provider, nil
+		if provider.SupportsModel(modelName) {
+			return provider, nil
+		}
 	}
-	// Fallback or more sophisticated lookup if p.providers is not populated yet
-	// or if a specific provider for modelName is needed.
-	// This might involve looking into p.envConfig.Providers.
 
-	// Placeholder: Attempt to find a provider that lists this model.
-	// This is a simplified lookup. A more robust system would map model names to provider types.
+	// If not initialized, find the provider in the environment configuration
 	for providerName, providerConfig := range p.envConfig.Providers {
 		for _, model := range providerConfig.Models {
 			if model.Name == modelName {
-				// Found a provider that lists this model. Now get/initialize this provider.
-				// This part depends on how providers are initialized and stored in p.providers.
-				// If p.providers is already populated by configureProviders(), this might not be needed here.
-				// For now, let's assume p.providers is populated.
-				if prov, ok := p.providers[providerName]; ok {
-					return prov, nil
+				// Initialize the provider if it's not already in the map
+				if _, ok := p.providers[providerName]; !ok {
+					var newProvider models.Provider
+					switch providerName {
+					case "openai":
+						newProvider = models.NewOpenAIProvider()
+					case "anthropic":
+						newProvider = models.NewAnthropicProvider()
+					case "google":
+						newProvider = models.NewGoogleProvider()
+					case "xai":
+						newProvider = models.NewXAIProvider()
+					case "deepseek":
+						newProvider = models.NewDeepseekProvider()
+					case "moonshot":
+						newProvider = models.NewMoonshotProvider()
+					case "ollama":
+						newProvider = models.NewOllamaProvider()
+					default:
+						return nil, fmt.Errorf("unknown provider: %s", providerName)
+					}
+					if err := newProvider.Configure(providerConfig.APIKey); err != nil {
+						return nil, fmt.Errorf("failed to configure provider %s: %w", providerName, err)
+					}
+					newProvider.SetVerbose(p.verbose)
+					p.providers[providerName] = newProvider
 				}
-				// If not in p.providers, we might need to initialize it.
-				// This is complex and depends on the overall provider management strategy.
-				// For this stub, we'll return an error if not found in the initialized map.
-				return nil, fmt.Errorf("provider '%s' for model '%s' not initialized in p.providers", providerName, modelName)
+				return p.providers[providerName], nil
 			}
 		}
 	}
