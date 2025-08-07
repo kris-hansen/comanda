@@ -48,6 +48,9 @@ var primaryOpenAIModels = []string{
 	"o3-pro",            // Responses API only model
 	"o3",                // Base model
 	"chatgpt-4o-latest", // ChatGPT variant
+	"gpt-5",
+	"gpt-5-mini",
+	"gpt-5-nano",
 }
 
 // Patterns for unsupported model types that should be excluded from selection

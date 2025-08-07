@@ -63,6 +63,9 @@ func (r *ModelRegistry) initializeDefaultModels() {
 		"o3-pro",
 		"o3",
 		"chatgpt-4o-latest",
+		"gpt-5",
+		"gpt-5-mini",
+		"gpt-5-nano",
 	})
 
 	// X.AI models

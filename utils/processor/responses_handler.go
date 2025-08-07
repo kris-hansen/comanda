@@ -418,7 +418,10 @@ func (p *Processor) processResponsesStep(step Step, isParallel bool, parallelID 
 	}
 
 	// Use the configured provider instance
-	configuredProvider := p.providers[provider.Name()]
+	configuredProvider, err := p.getProviderForModel(modelName)
+	if err != nil {
+		return "", fmt.Errorf("failed to get provider for model %s: %w", modelName, err)
+	}
 	if configuredProvider == nil {
 		return "", fmt.Errorf("OpenAI provider not configured")
 	}
@@ -538,7 +541,6 @@ func (p *Processor) processResponsesStep(step Step, isParallel bool, parallelID 
 	})
 
 	var response string
-	var err error
 
 	// Check if streaming is enabled
 	if step.Config.Stream {
@@ -571,8 +573,8 @@ func (p *Processor) processResponsesStep(step Step, isParallel bool, parallelID 
 		}
 
 		// Extract and store the response ID for potential future use
-		responseID, err := p.extractResponseID(response)
-		if err == nil && responseID != "" {
+		responseID, extractErr := p.extractResponseID(response)
+		if extractErr == nil && responseID != "" {
 			// Store in variables map
 			p.variables[step.Name+".response_id"] = responseID
 			p.debugf("[%s] Stored response ID: %s", step.Name, responseID)
