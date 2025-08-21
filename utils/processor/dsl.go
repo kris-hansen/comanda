@@ -85,15 +85,70 @@ func (c *DSLConfig) UnmarshalYAML(node *yaml.Node) error {
 			// Assign deferred steps to the config
 			c.Defer = deferredSteps
 		default:
+			// Try to decode as a standard step config first
 			var stepConfig StepConfig
-			if err := valueNode.Decode(&stepConfig); err != nil {
-				return fmt.Errorf("failed to decode step '%s': %w", stepName, err)
+			stepErr := valueNode.Decode(&stepConfig)
+			
+			// If it fails or if the valueNode is a mapping that contains nested steps,
+			// check if this is a parallel step group
+			if stepErr != nil || c.isParallelStepGroup(valueNode) {
+				var parallelSteps map[string]StepConfig
+				if err := valueNode.Decode(&parallelSteps); err != nil {
+					// If we can't decode as parallel steps either, return the original step error
+					if stepErr != nil {
+						return fmt.Errorf("failed to decode step '%s': %w", stepName, stepErr)
+					}
+					return fmt.Errorf("failed to decode parallel step group '%s': %w", stepName, err)
+				}
+				
+				// Convert map[string]StepConfig to []Step
+				var steps []Step
+				for subStepName, subStepConfig := range parallelSteps {
+					steps = append(steps, Step{Name: subStepName, Config: subStepConfig})
+				}
+				c.ParallelSteps[stepName] = steps
+			} else {
+				// It's a regular step
+				c.Steps = append(c.Steps, Step{Name: stepName, Config: stepConfig})
 			}
-			c.Steps = append(c.Steps, Step{Name: stepName, Config: stepConfig})
 		}
 	}
 
 	return nil
+}
+
+// isParallelStepGroup checks if a YAML node represents a parallel step group
+// by examining if it contains nested mappings that look like step configurations
+func (c *DSLConfig) isParallelStepGroup(node *yaml.Node) bool {
+	if node.Kind != yaml.MappingNode {
+		return false
+	}
+	
+	// Check if all the values in this mapping are themselves mappings
+	// which would indicate nested step configurations
+	for i := 1; i < len(node.Content); i += 2 {
+		valueNode := node.Content[i]
+		if valueNode.Kind != yaml.MappingNode {
+			return false
+		}
+		
+		// Check if this nested mapping has step-like keys
+		hasStepKeys := false
+		for j := 0; j < len(valueNode.Content); j += 2 {
+			keyNode := valueNode.Content[j]
+			key := keyNode.Value
+			if key == "input" || key == "model" || key == "action" || key == "output" || 
+			   key == "generate" || key == "process" || key == "type" {
+				hasStepKeys = true
+				break
+			}
+		}
+		if !hasStepKeys {
+			return false
+		}
+	}
+	
+	return true
 }
 
 // isTestMode checks if the code is running in test mode
