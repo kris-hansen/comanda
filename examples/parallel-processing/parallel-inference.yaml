@@ -2,7 +2,7 @@ parallel-process:
   step_one:
     input:
       - NA
-    model: gpt-4.5-preview
+    model: gpt-4o-mini
     action:
       - write a sonnet about network cables
     output:
@@ -12,7 +12,7 @@ parallel-process:
     input:
       - NA
     model:
-      - o1-mini
+      - gpt-4o-mini
     action:
       - write a sonnet about network cables
     output:
