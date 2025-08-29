@@ -454,10 +454,40 @@ func (c *EnvConfig) GetModelConfig(providerName, modelName string) (*Model, erro
 		return nil, err
 	}
 
+	var exactMatch *Model
+	var baseMatches []*Model
+	
 	for _, model := range provider.Models {
+		// Check for exact match first
 		if model.Name == modelName {
-			return &model, nil
+			exactMatch = &model
+			break
 		}
+		
+		// Check if this model matches the base name (before any tag)
+		modelBaseName := strings.Split(model.Name, ":")[0]
+		if modelBaseName == modelName {
+			baseMatches = append(baseMatches, &model)
+		}
+	}
+	
+	// Return exact match if found
+	if exactMatch != nil {
+		return exactMatch, nil
+	}
+	
+	// If no exact match but exactly one base name match, use that
+	if len(baseMatches) == 1 {
+		return baseMatches[0], nil
+	}
+	
+	// If multiple base name matches, it's ambiguous
+	if len(baseMatches) > 1 {
+		var modelNames []string
+		for _, match := range baseMatches {
+			modelNames = append(modelNames, match.Name)
+		}
+		return nil, fmt.Errorf("ambiguous model name %s for provider %s, matches: %v", modelName, providerName, modelNames)
 	}
 
 	return nil, fmt.Errorf("model %s not found for provider %s", modelName, providerName)
