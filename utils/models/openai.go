@@ -50,39 +50,49 @@ func (o *OpenAIProvider) debugf(format string, args ...interface{}) {
 // SupportsModel checks if the given model name is supported by OpenAI
 func (o *OpenAIProvider) SupportsModel(modelName string) bool {
 	o.debugf("Checking if model is supported: %s", modelName)
-	modelName = strings.ToLower(modelName)
+	modelNameLower := strings.ToLower(modelName)
 
-	// Register OpenAI model families if not already done
+	// Use the central model registry for validation - check exact matches first
 	registry := GetRegistry()
-	if len(registry.GetFamilies("openai")) == 0 {
-		registry.RegisterFamilies("openai", []string{
-			"gpt-",    // Standard GPT models
-			"gpt-5",   // New GPT-5 models
-			"o1",      // To cover o1, o1-pro, o1-mini
-			"o3",      // To cover o3, o3-pro, o3-mini
-			"o4-",     // Support for o4-mini series
-			"gpt-4o",  // Support for gpt-4o variants
-			"gpt-4.1", // To cover gpt-4.1 and potential gpt-4.1-variants
-		})
-	}
-
-	// Use the central model registry for validation
-	for _, prefix := range registry.GetFamilies("openai") {
-		if strings.HasPrefix(modelName, prefix) {
-			o.debugf("Model %s is supported (matches prefix %s)", modelName, prefix)
-			return true
-		}
-	}
-
-	// Also check exact matches in the registry
 	for _, model := range registry.GetModels("openai") {
-		if modelName == model {
+		if modelNameLower == strings.ToLower(model) {
 			o.debugf("Model %s is supported (exact match)", modelName)
 			return true
 		}
 	}
 
-	o.debugf("Model %s is not supported (no matching prefix or exact match)", modelName)
+	// For family matching, be very specific to avoid conflicts with other providers
+	// Only match well-known OpenAI model patterns
+	openaiPatterns := []string{
+		"gpt-3.5-turbo",
+		"gpt-3.5-",    // gpt-3.5 variants  
+		"gpt-4-turbo",
+		"gpt-4o-",     // gpt-4o variants
+		"gpt-4.1",
+		"gpt-5-",      // gpt-5 variants like gpt-5-mini, gpt-5-nano
+		"o1-",         // o1 variants
+		"o3-",         // o3 variants  
+		"o4-",         // o4 variants
+		"chatgpt-4o-",
+	}
+
+	for _, pattern := range openaiPatterns {
+		if strings.HasPrefix(modelNameLower, pattern) {
+			o.debugf("Model %s is supported (matches pattern %s)", modelName, pattern)
+			return true
+		}
+	}
+
+	// Check for exact matches of base models
+	baseModels := []string{"gpt-4", "gpt-3.5", "o1", "o3", "gpt-5"}
+	for _, base := range baseModels {
+		if modelNameLower == base {
+			o.debugf("Model %s is supported (exact base model)", modelName)
+			return true
+		}
+	}
+
+	o.debugf("Model %s is not supported by OpenAI provider", modelName)
 	return false
 }
 

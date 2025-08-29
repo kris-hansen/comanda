@@ -1,0 +1,20 @@
+# Local vs Remote GPT Models
+# gpt-oss VIA local Ollama and gpt-4o VIA OpenAI API
+
+local_gpt_test:
+  input: NA
+  model: gpt-oss
+  action: "You are a local AI model running via Ollama. Please respond with exactly: 'I am running locally via Ollama as gpt-oss' and then explain in 2-3 sentences what makes local models useful."
+  output: local_response.txt
+
+remote_gpt_test:
+  input: NA  
+  model: gpt-4o
+  action: "You are GPT-4o running via OpenAI's API. Please respond with exactly: 'I am running remotely via OpenAI API as gpt-4o' and then explain in 2-3 sentences what makes cloud models useful."
+  output: remote_response.txt
+
+comparison:
+  input: [local_response.txt, remote_response.txt]
+  model: gpt-oss
+  action: "Compare these two responses and identify which one came from a local model vs a remote API model. Look for the identifying statements in each response and verify that different providers were used correctly."
+  output: STDOUT
