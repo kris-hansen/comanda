@@ -616,6 +616,67 @@ paths:
                 $ref: '#/components/schemas/Error'
   # --- End Model Management Paths ---
 
+  /providers/validate:
+    post:
+      summary: Validate Provider API Key
+      description: Validates a provider's API key configuration to ensure it's working correctly.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: Provider name (e.g., openai, anthropic, google, xai, ollama)
+                apiKey:
+                  type: string
+                  description: API key to validate
+              required:
+                - name
+                - apiKey
+            example:
+              name: openai
+              apiKey: sk-your-api-key-here
+      responses:
+        '200':
+          description: API key validated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "API key is valid"
+                required:
+                  - message
+        '400':
+          description: Bad request (invalid provider name or API key)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                required:
+                  - error
+              examples:
+                unknown_provider:
+                  value:
+                    error: "Unknown provider: invalid_provider"
+                invalid_key:
+                  value:
+                    error: "Invalid API key: authentication failed"
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /env/encrypt:
     post:
       summary: Encrypt Environment
