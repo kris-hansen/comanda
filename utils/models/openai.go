@@ -107,13 +107,16 @@ func (o *OpenAIProvider) Configure(apiKey string) error {
 	return nil
 }
 
-// isNewModelSeries checks if the model is part of the newer series (4o, o1, o3, o4)
+// isNewModelSeries checks if the model is part of the newer series (4o, o1, o3, o4, gpt-5)
 func (o *OpenAIProvider) isNewModelSeries(modelName string) bool {
 	modelName = strings.ToLower(modelName)
-	return strings.Contains(modelName, "gpt-4o") ||
+	isNew := strings.Contains(modelName, "gpt-4o") ||
 		strings.HasPrefix(modelName, "o1") || // Covers o1, o1-pro, o1-mini
 		strings.HasPrefix(modelName, "o3") || // Covers o3, o3-pro, o3-mini
-		strings.HasPrefix(modelName, "o4-") // Covers o4-mini series
+		strings.HasPrefix(modelName, "o4-") || // Covers o4-mini series
+		strings.HasPrefix(modelName, "gpt-5") // Covers gpt-5 and variants
+	o.debugf("Model %s isNewModelSeries: %v", modelName, isNew)
+	return isNew
 }
 
 // createChatCompletionRequest creates a ChatCompletionRequest with the appropriate parameters
@@ -146,6 +149,7 @@ func (o *OpenAIProvider) createChatCompletionRequest(modelName string, messages 
 func (o *OpenAIProvider) SendPrompt(modelName string, prompt string) (string, error) {
 	o.debugf("Preparing to send prompt to model: %s", modelName)
 	o.debugf("Prompt length: %d characters", len(prompt))
+	o.debugf("About to call isNewModelSeries for: %s", modelName)
 
 	if o.apiKey == "" {
 		return "", fmt.Errorf("OpenAI provider not configured: missing API key")
