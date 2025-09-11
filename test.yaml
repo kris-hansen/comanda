@@ -1,5 +1,0 @@
-haiku_about_network_cables:
-  input: NA
-  model: gpt-4o-mini
-  action: "Compose a 3-line haiku in 5-7-5 syllables about network cables and connectivity. Output only the haiku, no title or commentary."
-  output: STDOUT
