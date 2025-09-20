@@ -411,7 +411,7 @@ google:
 
 ### Server Configuration
 
-comanda can run as an HTTP server, allowing you to process chains of models and actions defined in YAML files via HTTP requests. The server is managed using the `server` command:
+comanda can run as an HTTP server, allowing you to process chains of models and actions defined in YAML files via HTTP requests. The server uses a single port (default: 8080) for all traffic including API requests and Server-Sent Events (SSE) streaming. The server is managed using the `server` command:
 
 ```bash
 # Start the server
