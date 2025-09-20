@@ -19,7 +19,12 @@ var serverCmd = &cobra.Command{
 	Long:  `Start the HTTP server for processing YAML files, or manage server configuration`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Default behavior (no subcommand) is to start the server
-		// Use the centralized configuration that was loaded in rootCmd's PersistentPreRunE
+		configPath := config.GetEnvPath()
+		envConfig, err := config.LoadEnvConfigWithPassword(configPath)
+		if err != nil {
+			fmt.Printf("Error loading configuration: %v\n", err)
+			return
+		}
 
 		if err := server.Run(envConfig); err != nil {
 			fmt.Printf("Server failed to start: %v\n", err)
@@ -33,8 +38,12 @@ var configureServerCmd = &cobra.Command{
 	Short: "Configure server settings",
 	Long:  `Configure server settings including port, data directory, and authentication`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// Use the centralized configuration that was loaded in rootCmd's PersistentPreRunE
-		configPath := config.GetEnvPath() // Only needed for display purposes
+		configPath := config.GetEnvPath()
+		envConfig, err := config.LoadEnvConfigWithPassword(configPath)
+		if err != nil {
+			fmt.Printf("Error loading configuration: %v\n", err)
+			return
+		}
 
 		reader := bufio.NewReader(os.Stdin)
 		if err := configureServer(reader, envConfig); err != nil {
@@ -56,7 +65,12 @@ var showServerCmd = &cobra.Command{
 	Short: "Show current server configuration",
 	Long:  `Display the current server configuration settings`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// Use the centralized configuration that was loaded in rootCmd's PersistentPreRunE
+		configPath := config.GetEnvPath()
+		envConfig, err := config.LoadEnvConfigWithPassword(configPath)
+		if err != nil {
+			fmt.Printf("Error loading configuration: %v\n", err)
+			return
+		}
 
 		server := envConfig.GetServerConfig()
 		fmt.Println("\nServer Configuration:")
@@ -92,8 +106,12 @@ var updatePortCmd = &cobra.Command{
 			return
 		}
 
-		// Use the centralized configuration that was loaded in rootCmd's PersistentPreRunE
-		configPath := config.GetEnvPath() // Only needed for saving
+		configPath := config.GetEnvPath()
+		envConfig, err := config.LoadEnvConfigWithPassword(configPath)
+		if err != nil {
+			fmt.Printf("Error loading configuration: %v\n", err)
+			return
+		}
 
 		serverConfig := envConfig.GetServerConfig()
 		serverConfig.Port = port
@@ -154,8 +172,12 @@ var updateDataDirCmd = &cobra.Command{
 		}
 		os.Remove(testFile) // Clean up test file
 
-		// Use the centralized configuration that was loaded in rootCmd's PersistentPreRunE
-		configPath := config.GetEnvPath() // Only needed for saving
+		configPath := config.GetEnvPath()
+		envConfig, err := config.LoadEnvConfigWithPassword(configPath)
+		if err != nil {
+			fmt.Printf("Error loading configuration: %v\n", err)
+			return
+		}
 
 		serverConfig := envConfig.GetServerConfig()
 		serverConfig.DataDir = absPath
@@ -182,8 +204,12 @@ var toggleAuthCmd = &cobra.Command{
 			return
 		}
 
-		// Use the centralized configuration that was loaded in rootCmd's PersistentPreRunE
-		configPath := config.GetEnvPath() // Only needed for saving
+		configPath := config.GetEnvPath()
+		envConfig, err := config.LoadEnvConfigWithPassword(configPath)
+		if err != nil {
+			fmt.Printf("Error loading configuration: %v\n", err)
+			return
+		}
 
 		serverConfig := envConfig.GetServerConfig()
 		serverConfig.Enabled = enable == "on"
@@ -215,8 +241,12 @@ var newTokenCmd = &cobra.Command{
 	Short: "Generate new bearer token",
 	Long:  `Generate a new bearer token for server authentication`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// Use the centralized configuration that was loaded in rootCmd's PersistentPreRunE
-		configPath := config.GetEnvPath() // Only needed for saving
+		configPath := config.GetEnvPath()
+		envConfig, err := config.LoadEnvConfigWithPassword(configPath)
+		if err != nil {
+			fmt.Printf("Error loading configuration: %v\n", err)
+			return
+		}
 
 		serverConfig := envConfig.GetServerConfig()
 		token, err := config.GenerateBearerToken()
@@ -297,8 +327,12 @@ var corsCmd = &cobra.Command{
 	Short: "Configure CORS settings",
 	Long:  `Configure Cross-Origin Resource Sharing (CORS) settings for the server`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// Use the centralized configuration that was loaded in rootCmd's PersistentPreRunE
-		configPath := config.GetEnvPath() // Only needed for saving
+		configPath := config.GetEnvPath()
+		envConfig, err := config.LoadEnvConfigWithPassword(configPath)
+		if err != nil {
+			fmt.Printf("Error loading configuration: %v\n", err)
+			return
+		}
 
 		reader := bufio.NewReader(os.Stdin)
 		if err := configureCORS(reader, envConfig); err != nil {
