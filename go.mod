@@ -1,6 +1,6 @@
 module github.com/kris-hansen/comanda
 
-go 1.23
+go 1.23.0
 
 require (
 	github.com/gocolly/colly/v2 v2.2.0
