@@ -14,7 +14,7 @@ comanda is engineered to be a powerful and developer-centric LLM orchestration t
     *   **Benefit:** Enables seamless integration with your existing scripts, CI/CD pipelines, and development workflows. Manage AI processes with the simplicity of standard command-line utilities.
 *   **🤖 Self-improving Workflows:** Create agentic workflows that can generate and optimize new processing pipelines automatically.
     *   **Benefit:** Build sophisticated systems that adapt and learn, allowing for dynamic and intelligent automation of complex tasks.
-*   **🌐 Server Mode:** Abstract multiple LLM providers (OpenAI, Anthropic, Google, Ollama, etc.) behind a unified API.
+*   **🌐 Server Mode:** Abstract multiple LLM providers (OpenAI, Anthropic, Google, Ollama, vLLM, etc.) behind a unified API.
     *   **Benefit:** Achieve consistent and scalable inference across diverse models. Easily switch providers or integrate new models without overhauling your application logic.
 *   **📄 Declarative YAML Workflows:** Define complex multi-step AI processes using simple, human-readable YAML.
     *   **Benefit:** Easily version, share, and manage your AI pipelines. Focus on the logic of your workflows, not on boilerplate code.
@@ -55,8 +55,8 @@ comanda configure
 
 This will launch an interactive setup process where you can:
 
-1.  Select an LLM provider (e.g., OpenAI, Anthropic, Google, Ollama).
-2.  Enter your API key for that provider (if applicable).
+1.  Select an LLM provider (e.g., OpenAI, Anthropic, Google, Ollama, vLLM).
+2.  Enter your API key for that provider (if applicable - local providers like Ollama and vLLM don't require API keys).
 3.  Specify the model name(s) you want to use from that provider.
 4.  Choose the mode for each model (text, vision, etc.).
 
@@ -111,7 +111,7 @@ Explore the [Features](#features) and [Examples](examples/README.md) to learn mo
 ## Features
 
 - 🔗 Chain multiple LLM operations together using simple YAML configuration
-- 🤖 Support for multiple LLM providers (OpenAI, Anthropic, Google, X.AI, Ollama, Moonshot)
+- 🤖 Support for multiple LLM providers (OpenAI, Anthropic, Google, X.AI, Ollama, vLLM, Moonshot, Deepseek)
 - 📄 File-based operations and transformations
 - 🖼️ Support for image analysis with vision models (screenshots and common image formats)
 - 🌐 Direct URL input support for web content analysis
@@ -242,6 +242,33 @@ comanda supports OpenAI's reasoning model families including o1-pro, o1-mini, o3
 - comanda automatically extends timeouts for these models to prevent connection issues
 - When using these models in workflows, expect longer processing times, especially for the first few tokens
 
+#### vLLM Local Model Support
+
+comanda supports [vLLM](https://github.com/vllm-project/vllm), a high-performance inference server for running LLMs locally. vLLM provides OpenAI-compatible API endpoints, making it easy to use with comanda.
+
+**Setup Requirements:**
+1. Install vLLM: `pip install vllm`
+2. Start the vLLM server with a model:
+   ```bash
+   vllm serve <model-name>
+   # Example:
+   vllm serve meta-llama/Llama-2-7b-chat-hf
+   ```
+3. The server will start on `http://localhost:8000` by default
+
+**Configuration:**
+- vLLM doesn't require an API key (it's a local service)
+- Models are automatically discovered from your running vLLM server
+- You can customize the endpoint using the `VLLM_ENDPOINT` environment variable
+
+**Example:**
+```bash
+# Configure vLLM provider
+comanda configure
+# Select: vllm
+# comanda will automatically detect models running on your vLLM server
+```
+
 Configure your providers and models using the interactive configuration command:
 
 ```bash
@@ -250,7 +277,7 @@ comanda configure
 
 This will prompt you to:
 
-1. Select a provider (OpenAI/Anthropic/Google/X.AI/Ollama/Moonshot)
+1. Select a provider (OpenAI/Anthropic/Google/X.AI/Ollama/vLLM/Moonshot/Deepseek)
 2. Enter API key (for OpenAI/Anthropic/Google/X.AI)
 3. Specify model name
 4. Select model mode:
@@ -1301,6 +1328,6 @@ If you use comanda in your research or academic work, please cite it as follows:
 ## Acknowledgments
 
 - OpenAI and Anthropic for their LLM APIs
-- The Ollama project for local LLM support
+- The Ollama and vLLM projects for local LLM support
 - The Go community for excellent libraries and tools
 - The Colly framework for web scraping capabilities

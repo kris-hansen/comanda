@@ -41,6 +41,7 @@ func (s *Server) handleGetProviders(w http.ResponseWriter, r *http.Request) {
 		{"google", models.NewGoogleProvider()},
 		{"xai", models.NewXAIProvider()},
 		{"ollama", models.NewOllamaProvider()},
+		{"vllm", models.NewVLLMProvider()},
 	}
 
 	// Get provider configurations
@@ -104,7 +105,7 @@ func (s *Server) handleGetAvailableModels(w http.ResponseWriter, r *http.Request
 	apiKey := ""
 	if err == nil { // Provider exists, get its key
 		apiKey = providerConfig.APIKey
-	} else if providerName != "ollama" && providerName != "anthropic" && providerName != "google" && providerName != "xai" && providerName != "deepseek" {
+	} else if providerName != "ollama" && providerName != "vllm" && providerName != "anthropic" && providerName != "google" && providerName != "xai" && providerName != "deepseek" {
 		// If provider doesn't exist and requires a key, we can't proceed
 		sendJSONError(w, http.StatusBadRequest, fmt.Sprintf("Provider '%s' not configured or requires an API key to list models", providerName))
 		return
@@ -161,7 +162,7 @@ func (s *Server) handleAddModel(w http.ResponseWriter, r *http.Request, provider
 
 	// Determine model type
 	modelType := "external"
-	if providerName == "ollama" {
+	if providerName == "ollama" || providerName == "vllm" {
 		modelType = "local"
 	}
 
@@ -319,6 +320,8 @@ func (s *Server) handleValidateProvider(w http.ResponseWriter, r *http.Request) 
 		provider = models.NewXAIProvider()
 	case "ollama":
 		provider = models.NewOllamaProvider()
+	case "vllm":
+		provider = models.NewVLLMProvider()
 	default:
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{
@@ -401,6 +404,8 @@ func (s *Server) handleUpdateProvider(w http.ResponseWriter, r *http.Request) {
 			provider = models.NewXAIProvider()
 		case "ollama":
 			provider = models.NewOllamaProvider()
+		case "vllm":
+			provider = models.NewVLLMProvider()
 		default:
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]string{

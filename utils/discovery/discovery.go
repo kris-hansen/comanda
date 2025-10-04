@@ -133,6 +133,57 @@ func GetOllamaModels() ([]OllamaModel, error) {
 	return response.Models, nil
 }
 
+// VLLMModel represents a model available on the vLLM server
+type VLLMModel struct {
+	ID      string `json:"id"`
+	Object  string `json:"object"`
+	Created int64  `json:"created"`
+	OwnedBy string `json:"owned_by"`
+}
+
+// CheckVLLMInstalled checks if the vLLM server is running and accessible.
+func CheckVLLMInstalled() bool {
+	endpoint := "http://localhost:8000"
+	// TODO: Support VLLM_ENDPOINT environment variable
+
+	resp, err := http.Get(endpoint + "/v1/models")
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+
+	return resp.StatusCode == http.StatusOK
+}
+
+// GetVLLMModels fetches the list of models available from the vLLM server.
+func GetVLLMModels() ([]VLLMModel, error) {
+	// Check if vLLM is running first
+	if !CheckVLLMInstalled() {
+		return nil, fmt.Errorf("vLLM server is not running or not accessible at http://localhost:8000")
+	}
+
+	endpoint := "http://localhost:8000"
+	resp, err := http.Get(endpoint + "/v1/models")
+	if err != nil {
+		return nil, fmt.Errorf("error connecting to vLLM API: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("vLLM API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var response struct {
+		Data []VLLMModel `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return nil, fmt.Errorf("error decoding vLLM response: %v", err)
+	}
+
+	return response.Data, nil
+}
+
 // GetAvailableModels retrieves the list of available models for a given provider.
 // For providers like OpenAI and Ollama, it requires the API key or connection.
 // For others, it returns a hardcoded list.
@@ -156,6 +207,16 @@ func GetAvailableModels(providerName string, apiKey string) ([]string, error) {
 		modelNames := make([]string, len(ollamaModels))
 		for i, m := range ollamaModels {
 			modelNames[i] = m.Name
+		}
+		return modelNames, nil
+	case "vllm":
+		vllmModels, err := GetVLLMModels()
+		if err != nil {
+			return nil, err
+		}
+		modelNames := make([]string, len(vllmModels))
+		for i, m := range vllmModels {
+			modelNames[i] = m.ID
 		}
 		return modelNames, nil
 	default:

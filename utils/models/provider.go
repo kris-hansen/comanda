@@ -105,13 +105,13 @@ func isModelAvailableLocally(modelName string) bool {
 	modelNameLower := strings.ToLower(modelName)
 	for _, model := range tagsResponse.Models {
 		modelFullName := strings.ToLower(model.Name)
-		
+
 		// First check exact match
 		if modelFullName == modelNameLower {
 			config.DebugLog("[Provider] Found local model (exact match): %s", modelName)
 			return true
 		}
-		
+
 		// Then check if the requested model matches the base name (before :tag)
 		// e.g., "gpt-oss" should match "gpt-oss:latest"
 		if strings.Contains(modelFullName, ":") {
@@ -121,9 +121,9 @@ func isModelAvailableLocally(modelName string) bool {
 				return true
 			}
 		}
-		
+
 		// Also check if the full model name starts with the requested name
-		// e.g., "llama3" should match "llama3.2:latest" 
+		// e.g., "llama3" should match "llama3.2:latest"
 		if strings.HasPrefix(modelFullName, modelNameLower) {
 			// Make sure we're not matching partial names unintentionally
 			nextChar := modelFullName[len(modelNameLower):]
@@ -138,6 +138,63 @@ func isModelAvailableLocally(modelName string) bool {
 	return false
 }
 
+// VLLMModelsResponse represents the response from vLLM's /v1/models endpoint
+type VLLMModelsResponse struct {
+	Data []VLLMModelInfo `json:"data"`
+}
+
+// VLLMModelInfo represents a single model from vLLM
+type VLLMModelInfo struct {
+	ID string `json:"id"`
+}
+
+// isModelAvailableOnVLLM checks if a model is available on the local vLLM instance
+func isModelAvailableOnVLLM(modelName string) bool {
+	// Get vLLM endpoint from environment or use default
+	endpoint := "http://localhost:8000"
+	// Note: endpoint customization can be done via VLLM_ENDPOINT environment variable
+	// which is read in the VLLMProvider itself
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(endpoint + "/v1/models")
+	if err != nil {
+		config.DebugLog("[Provider] Failed to connect to vLLM: %v", err)
+		return false
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		config.DebugLog("[Provider] vLLM API returned status %d", resp.StatusCode)
+		return false
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		config.DebugLog("[Provider] Failed to read vLLM response: %v", err)
+		return false
+	}
+
+	var modelsResponse VLLMModelsResponse
+	if err := json.Unmarshal(body, &modelsResponse); err != nil {
+		config.DebugLog("[Provider] Failed to parse vLLM response: %v", err)
+		return false
+	}
+
+	modelNameLower := strings.ToLower(modelName)
+	for _, model := range modelsResponse.Data {
+		modelIDLower := strings.ToLower(model.ID)
+
+		// Check for exact match
+		if modelIDLower == modelNameLower {
+			config.DebugLog("[Provider] Found vLLM model (exact match): %s", modelName)
+			return true
+		}
+	}
+
+	config.DebugLog("[Provider] Model %s not found on vLLM server", modelName)
+	return false
+}
+
 // DetectProviderFunc is the type for the provider detection function
 type DetectProviderFunc func(modelName string) Provider
 
@@ -148,14 +205,26 @@ var DetectProvider DetectProviderFunc = defaultDetectProvider
 func defaultDetectProvider(modelName string) Provider {
 	config.DebugLog("[Provider] Attempting to detect provider for model: %s", modelName)
 
-	// First, check if the model is available locally via Ollama
+	// First, check local providers (Ollama and vLLM)
 	// This prioritizes local models over third-party providers
+
+	// Check Ollama
 	ollamaProvider := NewOllamaProvider()
 	if ollamaProvider.SupportsModel(modelName) {
 		// Check if the model actually exists locally
 		if isModelAvailableLocally(modelName) {
 			config.DebugLog("[Provider] Found local Ollama provider for model %s", modelName)
 			return ollamaProvider
+		}
+	}
+
+	// Check vLLM
+	vllmProvider := NewVLLMProvider()
+	if vllmProvider.SupportsModel(modelName) {
+		// Check if the model actually exists on vLLM server
+		if isModelAvailableOnVLLM(modelName) {
+			config.DebugLog("[Provider] Found local vLLM provider for model %s", modelName)
+			return vllmProvider
 		}
 	}
 
