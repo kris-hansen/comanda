@@ -1565,6 +1565,8 @@ func (p *Processor) getProviderForModel(modelName string) (models.Provider, erro
 						newProvider = models.NewMoonshotProvider()
 					case "ollama":
 						newProvider = models.NewOllamaProvider()
+					case "vllm":
+						newProvider = models.NewVLLMProvider()
 					default:
 						return nil, fmt.Errorf("unknown provider: %s", providerName)
 					}

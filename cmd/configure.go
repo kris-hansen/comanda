@@ -240,6 +240,47 @@ func checkOllamaInstalled() bool {
 	return true
 }
 
+// VLLMModel represents a model from vLLM server
+type VLLMModel struct {
+	ID      string `json:"id"`
+	Object  string `json:"object"`
+	Created int64  `json:"created"`
+	OwnedBy string `json:"owned_by"`
+}
+
+func getVLLMModels() ([]VLLMModel, error) {
+	endpoint := "http://localhost:8000"
+	resp, err := http.Get(endpoint + "/v1/models")
+	if err != nil {
+		return nil, fmt.Errorf("error connecting to vLLM API: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("vLLM API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var response struct {
+		Data []VLLMModel `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return nil, fmt.Errorf("error decoding vLLM response: %v", err)
+	}
+
+	return response.Data, nil
+}
+
+func checkVLLMInstalled() bool {
+	endpoint := "http://localhost:8000"
+	resp, err := http.Get(endpoint + "/v1/models")
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
+}
+
 func validatePassword(password string) error {
 	if len(password) < 6 {
 		return fmt.Errorf("password must be at least 6 characters long")
@@ -717,19 +758,25 @@ var configureCmd = &cobra.Command{
 			// Prompt for provider
 			var provider string
 			for {
-				fmt.Print("Enter provider (openai/anthropic/ollama/google/xai/deepseek/moonshot): ")
+				fmt.Print("Enter provider (openai/anthropic/ollama/vllm/google/xai/deepseek/moonshot): ")
 				provider, _ = reader.ReadString('\n')
 				provider = strings.TrimSpace(provider)
-				if provider == "openai" || provider == "anthropic" || provider == "ollama" || provider == "google" || provider == "xai" || provider == "deepseek" || provider == "moonshot" {
+				if provider == "openai" || provider == "anthropic" || provider == "ollama" || provider == "vllm" || provider == "google" || provider == "xai" || provider == "deepseek" || provider == "moonshot" {
 					break
 				}
-				fmt.Println("Invalid provider. Please enter 'openai', 'anthropic', 'ollama', 'google', 'xai', 'deepseek', or 'moonshot'")
+				fmt.Println("Invalid provider. Please enter 'openai', 'anthropic', 'ollama', 'vllm', 'google', 'xai', 'deepseek', or 'moonshot'")
 			}
 
-			// Special handling for ollama provider
+			// Special handling for local providers
 			if provider == "ollama" {
 				if !checkOllamaInstalled() {
 					fmt.Println("Error: Ollama is not installed or not running. Please install ollama and try again.")
+					return
+				}
+			}
+			if provider == "vllm" {
+				if !checkVLLMInstalled() {
+					fmt.Println("Error: vLLM server is not running. Please start vLLM server and try again.")
 					return
 				}
 			}
@@ -738,11 +785,14 @@ var configureCmd = &cobra.Command{
 			existingProvider, err := envConfig.GetProviderConfig(provider)
 			var apiKey string
 			if err != nil {
-				if provider != "ollama" {
-					// Only prompt for API key if not ollama
+				if provider != "ollama" && provider != "vllm" {
+					// Only prompt for API key if not local providers
 					fmt.Print("Enter API key: ")
 					apiKey, _ = reader.ReadString('\n')
 					apiKey = strings.TrimSpace(apiKey)
+				} else {
+					// For local providers (ollama, vllm), use "LOCAL" as the API key
+					apiKey = "LOCAL"
 				}
 				existingProvider = &config.Provider{
 					APIKey: apiKey,
@@ -855,11 +905,31 @@ var configureCmd = &cobra.Command{
 					fmt.Printf("Error selecting models: %v\n", err)
 					return
 				}
+
+			case "vllm":
+				models, err := getVLLMModels()
+				if err != nil {
+					fmt.Printf("Error fetching vLLM models: %v\n", err)
+					return
+				}
+				modelNames := make([]string, len(models))
+				for i, model := range models {
+					modelNames[i] = model.ID
+				}
+				if len(modelNames) == 0 {
+					fmt.Println("No models found. Please start vLLM server with a model first")
+					return
+				}
+				selectedModels, err = promptForModelSelection(modelNames)
+				if err != nil {
+					fmt.Printf("Error selecting models: %v\n", err)
+					return
+				}
 			}
 
 			// Add new models to provider
 			modelType := "external"
-			if provider == "ollama" {
+			if provider == "ollama" || provider == "vllm" {
 				modelType = "local"
 			}
 
