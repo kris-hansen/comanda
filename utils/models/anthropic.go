@@ -84,8 +84,8 @@ type anthropicRequest struct {
 	Model       string             `json:"model"`
 	Messages    []anthropicMessage `json:"messages"`
 	MaxTokens   int                `json:"max_tokens"`
-	Temperature float64            `json:"temperature"`
-	TopP        float64            `json:"top_p"`
+	Temperature float64            `json:"temperature,omitempty"`
+	TopP        float64            `json:"top_p,omitempty"`
 }
 
 type anthropicResponse struct {
@@ -128,10 +128,12 @@ func (a *AnthropicProvider) SendPrompt(modelName string, prompt string) (string,
 				},
 			},
 		},
-		MaxTokens:   a.config.MaxTokens,
-		Temperature: a.config.Temperature,
-		TopP:        a.config.TopP,
+		MaxTokens: a.config.MaxTokens,
 	}
+
+	// Claude 4+ models only support either temperature OR top_p, not both
+	// Prefer temperature over top_p
+	reqBody.Temperature = a.config.Temperature
 
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
@@ -281,10 +283,12 @@ func (a *AnthropicProvider) SendPromptWithFile(modelName string, prompt string, 
 				Content: content,
 			},
 		},
-		MaxTokens:   a.config.MaxTokens,
-		Temperature: a.config.Temperature,
-		TopP:        a.config.TopP,
+		MaxTokens: a.config.MaxTokens,
 	}
+
+	// Claude 4+ models only support either temperature OR top_p, not both
+	// Prefer temperature over top_p
+	reqBody.Temperature = a.config.Temperature
 
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
