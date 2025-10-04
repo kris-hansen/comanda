@@ -407,7 +407,11 @@ anthropic:
     Modes: text, vision, multi, file
   - claude-opus-4-20250514 (external)
     Modes: text, vision, multi, file
+  - claude-opus-4-1-20250805 (external)
+    Modes: text, vision, multi, file
   - claude-sonnet-4-20250514 (external)
+    Modes: text, vision, multi, file
+  - claude-sonnet-4-5-20250929 (external)
     Modes: text, vision, multi, file
 
 Users updating an existing comanda installation may need to run `comanda configure` to select and enable these new models.

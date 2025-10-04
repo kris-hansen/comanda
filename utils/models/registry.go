@@ -41,14 +41,18 @@ func (r *ModelRegistry) initializeDefaultModels() {
 		"claude-3-7-sonnet-latest",
 		"claude-3-5-haiku-20241022",
 		"claude-opus-4-20250514",
+		"claude-opus-4-1-20250805",
 		"claude-sonnet-4-20250514",
+		"claude-sonnet-4-5-20250929",
 	})
 	r.RegisterFamilies("anthropic", []string{
 		"claude-3-5-sonnet",
 		"claude-3-5-haiku",
 		"claude-3-7-sonnet",
 		"claude-opus-4",
+		"claude-opus-4-1",
 		"claude-sonnet-4",
+		"claude-sonnet-4-5",
 	})
 
 	// OpenAI models - primary models only, the full list is fetched from the API
