@@ -5,8 +5,20 @@ claude_opus_example:
   action: Write a short poem about the beauty of a sunset.
   output: STDOUT
 
+claude_opus_4_1_example:
+  input: NA
+  model: claude-opus-4-1-20250805
+  action: Analyze the themes in Shakespeare's Hamlet in 3 paragraphs.
+  output: STDOUT
+
 claude_sonnet_example:
   input: NA
   model: claude-sonnet-4-20250514
   action: Summarize the key events of the French Revolution in 5 sentences.
+  output: STDOUT
+
+claude_sonnet_4_5_example:
+  input: NA
+  model: claude-sonnet-4-5-20250929
+  action: Explain the concept of recursion in programming with a simple example.
   output: STDOUT
