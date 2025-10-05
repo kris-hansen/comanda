@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // min returns the minimum of two integers
@@ -19,6 +20,33 @@ func (p *Processor) handleOutput(modelName string, response string, outputs []st
 	p.debugf("Handling %d output(s)", len(outputs))
 	for _, output := range outputs {
 		p.debugf("Processing output: %s", output)
+
+		// Handle MEMORY output
+		if output == "MEMORY" || strings.HasPrefix(output, "MEMORY:") {
+			if p.memory == nil || !p.memory.HasMemory() {
+				p.debugf("Warning: MEMORY output requested but no memory file configured")
+				continue
+			}
+
+			// Check if this is a sectioned memory write
+			if strings.HasPrefix(output, "MEMORY:") {
+				sectionName := strings.TrimPrefix(output, "MEMORY:")
+				p.debugf("Writing to memory section: %s", sectionName)
+				if err := p.memory.WriteMemorySection(sectionName, response); err != nil {
+					return fmt.Errorf("failed to write to memory section %s: %w", sectionName, err)
+				}
+				p.debugf("Successfully wrote to memory section: %s", sectionName)
+			} else {
+				// Append to memory file
+				p.debugf("Appending to memory file")
+				if err := p.memory.AppendMemory(response); err != nil {
+					return fmt.Errorf("failed to append to memory: %w", err)
+				}
+				p.debugf("Successfully appended to memory file")
+			}
+			continue
+		}
+
 		if output == "STDOUT" {
 			if p.progress != nil {
 				// Send through progress channel for streaming

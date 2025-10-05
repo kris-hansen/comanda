@@ -45,6 +45,7 @@ type Processor struct {
 	variables    map[string]string // Store variables from STDIN
 	progress     ProgressWriter    // Progress writer for streaming updates
 	runtimeDir   string            // Runtime directory for file operations
+	memory       *MemoryManager    // Memory manager for COMANDA.md file
 }
 
 // UnmarshalYAML is a custom unmarshaler for DSLConfig to handle mixed types at the root level
@@ -157,7 +158,7 @@ func isTestMode() bool {
 }
 
 // NewProcessor creates a new DSL processor
-func NewProcessor(config *DSLConfig, envConfig *config.EnvConfig, serverConfig *config.ServerConfig, verbose bool, runtimeDir ...string) *Processor {
+func NewProcessor(dslConfig *DSLConfig, envConfig *config.EnvConfig, serverConfig *config.ServerConfig, verbose bool, runtimeDir ...string) *Processor {
 	// Default runtime directory to empty string if not provided
 	rd := ""
 	if len(runtimeDir) > 0 {
@@ -165,7 +166,7 @@ func NewProcessor(config *DSLConfig, envConfig *config.EnvConfig, serverConfig *
 	}
 
 	p := &Processor{
-		config:       config,
+		config:       dslConfig,
 		envConfig:    envConfig,
 		serverConfig: serverConfig, // Store server config
 		handler:      input.NewHandler(),
@@ -193,6 +194,20 @@ func NewProcessor(config *DSLConfig, envConfig *config.EnvConfig, serverConfig *
 		p.debugf("No server configuration provided")
 	}
 
+	// Initialize memory manager
+	memoryPath := config.GetMemoryPath(envConfig)
+	if memoryPath != "" {
+		memoryMgr, err := NewMemoryManager(memoryPath)
+		if err != nil {
+			p.debugf("Warning: Failed to initialize memory manager: %v", err)
+		} else {
+			p.memory = memoryMgr
+			p.debugf("Memory manager initialized with file: %s", memoryPath)
+		}
+	} else {
+		p.debugf("No memory file configured")
+	}
+
 	// Disable spinner in test environments
 	if isTestMode() {
 		p.spinner.Disable()
@@ -216,6 +231,14 @@ func (p *Processor) SetLastOutput(output string) {
 // LastOutput returns the last output value
 func (p *Processor) LastOutput() string {
 	return p.lastOutput
+}
+
+// GetMemoryFilePath returns the path to the memory file, or empty string if not configured
+func (p *Processor) GetMemoryFilePath() string {
+	if p.memory == nil {
+		return ""
+	}
+	return p.memory.GetFilePath()
 }
 
 // debugf prints debug information if verbose mode is enabled
@@ -965,6 +988,17 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 				substituted = strings.ReplaceAll(substituted, "{{ chunk_index }}", fmt.Sprintf("%d", chunkIndex+1))
 				substituted = strings.ReplaceAll(substituted, "{{ total_chunks }}", fmt.Sprintf("%d", chunkResult.TotalChunks))
 				substituted = strings.ReplaceAll(substituted, "{{ current_chunk }}", string(currentInput.Contents))
+			}
+		}
+
+		// If memory is enabled for this step, inject memory content
+		if step.Config.Memory && p.memory != nil && p.memory.HasMemory() {
+			memoryContent := p.memory.GetMemory()
+			if memoryContent != "" {
+				// Prepend memory context to the action
+				memoryPrefix := fmt.Sprintf("Context from project memory:\n---\n%s\n---\n\n", memoryContent)
+				substituted = memoryPrefix + substituted
+				p.debugf("Injected memory context into action (memory length: %d chars)", len(memoryContent))
 			}
 		}
 

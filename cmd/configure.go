@@ -30,6 +30,8 @@ var (
 	databaseFlag                  bool
 	setDefaultGenerationModelFlag string
 	defaultFlag                   bool
+	memoryFlag                    string
+	initMemoryFlag                bool
 )
 
 // Green checkmark for successful operations
@@ -609,6 +611,38 @@ var configureCmd = &cobra.Command{
 
 		configPath := config.GetEnvPath()
 
+		// Handle init-memory flag
+		if initMemoryFlag {
+			memPath, err := config.InitializeUserMemoryFile()
+			if err != nil {
+				fmt.Printf("Error initializing memory file: %v\n", err)
+				return
+			}
+			fmt.Printf("%s Memory file initialized at: %s\n", greenCheckmark, memPath)
+			fmt.Println("\nYou can now use memory in your workflows with:")
+			fmt.Println("  memory: true  # In step config to read from memory")
+			fmt.Println("  output: MEMORY  # To write to memory")
+			return
+		}
+
+		// Handle memory flag
+		if memoryFlag != "" {
+			envCfg, err := config.LoadEnvConfigWithPassword(configPath)
+			if err != nil {
+				fmt.Printf("Error loading configuration: %v\n", err)
+				return
+			}
+
+			envCfg.MemoryFile = memoryFlag
+			if err := config.SaveEnvConfig(configPath, envCfg); err != nil {
+				fmt.Printf("Error saving configuration: %v\n", err)
+				return
+			}
+
+			fmt.Printf("%s Memory file path set to: %s\n", greenCheckmark, memoryFlag)
+			return
+		}
+
 		if encryptFlag {
 			password, err := config.PromptPassword("Enter encryption password (minimum 6 characters): ")
 			if err != nil {
@@ -1042,6 +1076,12 @@ func listConfiguration() {
 		fmt.Printf("Default Generation Model: %s\n\n", cfg.DefaultGenerationModel)
 	}
 
+	// List memory file if configured
+	memoryPath := config.GetMemoryPath(cfg)
+	if memoryPath != "" {
+		fmt.Printf("Memory File: %s\n\n", memoryPath)
+	}
+
 	// List server configuration if it exists
 	if server := cfg.GetServerConfig(); server != nil {
 		fmt.Println("Server Configuration:")
@@ -1105,5 +1145,7 @@ func init() {
 	configureCmd.Flags().BoolVar(&databaseFlag, "database", false, "Configure database settings")
 	configureCmd.Flags().StringVar(&setDefaultGenerationModelFlag, "set-default-generation-model", "", "Set the default model for workflow generation")
 	configureCmd.Flags().BoolVar(&defaultFlag, "default", false, "Interactively set the default model for workflow generation")
+	configureCmd.Flags().StringVar(&memoryFlag, "memory", "", "Set path to COMANDA.md memory file")
+	configureCmd.Flags().BoolVar(&initMemoryFlag, "init-memory", false, "Initialize a new memory file at ~/.comanda/COMANDA.md")
 	rootCmd.AddCommand(configureCmd)
 }

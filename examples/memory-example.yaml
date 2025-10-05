@@ -1,0 +1,38 @@
+# Example demonstrating memory support
+# This workflow shows how to use COMANDA.md for persistent memory
+
+# Step 1: Analyze input with memory context
+analyze_with_context:
+  input: STDIN
+  model: gpt-4o-mini
+  memory: true  # This includes the contents of COMANDA.md in the prompt context
+  action: |
+    Based on the project context you have, analyze the following input and provide insights.
+    Consider previous work, patterns, and knowledge stored in our project memory.
+  output: STDOUT
+
+# Step 2: Record key findings to memory
+record_findings:
+  input: STDIN
+  model: gpt-4o-mini
+  action: |
+    Summarize the key findings and insights from the previous analysis in 2-3 sentences.
+    Make it concise and actionable for future reference.
+  output: [STDOUT, MEMORY]  # Output to both console and memory file
+
+# Step 3: Update a specific memory section
+update_status:
+  input: STDIN
+  model: gpt-4o-mini
+  action: |
+    Based on the analysis, provide a one-sentence status update for the project.
+    Format: "Status: [current state]"
+  output: MEMORY:project_status  # Updates the "## project_status" section in COMANDA.md
+
+# Step 4: Review what's in memory (without making API call)
+review_memory:
+  input: NA
+  model: NA  # Using NA model means no API call, just pass through
+  memory: true  # This will load and display memory content
+  action: "passthrough"
+  output: STDOUT
