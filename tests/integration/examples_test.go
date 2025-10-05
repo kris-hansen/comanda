@@ -27,7 +27,7 @@ func TestBinaryBuild(t *testing.T) {
 	}
 
 	// Clean up
-	defer os.Remove(binaryPath)
+	t.Cleanup(func() { os.Remove(binaryPath) })
 
 	t.Log("✓ Binary built successfully")
 }
@@ -40,7 +40,7 @@ func TestOpenAIExample(t *testing.T) {
 	}
 
 	binaryPath := buildTestBinary(t)
-	defer os.Remove(binaryPath)
+	t.Cleanup(func() { os.Remove(binaryPath) })
 
 	examplePath := "../../examples/model-examples/openai-example.yaml"
 	if _, err := os.Stat(examplePath); os.IsNotExist(err) {
@@ -74,7 +74,7 @@ func TestFileConsolidation(t *testing.T) {
 	}
 
 	binaryPath := buildTestBinary(t)
-	defer os.Remove(binaryPath)
+	t.Cleanup(func() { os.Remove(binaryPath) })
 
 	examplePath := "../../examples/file-processing/consolidate-example.yaml"
 	if _, err := os.Stat(examplePath); os.IsNotExist(err) {
@@ -108,7 +108,7 @@ func TestParallelProcessing(t *testing.T) {
 	}
 
 	binaryPath := buildTestBinary(t)
-	defer os.Remove(binaryPath)
+	t.Cleanup(func() { os.Remove(binaryPath) })
 
 	examplePath := "../../examples/parallel-processing/parallel-inference.yaml"
 	if _, err := os.Stat(examplePath); os.IsNotExist(err) {
@@ -150,7 +150,7 @@ func TestDatabaseExample(t *testing.T) {
 	}
 
 	binaryPath := buildTestBinary(t)
-	defer os.Remove(binaryPath)
+	t.Cleanup(func() { os.Remove(binaryPath) })
 
 	examplePath := "../../examples/database-connections/postgres/db-example.yaml"
 	if _, err := os.Stat(examplePath); os.IsNotExist(err) {
@@ -236,7 +236,7 @@ func isDatabaseConfigured(t *testing.T) bool {
 // TestConfigureCommand tests the configure command
 func TestConfigureCommand(t *testing.T) {
 	binaryPath := buildTestBinary(t)
-	defer os.Remove(binaryPath)
+	t.Cleanup(func() { os.Remove(binaryPath) })
 
 	// Test configure --list command (doesn't require interaction)
 	cmd := exec.Command(binaryPath, "configure", "--list")
@@ -255,7 +255,7 @@ func TestConfigureCommand(t *testing.T) {
 // TestVersionCommand tests the version command
 func TestVersionCommand(t *testing.T) {
 	binaryPath := buildTestBinary(t)
-	defer os.Remove(binaryPath)
+	t.Cleanup(func() { os.Remove(binaryPath) })
 
 	// Read VERSION file
 	versionBytes, err := os.ReadFile("../../VERSION")
