@@ -109,6 +109,17 @@ var processCmd = &cobra.Command{
 					}
 
 					fmt.Printf("  - Output: %v\n", proc.NormalizeStringSlice(step.Config.Output))
+
+					// Display memory information if enabled
+					if step.Config.Memory {
+						memoryPath := proc.GetMemoryFilePath()
+						if memoryPath != "" {
+							fmt.Printf("  - Memory: [Using %s]\n", memoryPath)
+						} else {
+							fmt.Printf("  - Memory: [ENABLED but no memory file configured]\n")
+						}
+					}
+
 					nextActions := proc.NormalizeStringSlice(step.Config.NextAction)
 					if len(nextActions) > 0 {
 						fmt.Printf("  - Next Action: %v\n", nextActions)
@@ -133,6 +144,17 @@ var processCmd = &cobra.Command{
 				}
 
 				fmt.Printf("- Output: %v\n", proc.NormalizeStringSlice(step.Config.Output))
+
+				// Display memory information if enabled
+				if step.Config.Memory {
+					memoryPath := proc.GetMemoryFilePath()
+					if memoryPath != "" {
+						fmt.Printf("- Memory: [Using %s]\n", memoryPath)
+					} else {
+						fmt.Printf("- Memory: [ENABLED but no memory file configured]\n")
+					}
+				}
+
 				nextActions := proc.NormalizeStringSlice(step.Config.NextAction)
 				if len(nextActions) > 0 {
 					fmt.Printf("- Next Action: %v\n", nextActions)

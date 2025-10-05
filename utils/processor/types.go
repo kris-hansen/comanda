@@ -19,6 +19,7 @@ type StepConfig struct {
 	BatchMode  string       `yaml:"batch_mode"`      // How to process multiple files: "combined" (default) or "individual"
 	SkipErrors bool         `yaml:"skip_errors"`     // Whether to continue processing if some files fail
 	Chunk      *ChunkConfig `yaml:"chunk,omitempty"` // Configuration for chunking large files
+	Memory     bool         `yaml:"memory"`          // Whether to include memory context in this step
 
 	// OpenAI Responses API specific fields
 	Instructions       string                   `yaml:"instructions"`         // System message

@@ -63,6 +63,7 @@ type EnvConfig struct {
 	Server                 *ServerConfig             `yaml:"server,omitempty"`
 	Databases              map[string]DatabaseConfig `yaml:"databases,omitempty"` // Added database configurations
 	DefaultGenerationModel string                    `yaml:"default_generation_model,omitempty"`
+	MemoryFile             string                    `yaml:"memory_file,omitempty"` // Path to COMANDA.md memory file
 }
 
 // Verbose indicates whether verbose logging is enabled

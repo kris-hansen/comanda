@@ -129,6 +129,7 @@ Explore the [Features](#features) and [Examples](examples/README.md) to learn mo
 - 📄 Built-in chunking for processing large files with automatic splitting
 - 📂 Runtime directory support for organizing uploads and YAML processing scripts
 - ✨ YAML workflow generation from natural language prompts
+- 🧠 Persistent memory support via COMANDA.md for context-aware workflows
 
 
 ## Installation
@@ -1259,8 +1260,123 @@ output:
   sql: INSERT INTO customers (first_name, last_name, email) VALUES ('John', 'Doe', 'john.doe@example.com')
 ```
 
+## Memory Support
+
+comanda supports persistent memory through a `COMANDA.md` file that workflows can read from and write to. This enables context-aware, stateful workflows that can accumulate knowledge over time.
+
+### Memory File Discovery
+
+The memory file is discovered in the following order:
+1. `COMANDA_MEMORY` environment variable
+2. `memory_file` setting in `.env` configuration
+3. `COMANDA.md` in current directory
+4. `COMANDA.md` in parent directories (up to 5 levels)
+5. `~/.comanda/COMANDA.md` (user-level default)
+
+### Configuring Memory
+
+Initialize a new memory file:
+```bash
+comanda configure --init-memory
+```
+
+Set a custom memory file path:
+```bash
+comanda configure --memory /path/to/COMANDA.md
+```
+
+Or set it in your `.env` file:
+```yaml
+memory_file: path/to/COMANDA.md
+```
+
+Or via environment variable:
+```bash
+export COMANDA_MEMORY=/path/to/COMANDA.md
+```
+
+### Using Memory in Workflows
+
+**Reading from memory:**
+```yaml
+analyze_with_context:
+  input: data.txt
+  model: gpt-4o
+  memory: true  # Injects COMANDA.md content into the prompt context
+  action: Analyze this data considering our project context
+  output: STDOUT
+```
+
+**Writing to memory:**
+```yaml
+record_findings:
+  input: STDIN
+  model: gpt-4o
+  action: Summarize the key findings from this analysis
+  output: [STDOUT, MEMORY]  # Outputs to both console and memory file
+```
+
+**Writing to a specific memory section:**
+```yaml
+update_status:
+  input: STDIN
+  model: gpt-4o
+  action: Provide a status update
+  output: MEMORY:project_status  # Updates the "## project_status" section
+```
+
+### Memory File Format
+
+The memory file uses Markdown format with sections:
+
+```markdown
+# Project Memory
+
+## Project Context
+General project information and background
+
+## project_status
+*Updated: 2025-10-04 12:30:00*
+
+Current status information
+
+## Key Learnings
+Important insights and decisions
+
+## Notes
+General observations and notes
+```
+
+When writing to a specific section (e.g., `MEMORY:project_status`), comanda will:
+- Find or create the `## project_status` section
+- Add a timestamp
+- Replace the section content with new data
+- Preserve other sections
+
+When writing with `MEMORY` (without a section), comanda appends to the file with a timestamp separator.
+
+### Memory File Size Constraints
+
+To ensure memory content fits within model context windows along with prompts, comanda enforces size limits on the memory file:
+
+- **Maximum size**: 500KB (hard limit)
+- **Warning threshold**: 400KB
+
+When the memory file approaches or exceeds these limits:
+- At 400KB: A warning is displayed suggesting you archive old entries
+- At 500KB: Operations that would exceed the limit will fail with an error
+
+This ensures that the memory file, combined with your prompts and other content, can fit within typical model context windows (GPT-4: ~128K tokens/512KB, Claude: ~200K tokens/800KB).
+
+To manage memory file size:
+- Periodically review and archive old entries
+- Keep only relevant, recent context
+- Consider splitting different projects into separate memory files
+
 ### Example YAML Files
 Examples can be found in the `examples/` directory. Here is a link to the README for the examples: [examples/README.md](examples/README.md)
+
+For a complete memory example, see [examples/memory-example.yaml](examples/memory-example.yaml)
 
 ## Project Structure
 
