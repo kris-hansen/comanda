@@ -457,31 +457,31 @@ func (c *EnvConfig) GetModelConfig(providerName, modelName string) (*Model, erro
 
 	var exactMatch *Model
 	var baseMatches []*Model
-	
+
 	for _, model := range provider.Models {
 		// Check for exact match first
 		if model.Name == modelName {
 			exactMatch = &model
 			break
 		}
-		
+
 		// Check if this model matches the base name (before any tag)
 		modelBaseName := strings.Split(model.Name, ":")[0]
 		if modelBaseName == modelName {
 			baseMatches = append(baseMatches, &model)
 		}
 	}
-	
+
 	// Return exact match if found
 	if exactMatch != nil {
 		return exactMatch, nil
 	}
-	
+
 	// If no exact match but exactly one base name match, use that
 	if len(baseMatches) == 1 {
 		return baseMatches[0], nil
 	}
-	
+
 	// If multiple base name matches, it's ambiguous
 	if len(baseMatches) > 1 {
 		var modelNames []string

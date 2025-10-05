@@ -1408,22 +1408,135 @@ The following features are being considered:
 - Branching and basic if/or logic
 - Routing logic i.e., use this model if the output is x and that model if y
 
+## Development
+
+### Prerequisites
+
+- Go 1.23 or higher
+- Make (optional, but recommended)
+- golangci-lint (will be installed automatically if using Make)
+
+### Quick Start for Developers
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/kris-hansen/comanda.git
+   cd comanda
+   ```
+
+2. **Install dependencies**
+   ```bash
+   make deps
+   ```
+
+3. **Build the project**
+   ```bash
+   make build
+   ```
+
+4. **Run tests**
+   ```bash
+   make test
+   ```
+
+5. **Run linting**
+   ```bash
+   make lint
+   ```
+
+### Makefile Commands
+
+The project includes a comprehensive Makefile to streamline development:
+
+| Command | Description |
+|---------|-------------|
+| `make help` | Display all available commands |
+| `make deps` | Install/update dependencies |
+| `make lint` | Run golangci-lint with auto-fix |
+| `make lint-check` | Run linting without auto-fix (for CI) |
+| `make test` | Run unit tests with coverage |
+| `make coverage` | Generate HTML coverage report |
+| `make integration` | Run integration tests |
+| `make build` | Build binary for current platform |
+| `make build-all` | Build binaries for all platforms |
+| `make install` | Install binary to $GOPATH/bin |
+| `make clean` | Remove build artifacts |
+| `make fmt` | Format code with gofmt |
+| `make vet` | Run go vet |
+| `make check` | Run all checks (lint, vet, test) |
+| `make dev` | Full dev cycle: deps, lint, test, build |
+| `make release` | Prepare release: checks + build all platforms |
+
+### Code Quality
+
+This project uses [golangci-lint](https://golangci-lint.run/) for comprehensive code quality checks. The configuration includes:
+
+- **Error checking**: Ensures all errors are handled
+- **Code simplification**: Suggests simpler code where possible
+- **Style checks**: Enforces consistent code style
+- **Security**: Detects potential security issues
+- **Performance**: Identifies performance improvements
+- **Complexity**: Monitors cyclomatic and cognitive complexity
+
+Run `make lint` to automatically fix issues, or `make lint-check` to just report them.
+
+### Testing
+
+The project has two types of tests:
+
+1. **Unit Tests**: Run with `make test`
+   - Test individual functions and components
+   - Include coverage reporting
+   - Located alongside the code they test
+
+2. **Integration Tests**: Run with `make integration`
+   - Test complete workflows with real examples
+   - Require API keys to be configured in `.env`
+   - Located in `tests/integration/`
+   - See [tests/integration/README.md](tests/integration/README.md) for details
+
+### Project Structure
+
+```
+comanda/
+├── cmd/                    # Command line interface
+├── utils/                  # Utility packages
+│   ├── config/            # Configuration handling
+│   ├── input/             # Input validation
+│   ├── models/            # LLM provider implementations
+│   ├── processor/         # YAML processing
+│   ├── server/            # HTTP server
+│   └── ...
+├── examples/              # Example YAML workflows
+├── tests/
+│   └── integration/       # Integration tests
+├── .golangci.yml          # Linting configuration
+├── Makefile              # Development commands
+└── main.go
+```
+
 ## Contributing
 
-Contributions are welcome! Here's how you can help:
+Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) for details on our code of conduct and development process.
+
+### Quick Contribution Checklist
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+3. Make your changes following our code quality standards:
+   - Run `make lint` to check and fix code style
+   - Run `make test` to ensure tests pass
+   - Add tests for new functionality
+4. Commit your changes (`git commit -m 'Add amazing feature'`)
+5. Push to the branch (`git push origin feature/amazing-feature`)
+6. Open a Pull Request
 
-Please ensure your PR:
-
-- Includes tests for new functionality
-- Updates documentation as needed
-- Follows the existing code style
-- Includes a clear description of the changes
+All PRs must:
+- Pass linting checks (`make lint-check`)
+- Pass all tests (`make test`)
+- Include tests for new functionality
+- Update documentation as needed
+- Include a clear description of changes
 
 ## License
 

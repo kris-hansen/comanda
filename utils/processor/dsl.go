@@ -89,7 +89,7 @@ func (c *DSLConfig) UnmarshalYAML(node *yaml.Node) error {
 			// Try to decode as a standard step config first
 			var stepConfig StepConfig
 			stepErr := valueNode.Decode(&stepConfig)
-			
+
 			// If it fails or if the valueNode is a mapping that contains nested steps,
 			// check if this is a parallel step group
 			if stepErr != nil || c.isParallelStepGroup(valueNode) {
@@ -101,7 +101,7 @@ func (c *DSLConfig) UnmarshalYAML(node *yaml.Node) error {
 					}
 					return fmt.Errorf("failed to decode parallel step group '%s': %w", stepName, err)
 				}
-				
+
 				// Convert map[string]StepConfig to []Step
 				var steps []Step
 				for subStepName, subStepConfig := range parallelSteps {
@@ -124,7 +124,7 @@ func (c *DSLConfig) isParallelStepGroup(node *yaml.Node) bool {
 	if node.Kind != yaml.MappingNode {
 		return false
 	}
-	
+
 	// Check if all the values in this mapping are themselves mappings
 	// which would indicate nested step configurations
 	for i := 1; i < len(node.Content); i += 2 {
@@ -132,14 +132,14 @@ func (c *DSLConfig) isParallelStepGroup(node *yaml.Node) bool {
 		if valueNode.Kind != yaml.MappingNode {
 			return false
 		}
-		
+
 		// Check if this nested mapping has step-like keys
 		hasStepKeys := false
 		for j := 0; j < len(valueNode.Content); j += 2 {
 			keyNode := valueNode.Content[j]
 			key := keyNode.Value
-			if key == "input" || key == "model" || key == "action" || key == "output" || 
-			   key == "generate" || key == "process" || key == "type" {
+			if key == "input" || key == "model" || key == "action" || key == "output" ||
+				key == "generate" || key == "process" || key == "type" {
 				hasStepKeys = true
 				break
 			}
@@ -148,7 +148,7 @@ func (c *DSLConfig) isParallelStepGroup(node *yaml.Node) bool {
 			return false
 		}
 	}
-	
+
 	return true
 }
 
