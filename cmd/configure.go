@@ -633,13 +633,51 @@ var configureCmd = &cobra.Command{
 				return
 			}
 
-			envCfg.MemoryFile = memoryFlag
+			// Validate the memory file path
+			absPath, err := filepath.Abs(memoryFlag)
+			if err != nil {
+				fmt.Printf("Error resolving memory file path: %v\n", err)
+				return
+			}
+
+			// Check if the file exists or if the parent directory is accessible
+			if _, err := os.Stat(absPath); err != nil {
+				if os.IsNotExist(err) {
+					// Check if parent directory exists and is writable
+					parentDir := filepath.Dir(absPath)
+					if stat, err := os.Stat(parentDir); err != nil {
+						fmt.Printf("Error: Parent directory %s does not exist or is not accessible: %v\n", parentDir, err)
+						return
+					} else if !stat.IsDir() {
+						fmt.Printf("Error: %s is not a directory\n", parentDir)
+						return
+					}
+					// Check if directory is writable
+					if err := os.WriteFile(filepath.Join(parentDir, ".write_test"), []byte{}, 0644); err != nil {
+						fmt.Printf("Error: Directory %s is not writable: %v\n", parentDir, err)
+						return
+					}
+					os.Remove(filepath.Join(parentDir, ".write_test"))
+					fmt.Printf("Warning: Memory file does not exist at %s. It will be created when needed.\n", absPath)
+				} else {
+					fmt.Printf("Error accessing memory file: %v\n", err)
+					return
+				}
+			} else {
+				// File exists, check if it's readable
+				if _, err := os.ReadFile(absPath); err != nil {
+					fmt.Printf("Error: Memory file is not readable: %v\n", err)
+					return
+				}
+			}
+
+			envCfg.MemoryFile = absPath
 			if err := config.SaveEnvConfig(configPath, envCfg); err != nil {
 				fmt.Printf("Error saving configuration: %v\n", err)
 				return
 			}
 
-			fmt.Printf("%s Memory file path set to: %s\n", greenCheckmark, memoryFlag)
+			fmt.Printf("%s Memory file path set to: %s\n", greenCheckmark, absPath)
 			return
 		}
 

@@ -8,6 +8,17 @@ import (
 	"time"
 )
 
+const (
+	// MaxMemorySizeBytes is the maximum size for memory file content (500KB)
+	// This ensures memory can fit in model context windows along with prompts
+	// Typical context windows: GPT-4: ~128K tokens (~512KB), Claude: ~200K tokens (~800KB)
+	// We use 500KB to leave room for prompts and other content
+	MaxMemorySizeBytes = 500 * 1024
+
+	// MaxMemorySizeWarningBytes is the size at which we warn users (400KB)
+	MaxMemorySizeWarningBytes = 400 * 1024
+)
+
 // MemoryManager handles reading from and writing to the COMANDA.md memory file
 type MemoryManager struct {
 	filePath string
@@ -115,6 +126,19 @@ func (m *MemoryManager) AppendMemory(content string) error {
 	separator := fmt.Sprintf("\n---\n*Updated: %s*\n\n", getCurrentTimestamp())
 	fullContent := separator + content
 
+	// Check if appending would exceed size limit
+	newSize := len(m.content) + len(fullContent)
+	if newSize > MaxMemorySizeBytes {
+		return fmt.Errorf("appending content would exceed maximum memory size of %d bytes (current: %d, new: %d). Consider archiving or removing old entries",
+			MaxMemorySizeBytes, len(m.content), newSize)
+	}
+
+	// Warn if approaching size limit
+	if newSize > MaxMemorySizeWarningBytes && len(m.content) <= MaxMemorySizeWarningBytes {
+		fmt.Fprintf(os.Stderr, "Warning: Memory file size (%d bytes) is approaching the maximum limit (%d bytes). Consider archiving old entries.\n",
+			newSize, MaxMemorySizeBytes)
+	}
+
 	// Append to current content
 	m.content = m.content + fullContent
 
@@ -194,7 +218,22 @@ func (m *MemoryManager) WriteMemorySection(sectionName, content string) error {
 		return fmt.Errorf("failed to write section %s", sectionName)
 	}
 
-	m.content = strings.Join(newLines, "\n")
+	newContent := strings.Join(newLines, "\n")
+
+	// Check if new content would exceed size limit
+	newSize := len(newContent)
+	if newSize > MaxMemorySizeBytes {
+		return fmt.Errorf("updated content would exceed maximum memory size of %d bytes (new size: %d). Consider archiving or removing old entries",
+			MaxMemorySizeBytes, newSize)
+	}
+
+	// Warn if approaching size limit
+	if newSize > MaxMemorySizeWarningBytes && len(m.content) <= MaxMemorySizeWarningBytes {
+		fmt.Fprintf(os.Stderr, "Warning: Memory file size (%d bytes) is approaching the maximum limit (%d bytes). Consider archiving old entries.\n",
+			newSize, MaxMemorySizeBytes)
+	}
+
+	m.content = newContent
 	return os.WriteFile(m.filePath, []byte(m.content), 0644)
 }
 

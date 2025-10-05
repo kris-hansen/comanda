@@ -199,7 +199,27 @@ func NewProcessor(dslConfig *DSLConfig, envConfig *config.EnvConfig, serverConfi
 	if memoryPath != "" {
 		memoryMgr, err := NewMemoryManager(memoryPath)
 		if err != nil {
-			p.debugf("Warning: Failed to initialize memory manager: %v", err)
+			// Provide detailed diagnostic information about the failure
+			p.debugf("Warning: Failed to initialize memory manager")
+			p.debugf("  Memory file path: %s", memoryPath)
+			p.debugf("  Error: %v", err)
+
+			// Check if file exists and provide additional context
+			if fileInfo, statErr := os.Stat(memoryPath); statErr != nil {
+				if os.IsNotExist(statErr) {
+					p.debugf("  Reason: Memory file does not exist")
+				} else if os.IsPermission(statErr) {
+					p.debugf("  Reason: Permission denied accessing memory file")
+				} else {
+					p.debugf("  Additional error: %v", statErr)
+				}
+			} else {
+				p.debugf("  File exists: true, Size: %d bytes", fileInfo.Size())
+				if !fileInfo.Mode().IsRegular() {
+					p.debugf("  Reason: Path is not a regular file")
+				}
+			}
+			p.debugf("  Memory features will be disabled for this session")
 		} else {
 			p.memory = memoryMgr
 			p.debugf("Memory manager initialized with file: %s", memoryPath)

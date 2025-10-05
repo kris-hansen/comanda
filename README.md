@@ -1355,6 +1355,24 @@ When writing to a specific section (e.g., `MEMORY:project_status`), comanda will
 
 When writing with `MEMORY` (without a section), comanda appends to the file with a timestamp separator.
 
+### Memory File Size Constraints
+
+To ensure memory content fits within model context windows along with prompts, comanda enforces size limits on the memory file:
+
+- **Maximum size**: 500KB (hard limit)
+- **Warning threshold**: 400KB
+
+When the memory file approaches or exceeds these limits:
+- At 400KB: A warning is displayed suggesting you archive old entries
+- At 500KB: Operations that would exceed the limit will fail with an error
+
+This ensures that the memory file, combined with your prompts and other content, can fit within typical model context windows (GPT-4: ~128K tokens/512KB, Claude: ~200K tokens/800KB).
+
+To manage memory file size:
+- Periodically review and archive old entries
+- Keep only relevant, recent context
+- Consider splitting different projects into separate memory files
+
 ### Example YAML Files
 Examples can be found in the `examples/` directory. Here is a link to the README for the examples: [examples/README.md](examples/README.md)
 
