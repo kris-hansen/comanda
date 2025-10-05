@@ -56,12 +56,12 @@ func checkOllamaModelExists(modelName string) (bool, error) {
 	modelNameLower := strings.ToLower(modelName)
 	for _, model := range tagsResponse.Models {
 		modelFullName := strings.ToLower(model.Name)
-		
+
 		// First check exact match
 		if modelFullName == modelNameLower {
 			return true, nil // Model found (exact match)
 		}
-		
+
 		// Then check if the requested model matches the base name (before :tag)
 		// e.g., "gpt-oss" should match "gpt-oss:latest"
 		if strings.Contains(modelFullName, ":") {
@@ -70,9 +70,9 @@ func checkOllamaModelExists(modelName string) (bool, error) {
 				return true, nil // Model found (tag match)
 			}
 		}
-		
+
 		// Also check if the full model name starts with the requested name
-		// e.g., "llama3" should match "llama3.2:latest" 
+		// e.g., "llama3" should match "llama3.2:latest"
 		if strings.HasPrefix(modelFullName, modelNameLower) {
 			// Make sure we're not matching partial names unintentionally
 			nextChar := modelFullName[len(modelNameLower):]

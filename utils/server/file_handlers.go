@@ -46,7 +46,7 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	config.VerboseLog("Listing files in directory: %s", dirPath)
-	
+
 	// Validate and resolve the path
 	var fullPath string
 	if dirPath == "/" {
@@ -67,7 +67,7 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		config.DebugLog("Listing directory: %s", fullPath)
-		
+
 		// Verify the path exists and is a directory
 		fileInfo, err := os.Stat(fullPath)
 		if err != nil {
@@ -88,7 +88,7 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-		
+
 		// Ensure the path is a directory
 		if !fileInfo.IsDir() {
 			config.VerboseLog("Path is not a directory: %s", fullPath)
@@ -134,7 +134,7 @@ func (s *Server) listFilesWithMetadata(dir string) ([]FileInfo, error) {
 	for _, entry := range entries {
 		// Get full path for the entry
 		path := filepath.Join(dir, entry.Name())
-		
+
 		// Get detailed file info
 		info, err := entry.Info()
 		if err != nil {

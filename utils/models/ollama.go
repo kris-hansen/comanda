@@ -52,7 +52,7 @@ func (o *OllamaProvider) debugf(format string, args ...interface{}) {
 // Ollama can accept any model name and let the actual local availability check determine if it exists.
 func (o *OllamaProvider) SupportsModel(modelName string) bool {
 	o.debugf("Checking if model is supported: %s", modelName)
-	
+
 	// Ollama can potentially support any model that users have pulled locally
 	// The actual validation happens in isModelAvailableLocally() or checkOllamaModelExists()
 	o.debugf("Ollama provider can support model: %s (will check local availability)", modelName)

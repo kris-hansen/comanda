@@ -65,14 +65,14 @@ func (o *OpenAIProvider) SupportsModel(modelName string) bool {
 	// Only match well-known OpenAI model patterns
 	openaiPatterns := []string{
 		"gpt-3.5-turbo",
-		"gpt-3.5-",    // gpt-3.5 variants  
+		"gpt-3.5-", // gpt-3.5 variants
 		"gpt-4-turbo",
-		"gpt-4o-",     // gpt-4o variants
+		"gpt-4o-", // gpt-4o variants
 		"gpt-4.1",
-		"gpt-5-",      // gpt-5 variants like gpt-5-mini, gpt-5-nano
-		"o1-",         // o1 variants
-		"o3-",         // o3 variants  
-		"o4-",         // o4 variants
+		"gpt-5-", // gpt-5 variants like gpt-5-mini, gpt-5-nano
+		"o1-",    // o1 variants
+		"o3-",    // o3 variants
+		"o4-",    // o4 variants
 		"chatgpt-4o-",
 	}
 

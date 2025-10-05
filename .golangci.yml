@@ -1,0 +1,163 @@
+run:
+  timeout: 5m
+  tests: true
+  build-tags:
+    - integration
+
+linters:
+  enable:
+    # Bugs and correctness
+    - errcheck       # Check for unchecked errors
+    - gosimple       # Simplify code
+    - govet          # Go vet
+    - ineffassign    # Detect ineffectual assignments
+    - staticcheck    # Advanced Go linting
+    - unused         # Check for unused constants, variables, functions and types
+
+    # Code quality
+    - gocyclo        # Cyclomatic complexity
+    - goconst        # Repeated strings that could be constants
+    - gofmt          # Format code
+    # - goimports    # Fix imports - disabled for now
+    - misspell       # Spell checker
+    - unconvert      # Remove unnecessary type conversions
+
+    # Style
+    - stylecheck     # Stylecheck
+    - revive         # Replacement for golint
+
+    # Error handling
+    - errname        # Check error naming
+    - errorlint      # Error wrapping
+
+    # Best practices
+    - gosec          # Security issues
+    - nilerr         # Returns nil even if it checks that the error is not nil
+
+  disable:
+    - gocritic       # Too opinionated for now
+    - exhaustive     # Can be too strict
+    - lll            # Line length - handled by gofmt
+    - prealloc       # Too many false positives
+    - funlen         # Too strict for existing codebase
+    - gocognit       # Too strict for existing codebase
+    - nolintlint     # Can be added later
+
+linters-settings:
+  errcheck:
+    check-type-assertions: false  # Too strict for interactive CLI
+    check-blank: false            # Too strict for existing code
+
+  gocyclo:
+    min-complexity: 70  # Very relaxed for existing code - will be tightened in future
+
+  goconst:
+    min-len: 3
+    min-occurrences: 10  # Very lenient for existing code
+
+  govet:
+    shadow: true
+    enable:
+      - shadow
+
+  misspell:
+    locale: US
+
+  revive:
+    rules:
+      - name: exported
+        disabled: true  # Too many issues in existing code
+      - name: var-naming
+        disabled: false
+      - name: package-comments
+        disabled: true
+      - name: indent-error-flow
+        disabled: false
+
+  gosec:
+    excludes:
+      - G204  # Command execution - needed for the tool's functionality
+      - G304  # File path - needed for file operations
+      - G306  # File permissions - tool needs to write files
+
+issues:
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - goconst
+        - errcheck
+        - gosec
+        - govet  # Shadow variables acceptable in tests
+
+    # Exclude known issues with external packages
+    - path: vendor/
+      linters:
+        - all
+
+    # Allow unused functions - might be used in future or by external tools
+    - linters:
+        - unused
+      text: "is unused"
+
+    # Allow error wrapping style variations
+    - linters:
+        - errorlint
+      text: "non-wrapping format verb"
+
+    # Allow field alignment issues (not a priority for this tool)
+    - linters:
+        - govet
+      text: "fieldalignment:"
+
+    # Allow capitalized error strings in some cases
+    - linters:
+        - stylecheck
+      text: "ST1005:"
+
+  # Don't limit issues - we want to see all of them
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+  # Use default excludes for common false positives
+  exclude-use-default: true
+
+  # Additional specific exclusions
+  exclude:
+    - "ST1000:"  # Package comments - can be added later
+    - "G301:"    # Directory permissions - tool needs these permissions
+    - "G306:"    # File permissions - tool needs these permissions
+    - "Error return value of.*Encode.*is not checked"  # JSON encoding in HTTP handlers
+    - "Error return value of.*Close.*is not checked"   # Defer close is fine
+    - "Error return value of.*Help.*is not checked"    # CLI help output
+    - "Error return value of.*SendHeartbeat.*is not checked"  # Heartbeat errors handled elsewhere
+    - "Error return value of.*io.Copy.*is not checked"  # Copy errors handled by pipe
+    - "ineffectual assignment"  # False positives in error handling
+    - "shadow:"  # Shadow variables - can be fixed in follow-up PR
+    - "S1039:"   # Unnecessary fmt.Sprintf - minor optimization
+    - "S1017:"   # Can use TrimPrefix - minor optimization
+    - "SA1024:"  # Duplicate cutset - minor issue
+    - "SA9003:"  # Empty branch - intentional in some cases
+    - "SA4006:"  # Value never used - false positives
+    - "unnecessary conversion"  # Minor optimization
+    - "goconst:" # String constants - will be addressed in future PR
+    - "printf: non-constant format string"  # Dynamic format strings needed
+    - "Error return value of.*Send.*is not checked"  # SSE writers handle errors internally
+    - "Error return value of.*WriteProgress.*is not checked"  # Progress errors non-critical
+    - "comparing with != will fail on wrapped errors"  # Legacy error handling
+    - "G115:"    # Integer overflow - false positives
+    - "G110:"    # Decompression bomb - intentional for file operations
+    - "indent-error-flow"  # Style preference
+    - "SA1006:"  # Printf-style dynamic format - intentional
+    - "SA5011"   # Nil pointer in tests - false positive (note: no colon!)
+    - "Error return value of.*MkdirAll.*is not checked"  # Directory creation errors handled elsewhere
+    - "Error return value of.*Write.*is not checked"  # Write errors handled at higher level
+
+output:
+  formats:
+    - format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+  uniq-by-line: true
+  sort-results: true

@@ -200,7 +200,7 @@ func (p *Processor) isScrapeInput(url string) bool {
 func (p *Processor) isOutputInOtherSteps(path string) bool {
 	// Get the base filename without any directory components
 	basePath := filepath.Base(path)
-	
+
 	// Check sequential steps
 	for _, step := range p.config.Steps {
 		outputs := p.NormalizeStringSlice(step.Config.Output)
@@ -211,7 +211,7 @@ func (p *Processor) isOutputInOtherSteps(path string) bool {
 					p.debugf("Found exact match '%s' as output in sequential step: %s", path, step.Name)
 					return true
 				}
-				
+
 				// Check for basename match (for files in runtime directory)
 				if filepath.Base(output) == basePath {
 					p.debugf("Found basename match '%s' as output in sequential step: %s", basePath, step.Name)
@@ -232,7 +232,7 @@ func (p *Processor) isOutputInOtherSteps(path string) bool {
 						p.debugf("Found exact match '%s' as output in parallel step: %s (group: %s)", path, step.Name, groupName)
 						return true
 					}
-					
+
 					// Check for basename match (for files in runtime directory)
 					if filepath.Base(output) == basePath {
 						p.debugf("Found basename match '%s' as output in parallel step: %s (group: %s)", basePath, step.Name, groupName)
@@ -261,7 +261,7 @@ func (p *Processor) processRegularInput(inputPath string) error {
 	// Force server mode with runtime directory if available
 	if p.runtimeDir != "" {
 		p.debugf("IMPORTANT: Server mode with runtime directory is active")
-		p.debugf("All relative paths will be resolved relative to: %s", 
+		p.debugf("All relative paths will be resolved relative to: %s",
 			filepath.Join(p.serverConfig.DataDir, p.runtimeDir))
 	}
 
@@ -385,21 +385,21 @@ func (p *Processor) processRegularInput(inputPath string) error {
 
 	// --- Step 3: Check Existence and Type (if not found in context) ---
 	if filePath == "" {
-	// This means it was a relative path that wasn't found in runtimeDir or DataDir
-	if p.isOutputInOtherSteps(inputPath) { // Check original inputPath name for output steps
-		p.debugf("Relative input '%s' not found, but will be created as output in another step.", inputPath)
-		p.debugf("Allowing processing to continue since file will be created later")
-		return nil // Allow processing to continue
-	}
-	// Return specific "not found" error based on where we looked
-	p.debugf("File not found and is not marked as an output in any step")
-	if p.runtimeDir != "" && p.serverConfig != nil {
-		// In server mode with runtime directory, use the resolved path in the error message
-		resolvedPath := filepath.Join(p.serverConfig.DataDir, p.runtimeDir, inputPath)
-		return fmt.Errorf("input file '%s' not found (checked path: %s)", inputPath, resolvedPath)
-	} else {
-		return fmt.Errorf("input file '%s' not found in %s", inputPath, pathSource)
-	}
+		// This means it was a relative path that wasn't found in runtimeDir or DataDir
+		if p.isOutputInOtherSteps(inputPath) { // Check original inputPath name for output steps
+			p.debugf("Relative input '%s' not found, but will be created as output in another step.", inputPath)
+			p.debugf("Allowing processing to continue since file will be created later")
+			return nil // Allow processing to continue
+		}
+		// Return specific "not found" error based on where we looked
+		p.debugf("File not found and is not marked as an output in any step")
+		if p.runtimeDir != "" && p.serverConfig != nil {
+			// In server mode with runtime directory, use the resolved path in the error message
+			resolvedPath := filepath.Join(p.serverConfig.DataDir, p.runtimeDir, inputPath)
+			return fmt.Errorf("input file '%s' not found (checked path: %s)", inputPath, resolvedPath)
+		} else {
+			return fmt.Errorf("input file '%s' not found in %s", inputPath, pathSource)
+		}
 	}
 
 	// If filePath is set (either absolute or resolved), check it
