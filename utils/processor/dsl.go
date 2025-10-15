@@ -1083,6 +1083,35 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 	// Handle regular output if not already handled
 	if !handled {
 		outputs := p.NormalizeStringSlice(step.Config.Output)
+
+		// If we're processing chunks, substitute chunk variables in output filenames
+		if chunkResult != nil && len(p.handler.GetInputs()) > 0 {
+			// Get the current chunk index from the input path
+			currentInput := p.handler.GetInputs()[0]
+			chunkIndex := -1
+			for i, chunkPath := range chunkResult.ChunkPaths {
+				if chunkPath == currentInput.Path {
+					chunkIndex = i
+					break
+				}
+			}
+
+			if chunkIndex >= 0 {
+				// Replace chunk placeholders in output filenames
+				substitutedOutputs := make([]string, len(outputs))
+				for i, output := range outputs {
+					substituted := output
+					substituted = strings.ReplaceAll(substituted, "{{ chunk_index }}", fmt.Sprintf("%d", chunkIndex))
+					substituted = strings.ReplaceAll(substituted, "{{ total_chunks }}", fmt.Sprintf("%d", chunkResult.TotalChunks))
+					substitutedOutputs[i] = substituted
+					if output != substituted {
+						p.debugf("Output filename substitution: original='%s' substituted='%s'", output, substituted)
+					}
+				}
+				outputs = substitutedOutputs
+			}
+		}
+
 		p.debugf("Processing regular output for step '%s': model=%s outputs=%v",
 			step.Name, modelNames[0], outputs)
 		if err := p.handleOutput(modelNames[0], response, outputs, metrics); err != nil {

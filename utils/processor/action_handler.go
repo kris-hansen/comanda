@@ -151,9 +151,13 @@ func (p *Processor) processActions(modelNames []string, actions []string) (strin
 			for i, file := range fileInputs {
 				p.debugf("Processing file %d/%d: %s", i+1, len(fileInputs), file.Path)
 
+				// Build a clean prompt that discourages metadata wrapping
+				// Detect output format from action to provide appropriate instructions
+				promptPrefix := "IMPORTANT: Provide ONLY the requested output content without any headers, labels, file annotations, or metadata. Do not include phrases like 'Results for' or 'File:' or any other wrapper text. Output the pure content as requested.\n\n"
+
 				// Try to process each file individually
 				result, err := configuredProvider.SendPromptWithFile(modelName,
-					fmt.Sprintf("For this file: %s", action), file)
+					fmt.Sprintf("%sFor this file: %s", promptPrefix, action), file)
 
 				if err != nil {
 					// Log error but continue with other files if skipErrors is true
@@ -168,7 +172,9 @@ func (p *Processor) processActions(modelNames []string, actions []string) (strin
 					continue
 				}
 
-				results = append(results, fmt.Sprintf("Results for %s:\n%s", file.Path, result))
+				// Store just the result without the wrapper metadata
+				// This prevents downstream steps from receiving malformed input
+				results = append(results, result)
 			}
 
 			// If all files failed, return an error
@@ -176,12 +182,13 @@ func (p *Processor) processActions(modelNames []string, actions []string) (strin
 				return "", fmt.Errorf("all files failed processing: %s", strings.Join(errors, "; "))
 			}
 
-			// If some files succeeded, return their results with warnings about failed files
+			// If some files succeeded, return their results
+			// When processing chunks or multiple files, we concatenate the results directly
+			// without wrapper metadata so downstream steps receive clean content
 			combinedResult := strings.Join(results, "\n\n")
-			if len(errors) > 0 {
-				combinedResult += "\n\nWarning: Some files could not be processed:\n" +
-					strings.Join(errors, "\n")
-			}
+
+			// Note: We do not add warnings about failed files to the actual result content
+			// as that would pollute the data. Errors are logged via p.debugf() above.
 
 			return combinedResult, nil
 		}
