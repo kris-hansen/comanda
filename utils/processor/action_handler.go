@@ -10,10 +10,27 @@ import (
 	"github.com/kris-hansen/comanda/utils/scraper"
 )
 
+// ActionResult holds the results from processing actions
+// It can contain either a single combined result or multiple individual results (for chunking)
+type ActionResult struct {
+	// Single combined result (used when not chunking or when batch_mode is "combined")
+	CombinedResult string
+
+	// Individual results (used when chunking with batch_mode "individual")
+	IndividualResults []string
+
+	// Corresponding input paths for each individual result (for chunk identification)
+	InputPaths []string
+
+	// Whether this contains individual results
+	HasIndividualResults bool
+}
+
 // processActions handles the action section of the DSL
-func (p *Processor) processActions(modelNames []string, actions []string) (string, error) {
+// Returns ActionResult which may contain either combined or individual results
+func (p *Processor) processActions(modelNames []string, actions []string) (*ActionResult, error) {
 	if len(modelNames) == 0 {
-		return "", fmt.Errorf("no model specified for actions")
+		return nil, fmt.Errorf("no model specified for actions")
 	}
 
 	// For now, use the first model specified
@@ -24,7 +41,7 @@ func (p *Processor) processActions(modelNames []string, actions []string) (strin
 		inputs := p.handler.GetInputs()
 		if len(inputs) == 0 {
 			// If there are no inputs, return empty string since there's no content to process
-			return "", nil
+			return &ActionResult{CombinedResult: "", HasIndividualResults: false}, nil
 		}
 
 		// For NA model, concatenate all input contents
@@ -32,19 +49,22 @@ func (p *Processor) processActions(modelNames []string, actions []string) (strin
 		for _, inputItem := range inputs {
 			contents = append(contents, string(inputItem.Contents))
 		}
-		return strings.Join(contents, "\n"), nil
+		return &ActionResult{
+			CombinedResult:       strings.Join(contents, "\n"),
+			HasIndividualResults: false,
+		}, nil
 	}
 
 	// Get provider by detecting it from the model name
 	provider := models.DetectProvider(modelName)
 	if provider == nil {
-		return "", fmt.Errorf("provider not found for model: %s", modelName)
+		return nil, fmt.Errorf("provider not found for model: %s", modelName)
 	}
 
 	// Use the configured provider instance
 	configuredProvider := p.providers[provider.Name()]
 	if configuredProvider == nil {
-		return "", fmt.Errorf("provider %s not configured", provider.Name())
+		return nil, fmt.Errorf("provider %s not configured", provider.Name())
 	}
 
 	p.debugf("Using model %s with provider %s", modelName, configuredProvider.Name())
@@ -57,7 +77,7 @@ func (p *Processor) processActions(modelNames []string, actions []string) (strin
 		if strings.HasSuffix(strings.ToLower(action), ".md") {
 			content, err := fileutil.SafeReadFile(action)
 			if err != nil {
-				return "", fmt.Errorf("failed to read markdown file %s: %w", action, err)
+				return nil, fmt.Errorf("failed to read markdown file %s: %w", action, err)
 			}
 			action = string(content)
 			p.debugf("Loaded action content from markdown file: %s", action)
@@ -66,7 +86,14 @@ func (p *Processor) processActions(modelNames []string, actions []string) (strin
 		inputs := p.handler.GetInputs()
 		if len(inputs) == 0 {
 			// If there are no inputs, just send the action directly
-			return configuredProvider.SendPrompt(modelName, action)
+			result, err := configuredProvider.SendPrompt(modelName, action)
+			if err != nil {
+				return nil, err
+			}
+			return &ActionResult{
+				CombinedResult:       result,
+				HasIndividualResults: false,
+			}, nil
 		}
 
 		// Process inputs based on their type
@@ -101,7 +128,7 @@ func (p *Processor) processActions(modelNames []string, actions []string) (strin
 				}
 				scrapedData, err := scraper.Scrape(inputItem.Path)
 				if err != nil {
-					return "", fmt.Errorf("failed to scrape URL %s: %w", inputItem.Path, err)
+					return nil, fmt.Errorf("failed to scrape URL %s: %w", inputItem.Path, err)
 				}
 
 				// Convert scraped data to string
@@ -118,7 +145,14 @@ func (p *Processor) processActions(modelNames []string, actions []string) (strin
 		// If we have file inputs, use SendPromptWithFile
 		if len(fileInputs) > 0 {
 			if len(fileInputs) == 1 {
-				return configuredProvider.SendPromptWithFile(modelName, action, fileInputs[0])
+				result, err := configuredProvider.SendPromptWithFile(modelName, action, fileInputs[0])
+				if err != nil {
+					return nil, err
+				}
+				return &ActionResult{
+					CombinedResult:       result,
+					HasIndividualResults: false,
+				}, nil
 			}
 
 			// Check if we should use combined or individual processing mode
@@ -135,17 +169,26 @@ func (p *Processor) processActions(modelNames []string, actions []string) (strin
 				for i, file := range fileInputs {
 					content, err := fileutil.SafeReadFile(file.Path)
 					if err != nil {
-						return "", fmt.Errorf("failed to read file %s: %w", file.Path, err)
+						return nil, fmt.Errorf("failed to read file %s: %w", file.Path, err)
 					}
 					combinedPrompt += fmt.Sprintf("File %d (%s):\n%s\n\n", i+1, file.Path, string(content))
 				}
 				combinedPrompt += fmt.Sprintf("\nAction: %s", action)
-				return configuredProvider.SendPrompt(modelName, combinedPrompt)
+				result, err := configuredProvider.SendPrompt(modelName, combinedPrompt)
+				if err != nil {
+					return nil, err
+				}
+				return &ActionResult{
+					CombinedResult:       result,
+					HasIndividualResults: false,
+				}, nil
 			}
 
 			// Default to individual processing mode (safer)
+			// This is KEY for chunking support - we keep individual results separate
 			p.debugf("Using individual processing mode for %d files", len(fileInputs))
 			var results []string
+			var inputPaths []string
 			var errors []string
 
 			for i, file := range fileInputs {
@@ -172,33 +215,38 @@ func (p *Processor) processActions(modelNames []string, actions []string) (strin
 					continue
 				}
 
-				// Store just the result without the wrapper metadata
-				// This prevents downstream steps from receiving malformed input
+				// Store the result and its corresponding input path
 				results = append(results, result)
+				inputPaths = append(inputPaths, file.Path)
 			}
 
 			// If all files failed, return an error
 			if len(results) == 0 {
-				return "", fmt.Errorf("all files failed processing: %s", strings.Join(errors, "; "))
+				return nil, fmt.Errorf("all files failed processing: %s", strings.Join(errors, "; "))
 			}
 
-			// If some files succeeded, return their results
-			// When processing chunks or multiple files, we concatenate the results directly
-			// without wrapper metadata so downstream steps receive clean content
-			combinedResult := strings.Join(results, "\n\n")
-
-			// Note: We do not add warnings about failed files to the actual result content
-			// as that would pollute the data. Errors are logged via p.debugf() above.
-
-			return combinedResult, nil
+			// Return individual results for chunking support
+			// The caller will decide whether to combine them or write them separately
+			return &ActionResult{
+				IndividualResults:    results,
+				InputPaths:           inputPaths,
+				HasIndividualResults: true,
+			}, nil
 		}
 
 		// If we have non-file inputs, combine them and use SendPrompt
 		if len(nonFileInputs) > 0 {
 			combinedInput := strings.Join(nonFileInputs, "\n\n")
-			return configuredProvider.SendPrompt(modelName, fmt.Sprintf("Input:\n%s\n\nAction: %s", combinedInput, action))
+			result, err := configuredProvider.SendPrompt(modelName, fmt.Sprintf("Input:\n%s\n\nAction: %s", combinedInput, action))
+			if err != nil {
+				return nil, err
+			}
+			return &ActionResult{
+				CombinedResult:       result,
+				HasIndividualResults: false,
+			}, nil
 		}
 	}
 
-	return "", fmt.Errorf("no actions processed")
+	return nil, fmt.Errorf("no actions processed")
 }
