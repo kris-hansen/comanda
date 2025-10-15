@@ -1029,7 +1029,7 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 	}
 
 	p.debugf("Executing actions: models=%v actions=%v", modelNames, substitutedActions)
-	response, err := p.processActions(modelNames, substitutedActions)
+	actionResult, err := p.processActions(modelNames, substitutedActions)
 	if err != nil {
 		errMsg := fmt.Sprintf("Action processing failed for step '%s': %v (models=%v actions=%v)",
 			step.Name, err, modelNames, substitutedActions)
@@ -1048,13 +1048,21 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 	// Handle output for this step
 	p.debugf("Handling output for step: %s", step.Name)
 
+	// Determine the final response to return (for downstream steps)
+	var finalResponse string
+
 	// Handle output based on type
 	var handled bool
 	switch v := step.Config.Output.(type) {
 	case map[string]interface{}:
 		if _, hasDB := v["database"]; hasDB {
 			p.debugf("Processing database output for step '%s'", step.Name)
-			if err := p.handleDatabaseOutput(response, v); err != nil {
+			// For database output, use combined result if available, otherwise join individual results
+			dbOutput := actionResult.CombinedResult
+			if actionResult.HasIndividualResults {
+				dbOutput = strings.Join(actionResult.IndividualResults, "\n\n")
+			}
+			if err := p.handleDatabaseOutput(dbOutput, v); err != nil {
 				errMsg := fmt.Sprintf("Database output processing failed for step '%s': %v (config=%v)",
 					step.Name, err, v)
 				p.debugf("Database output error: %s", errMsg)
@@ -1076,6 +1084,7 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 			}
 
 			p.debugf("Successfully processed database output for step: %s", step.Name)
+			finalResponse = dbOutput
 			handled = true
 		}
 	}
@@ -1083,15 +1092,72 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 	// Handle regular output if not already handled
 	if !handled {
 		outputs := p.NormalizeStringSlice(step.Config.Output)
-		p.debugf("Processing regular output for step '%s': model=%s outputs=%v",
-			step.Name, modelNames[0], outputs)
-		if err := p.handleOutput(modelNames[0], response, outputs, metrics); err != nil {
-			errMsg := fmt.Sprintf("Output processing failed for step '%s': %v (model=%s outputs=%v)",
-				step.Name, err, modelNames[0], outputs)
-			p.debugf("Output processing error: %s", errMsg)
-			return "", fmt.Errorf("output handling error: %w", err)
+
+		// NEW: Handle individual results for chunking
+		if actionResult.HasIndividualResults && chunkResult != nil {
+			p.debugf("Processing individual chunk results (%d results)", len(actionResult.IndividualResults))
+
+			// Process each individual result with its own output file
+			for idx, result := range actionResult.IndividualResults {
+				// Find chunk index for this input path
+				chunkIndex := -1
+				for i, chunkPath := range chunkResult.ChunkPaths {
+					if chunkPath == actionResult.InputPaths[idx] {
+						chunkIndex = i
+						break
+					}
+				}
+
+				if chunkIndex < 0 {
+					p.debugf("Warning: Could not find chunk index for path %s", actionResult.InputPaths[idx])
+					continue
+				}
+
+				// Substitute chunk variables in output filename for THIS chunk
+				substitutedOutputs := make([]string, len(outputs))
+				for i, output := range outputs {
+					substituted := output
+					substituted = strings.ReplaceAll(substituted, "{{ chunk_index }}", fmt.Sprintf("%d", chunkIndex))
+					substituted = strings.ReplaceAll(substituted, "{{ total_chunks }}", fmt.Sprintf("%d", chunkResult.TotalChunks))
+					substitutedOutputs[i] = substituted
+					if output != substituted {
+						p.debugf("Chunk %d output filename substitution: original='%s' substituted='%s'", chunkIndex, output, substituted)
+					}
+				}
+
+				// Write this chunk's result to its corresponding output file
+				p.debugf("Writing chunk %d/%d result to output", chunkIndex, chunkResult.TotalChunks)
+				if err := p.handleOutput(modelNames[0], result, substitutedOutputs, metrics); err != nil {
+					errMsg := fmt.Sprintf("Output processing failed for chunk %d of step '%s': %v",
+						chunkIndex, step.Name, err)
+					p.debugf("Output processing error: %s", errMsg)
+					return "", fmt.Errorf("output handling error: %w", err)
+				}
+			}
+
+			// Combine all results for the return value (for downstream steps)
+			finalResponse = strings.Join(actionResult.IndividualResults, "\n\n")
+			p.debugf("Successfully processed all %d chunk outputs for step: %s", len(actionResult.IndividualResults), step.Name)
+
+		} else {
+			// Standard output handling (non-chunking or combined mode)
+			response := actionResult.CombinedResult
+			if actionResult.HasIndividualResults {
+				// If we have individual results but not chunking, combine them
+				response = strings.Join(actionResult.IndividualResults, "\n\n")
+			}
+
+			p.debugf("Processing regular output for step '%s': model=%s outputs=%v",
+				step.Name, modelNames[0], outputs)
+			if err := p.handleOutput(modelNames[0], response, outputs, metrics); err != nil {
+				errMsg := fmt.Sprintf("Output processing failed for step '%s': %v (model=%s outputs=%v)",
+					step.Name, err, modelNames[0], outputs)
+				p.debugf("Output processing error: %s", errMsg)
+				return "", fmt.Errorf("output handling error: %w", err)
+			}
+			finalResponse = response
+			p.debugf("Successfully processed output for step: %s", step.Name)
 		}
-		p.debugf("Successfully processed output for step: %s", step.Name)
 	}
 
 	// Record output processing time
@@ -1123,7 +1189,7 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 			metrics)
 	}
 
-	return response, nil
+	return finalResponse, nil
 }
 
 // processGenerateStep handles the logic for a 'generate' step

@@ -3,6 +3,8 @@ package processor
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -306,6 +308,97 @@ func TestProcess(t *testing.T) {
 				t.Errorf("Process() unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+func TestChunkingWithTemplateVariables(t *testing.T) {
+	// Create a temporary test file with enough content to chunk
+	tmpfile, err := os.CreateTemp("", "chunk-test-*.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpfile.Name())
+
+	// Write 100 lines to ensure chunking happens
+	content := strings.Repeat("This is line content for testing chunking.\n", 100)
+	if _, err := tmpfile.Write([]byte(content)); err != nil {
+		t.Fatal(err)
+	}
+	tmpfile.Close()
+
+	// Create a temporary output directory
+	outputDir, err := os.MkdirTemp("", "chunk-output-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(outputDir)
+
+	config := DSLConfig{
+		Steps: []Step{
+			{
+				Name: "chunk_test",
+				Config: StepConfig{
+					Input: tmpfile.Name(),
+					Chunk: &ChunkConfig{
+						By:        "lines",
+						Size:      30,
+						Overlap:   5,
+						MaxChunks: 10,
+					},
+					BatchMode: "individual",
+					Model:     "gpt-4o-mini",
+					Action:    "Summarize chunk {{ chunk_index }} of {{ total_chunks }}",
+					Output:    filepath.Join(outputDir, "output_chunk_{{ chunk_index }}.txt"),
+				},
+			},
+		},
+	}
+
+	processor := NewProcessor(&config, createTestEnvConfig(), createTestServerConfig(), true, "")
+
+	// Mock the provider to return predictable output
+	mockProvider := &MockProvider{}
+	processor.providers["openai"] = mockProvider
+
+	err = processor.Process()
+	if err != nil {
+		t.Fatalf("Process() failed: %v", err)
+	}
+
+	// Verify that multiple chunk files were created with proper names
+	files, err := filepath.Glob(filepath.Join(outputDir, "output_chunk_*.txt"))
+	if err != nil {
+		t.Fatalf("Failed to glob output files: %v", err)
+	}
+
+	if len(files) < 2 {
+		t.Errorf("Expected at least 2 chunk files, got %d. Files: %v", len(files), files)
+	}
+
+	// Verify that files have numeric indices, not template literals
+	for _, file := range files {
+		basename := filepath.Base(file)
+		if strings.Contains(basename, "{{") || strings.Contains(basename, "}}") {
+			t.Errorf("File still contains template literal: %s", basename)
+		}
+
+		// Verify the file matches the pattern output_chunk_N.txt where N is a number
+		if !strings.HasPrefix(basename, "output_chunk_") || !strings.HasSuffix(basename, ".txt") {
+			t.Errorf("File doesn't match expected pattern: %s", basename)
+		}
+	}
+
+	// Verify specific files exist
+	expectedFiles := []string{
+		filepath.Join(outputDir, "output_chunk_0.txt"),
+		filepath.Join(outputDir, "output_chunk_1.txt"),
+		filepath.Join(outputDir, "output_chunk_2.txt"),
+	}
+
+	for _, expectedFile := range expectedFiles {
+		if _, err := os.Stat(expectedFile); os.IsNotExist(err) {
+			t.Errorf("Expected file not found: %s", expectedFile)
+		}
 	}
 }
 
