@@ -1029,6 +1029,20 @@ Individual batch mode is particularly useful when:
 - Working with large numbers of files
 - Needing to identify which specific files might be problematic
 
+**Template variables in batch mode:** When using `batch_mode: individual`, you can use these placeholders in your `output` field:
+- `{{ chunk_index }}` or `{{ file_index }}`: The index of the current file (0-based)
+- `{{ total_chunks }}` or `{{ total_files }}`: The total number of files being processed
+
+For example:
+```yaml
+process_multiple_files:
+  input: [file1.txt, file2.txt, file3.txt]
+  batch_mode: individual
+  model: gpt-4o-mini
+  action: "Analyze this file"
+  output: "results/file_{{ file_index }}_analysis.txt"  # Creates file_0_analysis.txt, file_1_analysis.txt, etc.
+```
+
 #### File Chunking
 
 For large files that exceed an LLM's context window, you can use the built-in chunking feature to automatically split the file into smaller, manageable pieces:

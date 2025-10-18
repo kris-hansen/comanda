@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -399,6 +400,123 @@ func TestChunkingWithTemplateVariables(t *testing.T) {
 		if _, err := os.Stat(expectedFile); os.IsNotExist(err) {
 			t.Errorf("Expected file not found: %s", expectedFile)
 		}
+	}
+}
+
+func TestBatchModeIndividualWithTemplateVariables(t *testing.T) {
+	// Create temporary test files to simulate wildcard expansion
+	tmpDir, err := os.MkdirTemp("", "batch-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Create multiple input files (simulating requirements_chunk_*.txt)
+	for i := 0; i < 3; i++ {
+		tmpfile, err := os.CreateTemp(tmpDir, fmt.Sprintf("requirements_chunk_%d-*.txt", i))
+		if err != nil {
+			t.Fatal(err)
+		}
+		content := fmt.Sprintf("Requirement %d: This is test content for file %d\n", i, i)
+		if _, err := tmpfile.Write([]byte(content)); err != nil {
+			tmpfile.Close()
+			t.Fatal(err)
+		}
+		tmpfile.Close()
+	}
+
+	// Create a single additional file (simulating test_inventory.txt)
+	inventoryFile, err := os.CreateTemp(tmpDir, "test_inventory-*.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := inventoryFile.Write([]byte("Test inventory content\n")); err != nil {
+		inventoryFile.Close()
+		t.Fatal(err)
+	}
+	inventoryFile.Close()
+
+	// Create output directory
+	outputDir, err := os.MkdirTemp("", "batch-output-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(outputDir)
+
+	// Get all requirement files
+	reqFiles, err := filepath.Glob(filepath.Join(tmpDir, "requirements_chunk_*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Build input list (all requirement files + inventory file)
+	var inputs []interface{}
+	for _, f := range reqFiles {
+		inputs = append(inputs, f)
+	}
+	inputs = append(inputs, inventoryFile.Name())
+
+	config := DSLConfig{
+		Steps: []Step{
+			{
+				Name: "batch_test",
+				Config: StepConfig{
+					Input:     inputs,
+					BatchMode: "individual", // Key: using batch_mode individual without chunk: block
+					Model:     "gpt-4o-mini",
+					Action:    "Process this file",
+					Output:    filepath.Join(outputDir, "coverage_chunk_{{ chunk_index }}.txt"),
+				},
+			},
+		},
+	}
+
+	processor := NewProcessor(&config, createTestEnvConfig(), createTestServerConfig(), true, "")
+
+	// Mock the provider
+	mockProvider := &MockProvider{}
+	processor.providers["openai"] = mockProvider
+
+	err = processor.Process()
+	if err != nil {
+		t.Fatalf("Process() failed: %v", err)
+	}
+
+	// Verify that multiple output files were created with proper names (not literal template)
+	files, err := filepath.Glob(filepath.Join(outputDir, "coverage_chunk_*.txt"))
+	if err != nil {
+		t.Fatalf("Failed to glob output files: %v", err)
+	}
+
+	if len(files) != len(inputs) {
+		t.Errorf("Expected %d output files (one per input), got %d. Files: %v", len(inputs), len(files), files)
+	}
+
+	// Verify that files have numeric indices, not template literals
+	for _, file := range files {
+		basename := filepath.Base(file)
+		if strings.Contains(basename, "{{") || strings.Contains(basename, "}}") {
+			t.Errorf("File still contains template literal: %s", basename)
+		}
+
+		// Verify the file matches the pattern coverage_chunk_N.txt where N is a number
+		if !strings.HasPrefix(basename, "coverage_chunk_") || !strings.HasSuffix(basename, ".txt") {
+			t.Errorf("File doesn't match expected pattern: %s", basename)
+		}
+	}
+
+	// Verify specific files exist
+	for i := 0; i < len(inputs); i++ {
+		expectedFile := filepath.Join(outputDir, fmt.Sprintf("coverage_chunk_%d.txt", i))
+		if _, err := os.Stat(expectedFile); os.IsNotExist(err) {
+			t.Errorf("Expected file not found: %s", expectedFile)
+		}
+	}
+
+	// Verify that NO file exists with literal template syntax
+	literalFile := filepath.Join(outputDir, "coverage_chunk_{{ chunk_index }}.txt")
+	if _, err := os.Stat(literalFile); !os.IsNotExist(err) {
+		t.Errorf("File with literal template syntax should NOT exist: %s", literalFile)
 	}
 }
 
