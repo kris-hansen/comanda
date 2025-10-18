@@ -1094,11 +1094,17 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 		outputs := p.NormalizeStringSlice(step.Config.Output)
 
 		// NEW: Handle individual results for chunking
-		if actionResult.HasIndividualResults && chunkResult != nil {
+		if actionResult.HasIndividualResults && chunkResult != nil && chunkResult.ChunkPaths != nil {
 			p.debugf("Processing individual chunk results (%d results)", len(actionResult.IndividualResults))
 
 			// Process each individual result with its own output file
 			for idx, result := range actionResult.IndividualResults {
+				// Safety check: ensure we have a corresponding input path
+				if idx >= len(actionResult.InputPaths) {
+					p.debugf("Warning: No input path for result at index %d, skipping", idx)
+					continue
+				}
+
 				// Find chunk index for this input path
 				chunkIndex := -1
 				for i, chunkPath := range chunkResult.ChunkPaths {

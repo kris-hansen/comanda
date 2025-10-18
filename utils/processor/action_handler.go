@@ -10,6 +10,9 @@ import (
 	"github.com/kris-hansen/comanda/utils/scraper"
 )
 
+// PromptPrefix is used to instruct providers to output only the requested content without metadata.
+const PromptPrefix = "IMPORTANT: Provide ONLY the requested output content without any headers, labels, file annotations, or metadata. Do not include phrases like 'Results for' or 'File:' or any other wrapper text. Output the pure content as requested.\n\n"
+
 // ActionResult holds the results from processing actions
 // It can contain either a single combined result or multiple individual results (for chunking)
 type ActionResult struct {
@@ -196,11 +199,9 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 
 				// Build a clean prompt that discourages metadata wrapping
 				// Detect output format from action to provide appropriate instructions
-				promptPrefix := "IMPORTANT: Provide ONLY the requested output content without any headers, labels, file annotations, or metadata. Do not include phrases like 'Results for' or 'File:' or any other wrapper text. Output the pure content as requested.\n\n"
-
 				// Try to process each file individually
 				result, err := configuredProvider.SendPromptWithFile(modelName,
-					fmt.Sprintf("%sFor this file: %s", promptPrefix, action), file)
+					fmt.Sprintf("%sFor this file: %s", PromptPrefix, action), file)
 
 				if err != nil {
 					// Log error but continue with other files if skipErrors is true
