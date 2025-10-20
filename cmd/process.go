@@ -28,7 +28,7 @@ var processCmd = &cobra.Command{
 		// and available in the package-level envConfig variable
 
 		if verbose {
-			fmt.Println("[DEBUG] Using centralized environment configuration")
+			log.Println("[DEBUG] Using centralized environment configuration")
 		}
 
 		// Check if there's data on STDIN
@@ -56,7 +56,7 @@ var processCmd = &cobra.Command{
 
 			// Read YAML file
 			if verbose {
-				fmt.Printf("[DEBUG] Reading YAML file: %s\n", file)
+				log.Printf("[DEBUG] Reading YAML file: %s\n", file)
 			}
 			yamlFile, err := os.ReadFile(file)
 			if err != nil {
@@ -74,7 +74,7 @@ var processCmd = &cobra.Command{
 
 			// Create processor
 			if verbose {
-				fmt.Printf("[DEBUG] Creating processor for %s\n", file)
+				log.Printf("[DEBUG] Creating processor for %s\n", file)
 			}
 			// Create basic server config for CLI processing
 			serverConfig := &config.ServerConfig{

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -36,7 +37,7 @@ for model interactions and executes the specified actions.`,
 		// Get environment file path from COMANDA_ENV or default
 		envPath := config.GetEnvPath()
 		if verbose {
-			fmt.Printf("[DEBUG] Loading environment configuration from %s\n", envPath)
+			log.Printf("[DEBUG] Loading environment configuration from %s\n", envPath)
 		}
 
 		// Load environment configuration
@@ -47,7 +48,7 @@ for model interactions and executes the specified actions.`,
 		}
 
 		if verbose {
-			fmt.Println("[DEBUG] Environment configuration loaded successfully")
+			log.Println("[DEBUG] Environment configuration loaded successfully")
 		}
 
 		return nil

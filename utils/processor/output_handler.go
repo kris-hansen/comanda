@@ -125,21 +125,18 @@ func (p *Processor) handleOutput(modelName string, response string, outputs []st
 
 			// Write to file
 			p.debugf("Writing response to file: %s", outputPath)
-			fmt.Printf("\n==== DEBUG: Writing to file %s ====\n", outputPath)
-			fmt.Printf("Response length: %d characters\n", len(response))
-			fmt.Printf("First 100 characters: %s\n", response[:min(100, len(response))])
+			p.debugf("Response length: %d characters", len(response))
+			p.debugf("First 100 characters: %s", response[:min(100, len(response))])
 
 			if err := os.WriteFile(outputPath, []byte(response), 0644); err != nil {
 				errMsg := fmt.Sprintf("failed to write response to file %s: %v", outputPath, err)
 				p.debugf(errMsg)
-				fmt.Printf("ERROR: %s\n", errMsg)
 				return fmt.Errorf(errMsg)
 			}
 			p.debugf("Response successfully written to file: %s", outputPath)
 
-			// Print a message to the console to inform the user
+			// Print a simple confirmation to the console
 			fmt.Printf("\nResponse written to file: %s\n", outputPath)
-			fmt.Printf("==== END DEBUG ====\n\n")
 		}
 	}
 	return nil
