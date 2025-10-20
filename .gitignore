@@ -46,5 +46,8 @@ tmp-responses-full-response.txt
 # Warp AI assistant configuration
 WARP.md
 
+# Analysis and temporary files
+project-improvement-analysis.md
+
 # Data directory
 data*/
