@@ -99,9 +99,9 @@ func GetEnvPath() string {
 
 // PromptPassword prompts the user for a password securely
 func PromptPassword(prompt string) (string, error) {
-	fmt.Print(prompt)
+	log.Printf("%s", prompt)
 	password, err := term.ReadPassword(int(syscall.Stdin))
-	fmt.Println() // Add newline after password input
+	log.Printf("\n") // Add newline after password input
 	if err != nil {
 		return "", fmt.Errorf("error reading password: %w", err)
 	}

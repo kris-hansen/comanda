@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/kris-hansen/comanda/utils/fileutil"
 	"github.com/kris-hansen/comanda/utils/retry"
@@ -19,6 +20,7 @@ type AnthropicProvider struct {
 	apiKey  string
 	config  ModelConfig
 	verbose bool
+	mu      sync.Mutex
 }
 
 // NewAnthropicProvider creates a new Anthropic provider instance
@@ -32,9 +34,11 @@ func NewAnthropicProvider() *AnthropicProvider {
 	}
 }
 
-// debugf prints debug information if verbose mode is enabled
+// debugf prints debug information if verbose mode is enabled (thread-safe)
 func (a *AnthropicProvider) debugf(format string, args ...interface{}) {
 	if a.verbose {
+		a.mu.Lock()
+		defer a.mu.Unlock()
 		log.Printf("[DEBUG][Anthropic] "+format+"\n", args...)
 	}
 }

@@ -2,6 +2,7 @@ package retry
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"strings"
 	"time"
@@ -59,7 +60,7 @@ func WithRetry(operation func() (interface{}, error), shouldRetry func(error) bo
 			err, retryWait, attempt+1, config.MaxRetries)
 
 		// Also print a brief message in non-debug mode
-		fmt.Printf("Rate limit detected, retrying in %v (attempt %d/%d)...\n",
+		log.Printf("Rate limit detected, retrying in %v (attempt %d/%d)...\n",
 			retryWait, attempt+1, config.MaxRetries)
 
 		// Wait before next retry
@@ -127,5 +128,5 @@ func (c RetryConfig) DebugLog(format string, args ...interface{}) {
 
 // Log prints a message regardless of debug mode
 func (c RetryConfig) Log(format string, args ...interface{}) {
-	fmt.Printf(format+"\n", args...)
+	log.Printf(format+"\n", args...)
 }

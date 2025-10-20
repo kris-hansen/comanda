@@ -116,8 +116,8 @@ You can optionally specify a model to use for generation, otherwise the default_
 			return fmt.Errorf("no model specified for generation and no default_generation_model configured. Use --model or configure a default")
 		}
 
-		fmt.Printf("Generating workflow using model: %s\n", modelForGeneration)
-		fmt.Printf("Output file: %s\n", outputFilename)
+		log.Printf("Generating workflow using model: %s\n", modelForGeneration)
+		log.Printf("Output file: %s\n", outputFilename)
 
 		// Prepare the full prompt for the LLM
 		// Use the embedded guide instead of reading from file
@@ -147,7 +147,7 @@ CRITICAL INSTRUCTION: Your entire response must be valid YAML syntax that can be
 		providerConfig, err := envConfig.GetProviderConfig(provider.Name())
 		if err != nil {
 			// If provider is not in envConfig, it might be a public one like Ollama, or an error
-			fmt.Printf("Warning: Provider %s not found in env configuration. Assuming it does not require an API key or is pre-configured.\n", provider.Name())
+			log.Printf("Warning: Provider %s not found in env configuration. Assuming it does not require an API key or is pre-configured.\n", provider.Name())
 		} else {
 			if err := provider.Configure(providerConfig.APIKey); err != nil {
 				return fmt.Errorf("failed to configure provider %s: %w", provider.Name(), err)
@@ -200,7 +200,7 @@ CRITICAL INSTRUCTION: Your entire response must be valid YAML syntax that can be
 			return fmt.Errorf("failed to write generated workflow to '%s': %w", outputFilename, err)
 		}
 
-		fmt.Printf("\n%s Workflow successfully generated and saved to %s\n", "\u2705", outputFilename)
+		log.Printf("\n%s Workflow successfully generated and saved to %s\n", "\u2705", outputFilename)
 		return nil
 	},
 }
@@ -265,7 +265,7 @@ var versionCmd = &cobra.Command{
 	Long:  `All software has versions. This is Comanda's.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		versionStr := getVersionFromFile()
-		fmt.Printf("Comanda version: %s\n", versionStr)
+		log.Printf("Comanda version: %s\n", versionStr)
 	},
 }
 
@@ -280,7 +280,7 @@ func Execute() {
 			cmdPath := strings.Trim(strings.TrimPrefix(errMsg, "unknown command"), `"`+` for "comanda"`)
 			// Check if the unknown command might be a filename intended for 'process'
 			if _, statErr := os.Stat(cmdPath); statErr == nil || os.IsNotExist(statErr) { // if it exists or looks like a path
-				fmt.Printf("To process a file, use the 'process' command:\n\n   comanda process %s\n\n", cmdPath)
+			log.Printf("To process a file, use the 'process' command:\n\n   comanda process %s\n\n", cmdPath)
 			} else {
 				fmt.Fprintln(os.Stderr, err) // Default error for other unknown commands
 			}

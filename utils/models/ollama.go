@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/kris-hansen/comanda/utils/fileutil"
@@ -17,6 +18,7 @@ import (
 // OllamaProvider handles Ollama family of models
 type OllamaProvider struct {
 	verbose bool
+	mu      sync.Mutex
 }
 
 // OllamaRequest represents the request structure for Ollama API
@@ -42,9 +44,11 @@ func (o *OllamaProvider) Name() string {
 	return "ollama"
 }
 
-// debugf prints debug information if verbose mode is enabled
+// debugf prints debug information if verbose mode is enabled (thread-safe)
 func (o *OllamaProvider) debugf(format string, args ...interface{}) {
 	if o.verbose {
+		o.mu.Lock()
+		defer o.mu.Unlock()
 		log.Printf("[DEBUG][Ollama] "+format+"\n", args...)
 	}
 }
