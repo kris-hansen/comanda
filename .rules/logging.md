@@ -6,9 +6,9 @@ This document defines the logging standards and guidelines for the COMANDA proje
 ## Logging Principles
 
 ### 1. Use Standard Library Logging
-- **ALWAYS** use `log.Printf()`, `log.Println()`, etc. instead of `fmt.Printf()` for any logging output
+- **ALWAYS** use `log.Printf()`, `log.Println()`, etc. instead of `fmt.Printf()` for **ALL** output (debug, user-facing, error messages)
 - This provides consistency and allows for easier redirection of log outputs
-- Exception: User-facing output that is not debug/logging should use `fmt.Printf()`
+- **NO EXCEPTIONS**: All console output should go through the logging system for unified control
 
 ### 2. Debug Logging Guidelines
 - All debug logging must be thread-safe when used in concurrent contexts
@@ -47,20 +47,33 @@ func (p *Processor) debugf(format string, args ...interface{}) {
 }
 ```
 
-### Correct Log Configuration
+### Correct Log Configuration with Resource Management
 ```go
+// Global variable for log file cleanup
+var logFile *os.File
+
 // Configure logging for verbose mode
 if verbose {
     log.SetFlags(0) // Remove timestamps for cleaner debug output
     
-    // Optional: Configure log file output with error handling
-    if logFile := os.Getenv("COMANDA_LOG_FILE"); logFile != "" {
-        if file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666); err == nil {
+    // Optional: Configure log file output with proper resource management
+    if logFileName := os.Getenv("COMANDA_LOG_FILE"); logFileName != "" {
+        if file, err := os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666); err == nil {
+            logFile = file // Store for cleanup
             log.SetOutput(file)
             log.Printf("[INFO] Logging session started at %s\n", time.Now().Format(time.RFC3339))
+            
+            // CRITICAL: Ensure proper cleanup on application exit
+            defer func() {
+                if logFile != nil {
+                    log.Printf("[INFO] Logging session ended at %s\n", time.Now().Format(time.RFC3339))
+                    logFile.Sync() // Flush all buffered data
+                    logFile.Close()
+                }
+            }()
         } else {
             // Fallback: warn user but continue with stdout logging
-            log.Printf("[WARN] Failed to open log file '%s': %v. Continuing with stdout logging.\n", logFile, err)
+            log.Printf("[WARN] Failed to open log file '%s': %v. Continuing with stdout logging.\n", logFileName, err)
         }
     }
 }
@@ -84,6 +97,16 @@ if logFile := os.Getenv("LOG_FILE"); logFile != "" {
 
 // WRONG: Missing newline in log.Printf
 log.Printf("[DEBUG] Message without newline", args...) // Inconsistent formatting
+
+// WRONG: Missing log file cleanup
+if logFile != "" {
+    file, _ := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+    log.SetOutput(file)
+    // File never closed - resource leak!
+}
+
+// WRONG: Using fmt.Printf for user messages
+fmt.Printf("Response written to file: %s\n", outputPath) // Should use log.Printf
 ```
 
 ## File-Based Logging (Implementation)
@@ -113,11 +136,40 @@ File-based logging is available for debugging sessions:
 - User-facing messages should go through the same logging system as debug messages
 - This enables consistent redirection and formatting across all output types
 
-## Enforcement
-- All logging code should follow these standards
-- Code reviews should verify compliance with these guidelines
-- Automated linting should check for `fmt.Printf` usage in debug contexts
+### 9. Resource Management Requirements
+- **MANDATORY**: All log file handles must be properly closed when application exits
+- Use global variables to store file handles for proper lifecycle management
+- **ALWAYS** call `file.Sync()` before `file.Close()` to ensure data is flushed
+- Use `defer` statements in initialization functions to guarantee cleanup
+- Log session start and end times for audit trails
+
+## Enforcement and Verification
+
+### Code Review Checklist
+- [ ] **NO `fmt.Printf` statements** anywhere in the codebase (except in `.rules/logging.md` examples)
+- [ ] All debug functions use **thread-safe mutex protection** in concurrent contexts
+- [ ] Log file operations include **proper error handling and fallbacks**
+- [ ] File handles are **stored globally and properly closed** with defer statements
+- [ ] All log messages include **appropriate context** (model names, file paths, etc.)
+- [ ] **Newline characters** (`\n`) are consistently used in `log.Printf` format strings
+- [ ] **All model providers** use consistent `log.Printf` instead of `fmt.Printf`
+
+### Automated Verification
+```bash
+# Verify no fmt.Printf debug statements remain
+grep -r "fmt\.Printf.*\[DEBUG" . --exclude-dir=.git --exclude="*.md" || echo "✅ No fmt.Printf debug statements found"
+
+# Verify all model providers use log.Printf
+grep -r "log\.Printf.*\[DEBUG" utils/models/ || echo "❌ Model providers not using log.Printf"
+
+# Run tests to ensure functionality
+make test || echo "❌ Tests failing after logging changes"
+```
+
+### Standards Compliance
 - **Critical**: All model providers must use `log.Printf` instead of `fmt.Printf`
+- **Mandatory**: Thread safety must be implemented for all concurrent debug logging
+- **Required**: Resource cleanup must be guaranteed for all file operations
 
 ## Related Components
 - `utils/processor/dsl.go` - Primary debug logging implementation
