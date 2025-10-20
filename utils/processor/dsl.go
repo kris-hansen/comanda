@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"sync"
@@ -267,7 +268,7 @@ func (p *Processor) debugf(format string, args ...interface{}) {
 	if p.verbose {
 		p.mu.Lock()
 		defer p.mu.Unlock()
-		fmt.Printf("[DEBUG][DSL] "+format+"\n", args...)
+		log.Printf("[DEBUG][DSL] "+format, args...)
 	}
 }
 

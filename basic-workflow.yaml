@@ -1,0 +1,5 @@
+step_one:
+  input: examples/test.csv
+  model: o4-mini
+  action: "Analyze this CSV data and provide a summary of its contents."
+  output: STDOUT

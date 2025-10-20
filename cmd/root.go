@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/kris-hansen/comanda/utils/config"    // Required for input.Input
 	"github.com/kris-hansen/comanda/utils/models"    // Required for models.DetectProvider
@@ -33,6 +34,15 @@ for model interactions and executes the specified actions.`,
 		// Configure log output format (remove timestamps for cleaner debug output)
 		if verbose {
 			log.SetFlags(0)
+			
+			// Optional: Set up file-based logging for debugging sessions
+			// This preserves logs even after the session ends
+			if logFile := os.Getenv("COMANDA_LOG_FILE"); logFile != "" {
+				if file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666); err == nil {
+					log.SetOutput(file)
+					log.Printf("[INFO] Logging session started at %s", time.Now().Format(time.RFC3339))
+				}
+			}
 		}
 
 		// Set global verbose and debug flags
