@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"io"
 	"net/http"
 	"strings"
@@ -34,7 +35,7 @@ func NewAnthropicProvider() *AnthropicProvider {
 // debugf prints debug information if verbose mode is enabled
 func (a *AnthropicProvider) debugf(format string, args ...interface{}) {
 	if a.verbose {
-		fmt.Printf("[DEBUG][Anthropic] "+format+"\n", args...)
+		log.Printf("[DEBUG][Anthropic] "+format+"\n", args...)
 	}
 }
 

@@ -24,7 +24,9 @@ This document defines the logging standards and guidelines for the COMANDA proje
 ### 4. Log Output Configuration
 - When verbose mode is enabled, configure log formatting for cleaner output
 - Use `log.SetFlags(0)` to remove timestamps for debug output unless timestamps are specifically needed
-- Consider file-based logging for debugging sessions to preserve logs after execution
+- **ALWAYS implement error handling fallbacks** for file-based logging operations
+- **ALWAYS add newline characters** (`\n`) to `log.Printf` format strings for consistency
+- Provide informative error messages when log file operations fail
 
 ### 5. Thread Safety Requirements
 - Any logging function that may be called from multiple goroutines MUST be thread-safe
@@ -50,7 +52,17 @@ func (p *Processor) debugf(format string, args ...interface{}) {
 // Configure logging for verbose mode
 if verbose {
     log.SetFlags(0) // Remove timestamps for cleaner debug output
-    // Optional: Configure log file output for persistent debugging
+    
+    // Optional: Configure log file output with error handling
+    if logFile := os.Getenv("COMANDA_LOG_FILE"); logFile != "" {
+        if file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666); err == nil {
+            log.SetOutput(file)
+            log.Printf("[INFO] Logging session started at %s\n", time.Now().Format(time.RFC3339))
+        } else {
+            // Fallback: warn user but continue with stdout logging
+            log.Printf("[WARN] Failed to open log file '%s': %v. Continuing with stdout logging.\n", logFile, err)
+        }
+    }
 }
 ```
 
@@ -63,6 +75,15 @@ fmt.Printf("[DEBUG] Something happened\n")
 func debugf(format string, args ...interface{}) {
     fmt.Printf("[DEBUG] "+format+"\n", args...) // Race condition risk
 }
+
+// WRONG: Missing error handling for file operations
+if logFile := os.Getenv("LOG_FILE"); logFile != "" {
+    file, _ := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+    log.SetOutput(file) // Silent failure if file can't be opened
+}
+
+// WRONG: Missing newline in log.Printf
+log.Printf("[DEBUG] Message without newline", args...) // Inconsistent formatting
 ```
 
 ## File-Based Logging (Implementation)
@@ -72,10 +93,23 @@ File-based logging is available for debugging sessions:
 - Log files preserve debugging information after session ends
 - Session start times are automatically logged when file logging is enabled
 
+### 6. Debug Message Context
+- **ALWAYS include sufficient context** in debug messages for effective troubleshooting
+- Include relevant identifiers (model names, file paths, step names) in debug logs
+- Use consistent format: `[COMPONENT] context: message`
+- Example: `p.debugf("[%s] Writing response to file: %s", modelName, outputPath)`
+
+### 7. Error Handling in Logging Operations
+- **NEVER let logging failures crash the application**
+- Provide fallback mechanisms for file logging failures
+- Log warnings when fallback mechanisms are activated
+- Ensure application continues functioning even if logging fails
+
 ## Enforcement
 - All logging code should follow these standards
 - Code reviews should verify compliance with these guidelines
 - Automated linting should check for `fmt.Printf` usage in debug contexts
+- **Critical**: All model providers must use `log.Printf` instead of `fmt.Printf`
 
 ## Related Components
 - `utils/processor/dsl.go` - Primary debug logging implementation

@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -45,7 +46,7 @@ func (x *XAIProvider) Name() string {
 // debugf prints debug information if verbose mode is enabled
 func (x *XAIProvider) debugf(format string, args ...interface{}) {
 	if x.verbose {
-		fmt.Printf("[DEBUG][XAI] "+format+"\n", args...)
+		log.Printf("[DEBUG][XAI] "+format+"\n", args...)
 	}
 }
 

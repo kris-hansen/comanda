@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/kris-hansen/comanda/utils/fileutil"
@@ -37,7 +38,7 @@ func (d *DeepseekProvider) Name() string {
 // debugf prints debug information if verbose mode is enabled
 func (d *DeepseekProvider) debugf(format string, args ...interface{}) {
 	if d.verbose {
-		fmt.Printf("[DEBUG][Deepseek] "+format+"\n", args...)
+		log.Printf("[DEBUG][Deepseek] "+format+"\n", args...)
 	}
 }
 

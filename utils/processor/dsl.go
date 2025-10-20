@@ -268,7 +268,7 @@ func (p *Processor) debugf(format string, args ...interface{}) {
 	if p.verbose {
 		p.mu.Lock()
 		defer p.mu.Unlock()
-		log.Printf("[DEBUG][DSL] "+format, args...)
+		log.Printf("[DEBUG][DSL] "+format+"\n", args...)
 	}
 }
 

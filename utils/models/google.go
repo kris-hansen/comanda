@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/google/generative-ai-go/genai"
@@ -37,7 +38,7 @@ func (g *GoogleProvider) Name() string {
 // debugf prints debug information if verbose mode is enabled
 func (g *GoogleProvider) debugf(format string, args ...interface{}) {
 	if g.verbose {
-		fmt.Printf("[DEBUG][Google] "+format+"\n", args...)
+		log.Printf("[DEBUG][Google] "+format+"\n", args...)
 	}
 }
 

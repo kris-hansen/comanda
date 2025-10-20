@@ -41,6 +41,9 @@ for model interactions and executes the specified actions.`,
 				if file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666); err == nil {
 					log.SetOutput(file)
 					log.Printf("[INFO] Logging session started at %s", time.Now().Format(time.RFC3339))
+				} else {
+					// Fallback: warn user but continue with stdout logging
+					log.Printf("[WARN] Failed to open log file '%s': %v. Continuing with stdout logging.", logFile, err)
 				}
 			}
 		}

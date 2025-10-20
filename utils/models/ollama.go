@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"io"
 	"net/http"
 	"strings"
@@ -44,7 +45,7 @@ func (o *OllamaProvider) Name() string {
 // debugf prints debug information if verbose mode is enabled
 func (o *OllamaProvider) debugf(format string, args ...interface{}) {
 	if o.verbose {
-		fmt.Printf("[DEBUG][Ollama] "+format+"\n", args...)
+		log.Printf("[DEBUG][Ollama] "+format+"\n", args...)
 	}
 }
 

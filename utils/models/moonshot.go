@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"io"
 	"net/http"
 	"strings"
@@ -43,7 +44,7 @@ func (o *MoonshotProvider) Name() string {
 // debugf prints debug information if verbose mode is enabled
 func (o *MoonshotProvider) debugf(format string, args ...interface{}) {
 	if o.verbose {
-		fmt.Printf("[DEBUG][Moonshot] "+format+"\n", args...)
+		log.Printf("[DEBUG][Moonshot] "+format+"\n", args...)
 	}
 }
 

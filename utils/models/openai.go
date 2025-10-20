@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -43,7 +44,7 @@ func (o *OpenAIProvider) Name() string {
 // debugf prints debug information if verbose mode is enabled
 func (o *OpenAIProvider) debugf(format string, args ...interface{}) {
 	if o.verbose {
-		fmt.Printf("[DEBUG][OpenAI] "+format+"\n", args...)
+		log.Printf("[DEBUG][OpenAI] "+format+"\n", args...)
 	}
 }
 

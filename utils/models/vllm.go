@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"fmt"
+	"log"
 	"io"
 	"net/http"
 	"os"
@@ -39,7 +40,7 @@ func (v *VLLMProvider) Name() string {
 // debugf prints debug information if verbose mode is enabled
 func (v *VLLMProvider) debugf(format string, args ...interface{}) {
 	if v.verbose {
-		fmt.Printf("[DEBUG][vLLM] "+format+"\n", args...)
+		log.Printf("[DEBUG][vLLM] "+format+"\n", args...)
 	}
 }
 
