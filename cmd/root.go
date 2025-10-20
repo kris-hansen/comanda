@@ -25,6 +25,9 @@ var generateModelName string // Flag for specifying model in generateCmd
 // envConfig holds the loaded environment configuration, available to all commands
 var envConfig *config.EnvConfig
 
+// logFile holds the log file handle for proper cleanup
+var logFile *os.File
+
 var rootCmd = &cobra.Command{
 	Use:   "comanda",
 	Short: "A workflow processor for handling model interactions",
@@ -37,13 +40,23 @@ for model interactions and executes the specified actions.`,
 			
 			// Optional: Set up file-based logging for debugging sessions
 			// This preserves logs even after the session ends
-			if logFile := os.Getenv("COMANDA_LOG_FILE"); logFile != "" {
-				if file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666); err == nil {
+			if logFileName := os.Getenv("COMANDA_LOG_FILE"); logFileName != "" {
+				if file, err := os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666); err == nil {
+					logFile = file // Store for cleanup
 					log.SetOutput(file)
-					log.Printf("[INFO] Logging session started at %s", time.Now().Format(time.RFC3339))
+					log.Printf("[INFO] Logging session started at %s\n", time.Now().Format(time.RFC3339))
+					
+					// Ensure log file is properly closed on application exit
+					defer func() {
+						if logFile != nil {
+							log.Printf("[INFO] Logging session ended at %s\n", time.Now().Format(time.RFC3339))
+							logFile.Sync() // Flush any remaining data
+							logFile.Close()
+						}
+					}()
 				} else {
 					// Fallback: warn user but continue with stdout logging
-					log.Printf("[WARN] Failed to open log file '%s': %v. Continuing with stdout logging.", logFile, err)
+					log.Printf("[WARN] Failed to open log file '%s': %v. Continuing with stdout logging.\n", logFileName, err)
 				}
 			}
 		}

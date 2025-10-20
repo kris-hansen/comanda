@@ -104,6 +104,14 @@ File-based logging is available for debugging sessions:
 - Provide fallback mechanisms for file logging failures
 - Log warnings when fallback mechanisms are activated
 - Ensure application continues functioning even if logging fails
+- **ALWAYS ensure log files are properly closed** when application exits
+- Use `defer` statements to guarantee file cleanup and flushing
+
+### 8. User-Facing vs Debug Messages
+- **Use `log.Printf` for ALL output messages** to maintain consistency
+- Avoid mixing `fmt.Printf` and `log.Printf` for different message types
+- User-facing messages should go through the same logging system as debug messages
+- This enables consistent redirection and formatting across all output types
 
 ## Enforcement
 - All logging code should follow these standards

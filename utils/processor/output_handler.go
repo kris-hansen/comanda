@@ -2,6 +2,7 @@ package processor
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -83,11 +84,11 @@ func (p *Processor) handleOutput(modelName string, response string, outputs []st
 				p.debugf("Output event sent successfully")
 			} else {
 				// Fallback to direct console output
-				fmt.Printf("\nResponse from %s:\n%s\n", modelName, response)
+				log.Printf("\nResponse from %s:\n%s\n", modelName, response)
 
 				// Print performance metrics if available
 				if metrics != nil {
-					fmt.Printf("\nPerformance Metrics:\n"+
+					log.Printf("\nPerformance Metrics:\n"+
 						"- Input processing: %d ms\n"+
 						"- Model processing: %d ms\n"+
 						"- Action processing: %d ms\n"+
@@ -136,7 +137,7 @@ func (p *Processor) handleOutput(modelName string, response string, outputs []st
 			p.debugf("[%s] Response successfully written to file: %s", modelName, outputPath)
 
 			// Print a simple confirmation to the console
-			fmt.Printf("\nResponse written to file: %s\n", outputPath)
+			log.Printf("\nResponse written to file: %s\n", outputPath)
 		}
 	}
 	return nil
