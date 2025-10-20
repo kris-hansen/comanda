@@ -46,6 +46,7 @@ type Processor struct {
 	progress     ProgressWriter    // Progress writer for streaming updates
 	runtimeDir   string            // Runtime directory for file operations
 	memory       *MemoryManager    // Memory manager for COMANDA.md file
+	mu           sync.Mutex        // Mutex for thread-safe debug logging
 }
 
 // UnmarshalYAML is a custom unmarshaler for DSLConfig to handle mixed types at the root level
@@ -261,9 +262,11 @@ func (p *Processor) GetMemoryFilePath() string {
 	return p.memory.GetFilePath()
 }
 
-// debugf prints debug information if verbose mode is enabled
+// debugf prints debug information if verbose mode is enabled (thread-safe)
 func (p *Processor) debugf(format string, args ...interface{}) {
 	if p.verbose {
+		p.mu.Lock()
+		defer p.mu.Unlock()
 		fmt.Printf("[DEBUG][DSL] "+format+"\n", args...)
 	}
 }

@@ -30,6 +30,11 @@ var rootCmd = &cobra.Command{
 	Long: `comanda is a command line tool that processes workflow configurations
 for model interactions and executes the specified actions.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		// Configure log output format (remove timestamps for cleaner debug output)
+		if verbose {
+			log.SetFlags(0)
+		}
+
 		// Set global verbose and debug flags
 		config.Verbose = verbose
 		config.Debug = debug
