@@ -34,7 +34,7 @@ var rootCmd = &cobra.Command{
 	Long: `comanda is a command line tool that processes workflow configurations
 for model interactions and executes the specified actions.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		// Configure log output format (remove timestamps for cleaner debug output)
+	// Configure log output format (remove timestamps for cleaner debug output)
 		if verbose {
 			log.SetFlags(0)
 			
@@ -45,21 +45,21 @@ for model interactions and executes the specified actions.`,
 					logFile = file // Store for cleanup
 					log.SetOutput(file)
 					log.Printf("[INFO] Logging session started at %s\n", time.Now().Format(time.RFC3339))
-					
-					// Ensure log file is properly closed on application exit
-					defer func() {
-						if logFile != nil {
-							log.Printf("[INFO] Logging session ended at %s\n", time.Now().Format(time.RFC3339))
-							logFile.Sync() // Flush any remaining data
-							logFile.Close()
-						}
-					}()
 				} else {
 					// Fallback: warn user but continue with stdout logging
 					log.Printf("[WARN] Failed to open log file '%s': %v. Continuing with stdout logging.\n", logFileName, err)
 				}
 			}
 		}
+		
+		// Ensure log file is properly closed on application exit (outside conditional)
+		defer func() {
+			if logFile != nil {
+				log.Printf("[INFO] Logging session ended at %s\n", time.Now().Format(time.RFC3339))
+				logFile.Sync() // Flush any remaining data
+				logFile.Close()
+			}
+		}()
 
 		// Set global verbose and debug flags
 		config.Verbose = verbose

@@ -292,7 +292,7 @@ func validatePassword(password string) error {
 }
 
 func configureDatabase(reader *bufio.Reader, envConfig *config.EnvConfig) error {
-	log.Printf("Enter database name: ")
+	log.Print("Enter database name: ")
 	dbName, _ := reader.ReadString('\n')
 	dbName = strings.TrimSpace(dbName)
 
@@ -303,7 +303,7 @@ func configureDatabase(reader *bufio.Reader, envConfig *config.EnvConfig) error 
 	}
 
 	// Get database connection details
-	log.Printf("Enter database host (default: localhost): ")
+	log.Print("Enter database host (default: localhost): ")
 	host, _ := reader.ReadString('\n')
 	host = strings.TrimSpace(host)
 	if host == "" {
@@ -311,7 +311,7 @@ func configureDatabase(reader *bufio.Reader, envConfig *config.EnvConfig) error 
 	}
 	dbConfig.Host = host
 
-	log.Printf("Enter database port (default: 5432): ")
+	log.Print("Enter database port (default: 5432): ")
 	portStr, _ := reader.ReadString('\n')
 	portStr = strings.TrimSpace(portStr)
 	if portStr == "" {
@@ -324,7 +324,7 @@ func configureDatabase(reader *bufio.Reader, envConfig *config.EnvConfig) error 
 		dbConfig.Port = port
 	}
 
-	log.Printf("Enter database user: ")
+	log.Print("Enter database user: ")
 	user, _ := reader.ReadString('\n')
 	dbConfig.User = strings.TrimSpace(user)
 
@@ -339,7 +339,7 @@ func configureDatabase(reader *bufio.Reader, envConfig *config.EnvConfig) error 
 	envConfig.AddDatabase(dbName, dbConfig)
 
 	// Ask if user wants to test the connection
-	log.Printf("Would you like to test the database connection? (y/n): ")
+	log.Print("Would you like to test the database connection? (y/n): ")
 	testConn, _ := reader.ReadString('\n')
 	if strings.TrimSpace(strings.ToLower(testConn)) == "y" {
 		// Create a database handler and test the connection
