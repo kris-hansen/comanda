@@ -6,9 +6,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/kris-hansen/comanda/utils/fileutil"
@@ -21,6 +23,7 @@ type MoonshotProvider struct {
 	apiKey  string
 	config  ModelConfig
 	verbose bool
+	mu      sync.Mutex
 }
 
 // NewMoonshotProvider creates a new Moonshot provider instance
@@ -40,10 +43,12 @@ func (o *MoonshotProvider) Name() string {
 	return "moonshot"
 }
 
-// debugf prints debug information if verbose mode is enabled
+// debugf prints debug information if verbose mode is enabled (thread-safe)
 func (o *MoonshotProvider) debugf(format string, args ...interface{}) {
 	if o.verbose {
-		fmt.Printf("[DEBUG][Moonshot] "+format+"\n", args...)
+		o.mu.Lock()
+		defer o.mu.Unlock()
+		log.Printf("[DEBUG][Moonshot] "+format+"\n", args...)
 	}
 }
 

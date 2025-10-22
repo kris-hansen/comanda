@@ -43,5 +43,5 @@ func main() {
 	if __name__ == "__main__":
 		main()
 
-	fmt.Printf("Scrape Input: %+v\n", scrapeInput)
+	log.Printf("Scrape Input: %+v\n", scrapeInput)
 }

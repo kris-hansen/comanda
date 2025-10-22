@@ -3,7 +3,9 @@ package models
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
+	"sync"
 
 	"github.com/google/generative-ai-go/genai"
 	"github.com/kris-hansen/comanda/utils/fileutil"
@@ -16,6 +18,7 @@ type GoogleProvider struct {
 	apiKey  string
 	config  ModelConfig
 	verbose bool
+	mu      sync.Mutex
 }
 
 // NewGoogleProvider creates a new Google provider instance
@@ -34,10 +37,12 @@ func (g *GoogleProvider) Name() string {
 	return "google"
 }
 
-// debugf prints debug information if verbose mode is enabled
+// debugf prints debug information if verbose mode is enabled (thread-safe)
 func (g *GoogleProvider) debugf(format string, args ...interface{}) {
 	if g.verbose {
-		fmt.Printf("[DEBUG][Google] "+format+"\n", args...)
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		log.Printf("[DEBUG][Google] "+format+"\n", args...)
 	}
 }
 

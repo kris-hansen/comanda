@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"sync"
@@ -46,6 +47,7 @@ type Processor struct {
 	progress     ProgressWriter    // Progress writer for streaming updates
 	runtimeDir   string            // Runtime directory for file operations
 	memory       *MemoryManager    // Memory manager for COMANDA.md file
+	mu           sync.Mutex        // Mutex for thread-safe debug logging
 }
 
 // UnmarshalYAML is a custom unmarshaler for DSLConfig to handle mixed types at the root level
@@ -261,10 +263,12 @@ func (p *Processor) GetMemoryFilePath() string {
 	return p.memory.GetFilePath()
 }
 
-// debugf prints debug information if verbose mode is enabled
+// debugf prints debug information if verbose mode is enabled (thread-safe)
 func (p *Processor) debugf(format string, args ...interface{}) {
 	if p.verbose {
-		fmt.Printf("[DEBUG][DSL] "+format+"\n", args...)
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		log.Printf("[DEBUG][DSL] "+format+"\n", args...)
 	}
 }
 
@@ -875,7 +879,7 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 			tmpFile, err := os.CreateTemp("", "comanda-stdin-*.txt")
 			if err != nil {
 				err = fmt.Errorf("failed to create temp file for STDIN: %w", err)
-				fmt.Printf("Error in step '%s': %v\n", step.Name, err)
+				log.Printf("Error in step '%s': %v\n", step.Name, err)
 				return "", err
 			}
 			tmpPath := tmpFile.Name()
@@ -884,7 +888,7 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 			if _, err := tmpFile.WriteString(p.lastOutput); err != nil {
 				tmpFile.Close()
 				err = fmt.Errorf("failed to write to temp file: %w", err)
-				fmt.Printf("Error in step '%s': %v\n", step.Name, err)
+				log.Printf("Error in step '%s': %v\n", step.Name, err)
 				return "", err
 			}
 			tmpFile.Close()
@@ -931,7 +935,7 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 				if err := chunker.CleanupChunks(chunkResult); err != nil {
 					p.debugf("Error cleaning up chunks for step '%s': %v", step.Name, err)
 					// Log the error but don't fail the step - cleanup errors are non-fatal
-					fmt.Printf("Warning: Failed to clean up temporary chunk files: %v\n", err)
+					log.Printf("Warning: Failed to clean up temporary chunk files: %v\n", err)
 				}
 			}()
 		}
@@ -942,7 +946,7 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 		p.debugf("Processing inputs for step %s...", step.Name)
 		if err := p.processInputs(inputs); err != nil {
 			err = fmt.Errorf("input processing error in step %s: %w", step.Name, err)
-			fmt.Printf("Error: %v\n", err)
+			log.Printf("Error: %v\n", err)
 			return "", err
 		}
 	}
@@ -1071,7 +1075,7 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 
 			// For database outputs, we still want to show performance metrics in STDOUT
 			if p.verbose {
-				fmt.Printf("\nPerformance Metrics for step '%s':\n"+
+				log.Printf("\nPerformance Metrics for step '%s':\n"+
 					"- Input processing: %d ms\n"+
 					"- Model processing: %d ms\n"+
 					"- Action processing: %d ms\n"+

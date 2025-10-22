@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/kris-hansen/comanda/utils/fileutil"
@@ -21,6 +23,7 @@ type OpenAIProvider struct {
 	apiKey  string
 	config  ModelConfig
 	verbose bool
+	mu      sync.Mutex
 }
 
 // NewOpenAIProvider creates a new OpenAI provider instance
@@ -40,10 +43,12 @@ func (o *OpenAIProvider) Name() string {
 	return "openai"
 }
 
-// debugf prints debug information if verbose mode is enabled
+// debugf prints debug information if verbose mode is enabled (thread-safe)
 func (o *OpenAIProvider) debugf(format string, args ...interface{}) {
 	if o.verbose {
-		fmt.Printf("[DEBUG][OpenAI] "+format+"\n", args...)
+		o.mu.Lock()
+		defer o.mu.Unlock()
+		log.Printf("[DEBUG][OpenAI] "+format+"\n", args...)
 	}
 }
 
