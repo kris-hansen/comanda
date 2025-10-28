@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bufio"
-	"fmt"
 	"io"
 	"log"
 	"os"
@@ -28,7 +27,7 @@ var processCmd = &cobra.Command{
 		// and available in the package-level envConfig variable
 
 		if verbose {
-			fmt.Println("[DEBUG] Using centralized environment configuration")
+			log.Println("[DEBUG] Using centralized environment configuration")
 		}
 
 		// Check if there's data on STDIN
@@ -52,11 +51,11 @@ var processCmd = &cobra.Command{
 		}
 
 		for _, file := range args {
-			fmt.Printf("\nProcessing workflow file: %s\n", file)
+			log.Printf("\nProcessing workflow file: %s\n", file)
 
 			// Read YAML file
 			if verbose {
-				fmt.Printf("[DEBUG] Reading YAML file: %s\n", file)
+				log.Printf("[DEBUG] Reading YAML file: %s\n", file)
 			}
 			yamlFile, err := os.ReadFile(file)
 			if err != nil {
@@ -74,7 +73,7 @@ var processCmd = &cobra.Command{
 
 			// Create processor
 			if verbose {
-				fmt.Printf("[DEBUG] Creating processor for %s\n", file)
+				log.Printf("[DEBUG] Creating processor for %s\n", file)
 			}
 			// Create basic server config for CLI processing
 			serverConfig := &config.ServerConfig{
@@ -88,79 +87,79 @@ var processCmd = &cobra.Command{
 			}
 
 			// Print configuration summary before processing
-			fmt.Println("\nConfiguration:")
+			log.Printf("\nConfiguration:\n")
 
 			// Print parallel steps if any
 			for groupName, parallelSteps := range dslConfig.ParallelSteps {
-				fmt.Printf("\nParallel Process Group: %s\n", groupName)
+				log.Printf("\nParallel Process Group: %s\n", groupName)
 				for _, step := range parallelSteps {
-					fmt.Printf("\n  Parallel Step: %s\n", step.Name)
+					log.Printf("\n  Parallel Step: %s\n", step.Name)
 					inputs := proc.NormalizeStringSlice(step.Config.Input)
 					if len(inputs) > 0 && inputs[0] != "NA" {
-						fmt.Printf("  - Input: %v\n", inputs)
+						log.Printf("  - Input: %v\n", inputs)
 					}
-					fmt.Printf("  - Model: %v\n", proc.NormalizeStringSlice(step.Config.Model))
+					log.Printf("  - Model: %v\n", proc.NormalizeStringSlice(step.Config.Model))
 
 					// Display instructions for openai-responses type steps, otherwise display action
 					if step.Config.Type == "openai-responses" && step.Config.Instructions != "" {
-						fmt.Printf("  - Instructions: %v\n", step.Config.Instructions)
+						log.Printf("  - Instructions: %v\n", step.Config.Instructions)
 					} else {
-						fmt.Printf("  - Action: %v\n", proc.NormalizeStringSlice(step.Config.Action))
+						log.Printf("  - Action: %v\n", proc.NormalizeStringSlice(step.Config.Action))
 					}
 
-					fmt.Printf("  - Output: %v\n", proc.NormalizeStringSlice(step.Config.Output))
+					log.Printf("  - Output: %v\n", proc.NormalizeStringSlice(step.Config.Output))
 
 					// Display memory information if enabled
 					if step.Config.Memory {
 						memoryPath := proc.GetMemoryFilePath()
 						if memoryPath != "" {
-							fmt.Printf("  - Memory: [Using %s]\n", memoryPath)
+							log.Printf("  - Memory: [Using %s]\n", memoryPath)
 						} else {
-							fmt.Printf("  - Memory: [ENABLED but no memory file configured]\n")
+							log.Printf("  - Memory: [ENABLED but no memory file configured]\n")
 						}
 					}
 
 					nextActions := proc.NormalizeStringSlice(step.Config.NextAction)
 					if len(nextActions) > 0 {
-						fmt.Printf("  - Next Action: %v\n", nextActions)
+						log.Printf("  - Next Action: %v\n", nextActions)
 					}
 				}
 			}
 
 			// Print sequential steps
 			for _, step := range dslConfig.Steps {
-				fmt.Printf("\nStep: %s\n", step.Name)
+				log.Printf("\nStep: %s\n", step.Name)
 				inputs := proc.NormalizeStringSlice(step.Config.Input)
 				if len(inputs) > 0 && inputs[0] != "NA" {
-					fmt.Printf("- Input: %v\n", inputs)
+					log.Printf("- Input: %v\n", inputs)
 				}
-				fmt.Printf("- Model: %v\n", proc.NormalizeStringSlice(step.Config.Model))
+				log.Printf("- Model: %v\n", proc.NormalizeStringSlice(step.Config.Model))
 
 				// Display instructions for openai-responses type steps, otherwise display action
 				if step.Config.Type == "openai-responses" && step.Config.Instructions != "" {
-					fmt.Printf("- Instructions: %v\n", step.Config.Instructions)
+					log.Printf("- Instructions: %v\n", step.Config.Instructions)
 				} else {
-					fmt.Printf("- Action: %v\n", proc.NormalizeStringSlice(step.Config.Action))
+					log.Printf("- Action: %v\n", proc.NormalizeStringSlice(step.Config.Action))
 				}
 
-				fmt.Printf("- Output: %v\n", proc.NormalizeStringSlice(step.Config.Output))
+				log.Printf("- Output: %v\n", proc.NormalizeStringSlice(step.Config.Output))
 
 				// Display memory information if enabled
 				if step.Config.Memory {
 					memoryPath := proc.GetMemoryFilePath()
 					if memoryPath != "" {
-						fmt.Printf("- Memory: [Using %s]\n", memoryPath)
+						log.Printf("- Memory: [Using %s]\n", memoryPath)
 					} else {
-						fmt.Printf("- Memory: [ENABLED but no memory file configured]\n")
+						log.Printf("- Memory: [ENABLED but no memory file configured]\n")
 					}
 				}
 
 				nextActions := proc.NormalizeStringSlice(step.Config.NextAction)
 				if len(nextActions) > 0 {
-					fmt.Printf("- Next Action: %v\n", nextActions)
+					log.Printf("- Next Action: %v\n", nextActions)
 				}
 			}
-			fmt.Println()
+			log.Printf("\n")
 
 			// Run processor
 			if err := proc.Process(); err != nil {

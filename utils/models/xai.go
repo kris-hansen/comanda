@@ -3,7 +3,9 @@ package models
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/kris-hansen/comanda/utils/fileutil"
@@ -16,6 +18,7 @@ type XAIProvider struct {
 	apiKey  string
 	config  ModelConfig
 	verbose bool
+	mu      sync.Mutex
 }
 
 // Default configuration values
@@ -42,10 +45,12 @@ func (x *XAIProvider) Name() string {
 	return "xai"
 }
 
-// debugf prints debug information if verbose mode is enabled
+// debugf prints debug information if verbose mode is enabled (thread-safe)
 func (x *XAIProvider) debugf(format string, args ...interface{}) {
 	if x.verbose {
-		fmt.Printf("[DEBUG][XAI] "+format+"\n", args...)
+		x.mu.Lock()
+		defer x.mu.Unlock()
+		log.Printf("[DEBUG][XAI] "+format+"\n", args...)
 	}
 }
 

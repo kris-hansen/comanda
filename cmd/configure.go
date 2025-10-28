@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -108,7 +109,7 @@ func getOpenAIModelsAndCategorize(apiKey string) ([]string, []string, error) {
 			apiModels[model.ID] = true
 		}
 	} else {
-		fmt.Printf("Warning: Could not fetch models from OpenAI API: %v\nFalling back to known models.\n", err)
+			log.Printf("Warning: Could not fetch models from OpenAI API: %v\nFalling back to known models.\n", err)
 	}
 
 	var primaryModels []string
@@ -291,7 +292,7 @@ func validatePassword(password string) error {
 }
 
 func configureDatabase(reader *bufio.Reader, envConfig *config.EnvConfig) error {
-	fmt.Print("Enter database name: ")
+	log.Print("Enter database name: ")
 	dbName, _ := reader.ReadString('\n')
 	dbName = strings.TrimSpace(dbName)
 
@@ -302,7 +303,7 @@ func configureDatabase(reader *bufio.Reader, envConfig *config.EnvConfig) error 
 	}
 
 	// Get database connection details
-	fmt.Print("Enter database host (default: localhost): ")
+	log.Print("Enter database host (default: localhost): ")
 	host, _ := reader.ReadString('\n')
 	host = strings.TrimSpace(host)
 	if host == "" {
@@ -310,7 +311,7 @@ func configureDatabase(reader *bufio.Reader, envConfig *config.EnvConfig) error 
 	}
 	dbConfig.Host = host
 
-	fmt.Print("Enter database port (default: 5432): ")
+	log.Print("Enter database port (default: 5432): ")
 	portStr, _ := reader.ReadString('\n')
 	portStr = strings.TrimSpace(portStr)
 	if portStr == "" {
@@ -323,7 +324,7 @@ func configureDatabase(reader *bufio.Reader, envConfig *config.EnvConfig) error 
 		dbConfig.Port = port
 	}
 
-	fmt.Print("Enter database user: ")
+	log.Print("Enter database user: ")
 	user, _ := reader.ReadString('\n')
 	dbConfig.User = strings.TrimSpace(user)
 
@@ -338,7 +339,7 @@ func configureDatabase(reader *bufio.Reader, envConfig *config.EnvConfig) error 
 	envConfig.AddDatabase(dbName, dbConfig)
 
 	// Ask if user wants to test the connection
-	fmt.Print("Would you like to test the database connection? (y/n): ")
+	log.Print("Would you like to test the database connection? (y/n): ")
 	testConn, _ := reader.ReadString('\n')
 	if strings.TrimSpace(strings.ToLower(testConn)) == "y" {
 		// Create a database handler and test the connection
@@ -346,7 +347,7 @@ func configureDatabase(reader *bufio.Reader, envConfig *config.EnvConfig) error 
 		if err := dbHandler.TestConnection(dbName); err != nil {
 			return fmt.Errorf("connection test failed: %v", err)
 		}
-		fmt.Printf("%s Database connection successful!\n", greenCheckmark)
+		log.Printf("%s Database connection successful!\n", greenCheckmark)
 	}
 
 	return nil
@@ -360,7 +361,7 @@ func removeModel(envConfig *config.EnvConfig, modelName string) error {
 				// Remove the model from the slice
 				provider.Models = append(provider.Models[:i], provider.Models[i+1:]...)
 				removed = true
-				fmt.Printf("Removed model '%s' from provider '%s'\n", modelName, providerName)
+				log.Printf("Removed model '%s' from provider '%s'\n", modelName, providerName)
 				break
 			}
 		}
@@ -442,25 +443,25 @@ func parseModelSelection(input string, maxNum int) ([]int, error) {
 }
 
 func promptForModelSelection(models []string) ([]string, error) {
-	fmt.Println("\nAvailable models:")
+	log.Printf("\nAvailable models:\n")
 	for i, model := range models {
-		fmt.Printf("%d. %s\n", i+1, model)
+		log.Printf("%d. %s\n", i+1, model)
 	}
 
 	reader := bufio.NewReader(os.Stdin)
 	for {
-		fmt.Print("\nEnter model numbers (comma-separated, ranges allowed e.g., 1,2,4-6): ")
+		log.Printf("\nEnter model numbers (comma-separated, ranges allowed e.g., 1,2,4-6): ")
 		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(input)
 
 		selected, err := parseModelSelection(input, len(models))
 		if err != nil {
-			fmt.Printf("Error: %v\nPlease try again.\n", err)
+			log.Printf("Error: %v\nPlease try again.\n", err)
 			continue
 		}
 
 		if len(selected) == 0 {
-			fmt.Println("No valid selections made. Please try again.")
+			log.Printf("No valid selections made. Please try again.\n")
 			continue
 		}
 
@@ -479,9 +480,9 @@ func promptForOpenAIModelSelection(primaryModels []string, otherModels []string)
 	reader := bufio.NewReader(os.Stdin)
 
 	// Display primary models first
-	fmt.Println("\nPrimary OpenAI Models:")
+	log.Printf("\nPrimary OpenAI Models:\n")
 	for i, model := range primaryModels {
-		fmt.Printf("%d. %s\n", i+1, model)
+		log.Printf("%d. %s\n", i+1, model)
 	}
 
 	// Combined list for selection validation
@@ -499,23 +500,23 @@ func promptForOpenAIModelSelection(primaryModels []string, otherModels []string)
 			prompt = "\nEnter model numbers, or 'p' to see primary models: "
 		}
 
-		fmt.Print(prompt)
+		log.Printf(prompt)
 		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(input)
 
 		// Handle pagination
 		if input == "m" && showingPrimary {
 			showingPrimary = false
-			fmt.Println("\nOther OpenAI Models:")
+			log.Printf("\nOther OpenAI Models:\n")
 			for i, model := range otherModels {
-				fmt.Printf("%d. %s\n", i+len(primaryModels)+1, model)
+				log.Printf("%d. %s\n", i+len(primaryModels)+1, model)
 			}
 			continue
 		} else if input == "p" && !showingPrimary {
 			showingPrimary = true
-			fmt.Println("\nPrimary OpenAI Models:")
+			log.Printf("\nPrimary OpenAI Models:\n")
 			for i, model := range primaryModels {
-				fmt.Printf("%d. %s\n", i+1, model)
+				log.Printf("%d. %s\n", i+1, model)
 			}
 			continue
 		}
@@ -523,12 +524,12 @@ func promptForOpenAIModelSelection(primaryModels []string, otherModels []string)
 		// Parse selection
 		selected, err := parseModelSelection(input, len(allModels))
 		if err != nil {
-			fmt.Printf("Error: %v\nPlease try again.\n", err)
+			log.Printf("Error: %v\nPlease try again.\n", err)
 			continue
 		}
 
 		if len(selected) == 0 {
-			fmt.Println("No valid selections made. Please try again.")
+			log.Printf("No valid selections made. Please try again.\n")
 			continue
 		}
 
@@ -543,13 +544,13 @@ func promptForOpenAIModelSelection(primaryModels []string, otherModels []string)
 }
 
 func promptForModes(reader *bufio.Reader, modelName string) ([]config.ModelMode, error) {
-	fmt.Printf("\nConfiguring modes for %s\n", modelName)
-	fmt.Println("Available modes:")
-	fmt.Println("1. text - Text processing mode")
-	fmt.Println("2. vision - Image and vision processing mode")
-	fmt.Println("3. multi - Multi-modal processing")
-	fmt.Println("4. file - File processing mode")
-	fmt.Print("\nEnter mode numbers (comma-separated, e.g., 1,2): ")
+	log.Printf("\nConfiguring modes for %s\n", modelName)
+	log.Printf("Available modes:\n")
+	log.Printf("1. text - Text processing mode")
+	log.Printf("2. vision - Image and vision processing mode")
+	log.Printf("3. multi - Multi-modal processing")
+	log.Printf("4. file - File processing mode")
+	log.Printf("\nEnter mode numbers (comma-separated, e.g., 1,2): ")
 	modesInput, _ := reader.ReadString('\n')
 	modesInput = strings.TrimSpace(modesInput)
 
@@ -568,7 +569,7 @@ func promptForModes(reader *bufio.Reader, modelName string) ([]config.ModelMode,
 			case "4":
 				modes = append(modes, config.FileMode)
 			default:
-				fmt.Printf("Warning: Invalid mode number '%s' ignored\n", num)
+				log.Printf("Warning: Invalid mode number '%s' ignored\n", num)
 			}
 		}
 	}
@@ -576,7 +577,7 @@ func promptForModes(reader *bufio.Reader, modelName string) ([]config.ModelMode,
 	if len(modes) == 0 {
 		// Default to text mode if no modes selected
 		modes = append(modes, config.TextMode)
-		fmt.Println("No valid modes selected. Defaulting to text mode.")
+		log.Printf("No valid modes selected. Defaulting to text mode.")
 	}
 
 	return modes, nil
@@ -615,13 +616,13 @@ var configureCmd = &cobra.Command{
 		if initMemoryFlag {
 			memPath, err := config.InitializeUserMemoryFile()
 			if err != nil {
-				fmt.Printf("Error initializing memory file: %v\n", err)
+				log.Printf("Error initializing memory file: %v\n", err)
 				return
 			}
-			fmt.Printf("%s Memory file initialized at: %s\n", greenCheckmark, memPath)
-			fmt.Println("\nYou can now use memory in your workflows with:")
-			fmt.Println("  memory: true  # In step config to read from memory")
-			fmt.Println("  output: MEMORY  # To write to memory")
+			log.Printf("%s Memory file initialized at: %s\n", greenCheckmark, memPath)
+			log.Printf("\nYou can now use memory in your workflows with:")
+			log.Printf("  memory: true  # In step config to read from memory")
+			log.Printf("  output: MEMORY  # To write to memory")
 			return
 		}
 
@@ -629,14 +630,14 @@ var configureCmd = &cobra.Command{
 		if memoryFlag != "" {
 			envCfg, err := config.LoadEnvConfigWithPassword(configPath)
 			if err != nil {
-				fmt.Printf("Error loading configuration: %v\n", err)
+				log.Printf("Error loading configuration: %v\n", err)
 				return
 			}
 
 			// Validate the memory file path
 			absPath, err := filepath.Abs(memoryFlag)
 			if err != nil {
-				fmt.Printf("Error resolving memory file path: %v\n", err)
+				log.Printf("Error resolving memory file path: %v\n", err)
 				return
 			}
 
@@ -646,69 +647,69 @@ var configureCmd = &cobra.Command{
 					// Check if parent directory exists and is writable
 					parentDir := filepath.Dir(absPath)
 					if stat, err := os.Stat(parentDir); err != nil {
-						fmt.Printf("Error: Parent directory %s does not exist or is not accessible: %v\n", parentDir, err)
+						log.Printf("Error: Parent directory %s does not exist or is not accessible: %v\n", parentDir, err)
 						return
 					} else if !stat.IsDir() {
-						fmt.Printf("Error: %s is not a directory\n", parentDir)
+						log.Printf("Error: %s is not a directory\n", parentDir)
 						return
 					}
 					// Check if directory is writable
 					if err := os.WriteFile(filepath.Join(parentDir, ".write_test"), []byte{}, 0644); err != nil {
-						fmt.Printf("Error: Directory %s is not writable: %v\n", parentDir, err)
+						log.Printf("Error: Directory %s is not writable: %v\n", parentDir, err)
 						return
 					}
 					os.Remove(filepath.Join(parentDir, ".write_test"))
-					fmt.Printf("Warning: Memory file does not exist at %s. It will be created when needed.\n", absPath)
+					log.Printf("Warning: Memory file does not exist at %s. It will be created when needed.\n", absPath)
 				} else {
-					fmt.Printf("Error accessing memory file: %v\n", err)
+					log.Printf("Error accessing memory file: %v\n", err)
 					return
 				}
 			} else {
 				// File exists, check if it's readable
 				if _, err := os.ReadFile(absPath); err != nil {
-					fmt.Printf("Error: Memory file is not readable: %v\n", err)
+					log.Printf("Error: Memory file is not readable: %v\n", err)
 					return
 				}
 			}
 
 			envCfg.MemoryFile = absPath
 			if err := config.SaveEnvConfig(configPath, envCfg); err != nil {
-				fmt.Printf("Error saving configuration: %v\n", err)
+				log.Printf("Error saving configuration: %v\n", err)
 				return
 			}
 
-			fmt.Printf("%s Memory file path set to: %s\n", greenCheckmark, absPath)
+			log.Printf("%s Memory file path set to: %s\n", greenCheckmark, absPath)
 			return
 		}
 
 		if encryptFlag {
 			password, err := config.PromptPassword("Enter encryption password (minimum 6 characters): ")
 			if err != nil {
-				fmt.Printf("Error reading password: %v\n", err)
+				log.Printf("Error reading password: %v\n", err)
 				return
 			}
 
 			if err := validatePassword(password); err != nil {
-				fmt.Printf("Error: %v\n", err)
+				log.Printf("Error: %v\n", err)
 				return
 			}
 
 			confirmPassword, err := config.PromptPassword("Confirm encryption password: ")
 			if err != nil {
-				fmt.Printf("Error reading password: %v\n", err)
+				log.Printf("Error reading password: %v\n", err)
 				return
 			}
 
 			if password != confirmPassword {
-				fmt.Println("Passwords do not match")
+				log.Printf("Passwords do not match")
 				return
 			}
 
 			if err := config.EncryptConfig(configPath, password); err != nil {
-				fmt.Printf("Error encrypting configuration: %v\n", err)
+				log.Printf("Error encrypting configuration: %v\n", err)
 				return
 			}
-			fmt.Println("Configuration encrypted successfully!")
+			log.Printf("Configuration encrypted successfully!")
 			return
 		}
 
@@ -716,35 +717,35 @@ var configureCmd = &cobra.Command{
 			// Check if file exists and is encrypted
 			data, err := os.ReadFile(configPath)
 			if err != nil {
-				fmt.Printf("Error reading configuration file: %v\n", err)
+				log.Printf("Error reading configuration file: %v\n", err)
 				return
 			}
 
 			if !config.IsEncrypted(data) {
-				fmt.Println("Configuration file is not encrypted")
+				log.Printf("Configuration file is not encrypted")
 				return
 			}
 
 			password, err := config.PromptPassword("Enter decryption password: ")
 			if err != nil {
-				fmt.Printf("Error reading password: %v\n", err)
+				log.Printf("Error reading password: %v\n", err)
 				return
 			}
 
 			// Decrypt the configuration
 			decrypted, err := config.DecryptConfig(data, password)
 			if err != nil {
-				fmt.Printf("Error decrypting configuration: %v\n", err)
+				log.Printf("Error decrypting configuration: %v\n", err)
 				return
 			}
 
 			// Write the decrypted data back to the file
 			if err := os.WriteFile(configPath, decrypted, 0644); err != nil {
-				fmt.Printf("Error writing decrypted configuration: %v\n", err)
+				log.Printf("Error writing decrypted configuration: %v\n", err)
 				return
 			}
 
-			fmt.Println("Configuration decrypted successfully!")
+			log.Printf("Configuration decrypted successfully!")
 			return
 		}
 
@@ -757,7 +758,7 @@ var configureCmd = &cobra.Command{
 				wasEncrypted = true
 				password, err := config.PromptPassword("Enter decryption password: ")
 				if err != nil {
-					fmt.Printf("Error reading password: %v\n", err)
+					log.Printf("Error reading password: %v\n", err)
 					return
 				}
 				decryptionPassword = password
@@ -769,54 +770,54 @@ var configureCmd = &cobra.Command{
 
 		if updateKeyFlag != "" {
 			reader := bufio.NewReader(os.Stdin)
-			fmt.Print("Enter new API key: ")
+			log.Printf("Enter new API key: ")
 			apiKey, _ := reader.ReadString('\n')
 			apiKey = strings.TrimSpace(apiKey)
 
 			if err := envConfig.UpdateAPIKey(updateKeyFlag, apiKey); err != nil {
-				fmt.Printf("Error updating API key: %v\n", err)
+				log.Printf("Error updating API key: %v\n", err)
 				return
 			}
-			fmt.Printf("Successfully updated API key for provider '%s'\n", updateKeyFlag)
+			log.Printf("Successfully updated API key for provider '%s'\n", updateKeyFlag)
 		} else if removeFlag != "" {
 			if err := removeModel(envConfig, removeFlag); err != nil {
-				fmt.Printf("Error: %v\n", err)
+				log.Printf("Error: %v\n", err)
 				return
 			}
 		} else if databaseFlag {
 			reader := bufio.NewReader(os.Stdin)
 			if err := configureDatabase(reader, envConfig); err != nil {
-				fmt.Printf("Error configuring database: %v\n", err)
+				log.Printf("Error configuring database: %v\n", err)
 				return
 			}
 		} else if setDefaultGenerationModelFlag != "" {
 			envConfig.DefaultGenerationModel = setDefaultGenerationModelFlag
-			fmt.Printf("Default generation model set to '%s'\n", setDefaultGenerationModelFlag)
+			log.Printf("Default generation model set to '%s'\n", setDefaultGenerationModelFlag)
 		} else if defaultFlag {
 			// Interactive mode to set default generation model
 			reader := bufio.NewReader(os.Stdin)
 			allModels := getAllConfiguredModelNames(envConfig)
 			if len(allModels) == 0 {
-				fmt.Println("No models are currently configured. Please configure models first using 'comanda configure'.")
+				log.Printf("No models are currently configured. Please configure models first using 'comanda configure'.")
 				return
 			}
 
-			fmt.Println("Available configured models:")
+			log.Printf("Available configured models:")
 			for i, modelName := range allModels {
-				fmt.Printf("%d. %s", i+1, modelName)
+				log.Printf("%d. %s", i+1, modelName)
 				if envConfig.DefaultGenerationModel == modelName {
-					fmt.Print(" (current default)")
+					log.Printf(" (current default)")
 				}
-				fmt.Println()
+				log.Printf("\n")
 			}
 
 			var selectedDefaultModel string
 			for {
-				fmt.Print("\nEnter the number of the model to set as default for generation: ")
+				log.Printf("\nEnter the number of the model to set as default for generation: ")
 				selectionInput, _ := reader.ReadString('\n')
 				selectionNum, err := strconv.Atoi(strings.TrimSpace(selectionInput))
 				if err != nil || selectionNum < 1 || selectionNum > len(allModels) {
-					fmt.Println("Invalid selection. Please enter a number from the list.")
+					log.Printf("Invalid selection. Please enter a number from the list.")
 					continue
 				}
 				selectedDefaultModel = allModels[selectionNum-1]
@@ -824,31 +825,31 @@ var configureCmd = &cobra.Command{
 			}
 
 			envConfig.DefaultGenerationModel = selectedDefaultModel
-			fmt.Printf("%s Default generation model set to '%s'\n", greenCheckmark, selectedDefaultModel)
+			log.Printf("%s Default generation model set to '%s'\n", greenCheckmark, selectedDefaultModel)
 		} else {
 			reader := bufio.NewReader(os.Stdin)
 			// Prompt for provider
 			var provider string
 			for {
-				fmt.Print("Enter provider (openai/anthropic/ollama/vllm/google/xai/deepseek/moonshot): ")
+				log.Printf("Enter provider (openai/anthropic/ollama/vllm/google/xai/deepseek/moonshot): ")
 				provider, _ = reader.ReadString('\n')
 				provider = strings.TrimSpace(provider)
 				if provider == "openai" || provider == "anthropic" || provider == "ollama" || provider == "vllm" || provider == "google" || provider == "xai" || provider == "deepseek" || provider == "moonshot" {
 					break
 				}
-				fmt.Println("Invalid provider. Please enter 'openai', 'anthropic', 'ollama', 'vllm', 'google', 'xai', 'deepseek', or 'moonshot'")
+				log.Printf("Invalid provider. Please enter 'openai', 'anthropic', 'ollama', 'vllm', 'google', 'xai', 'deepseek', or 'moonshot'")
 			}
 
 			// Special handling for local providers
 			if provider == "ollama" {
 				if !checkOllamaInstalled() {
-					fmt.Println("Error: Ollama is not installed or not running. Please install ollama and try again.")
+					log.Printf("Error: Ollama is not installed or not running. Please install ollama and try again.")
 					return
 				}
 			}
 			if provider == "vllm" {
 				if !checkVLLMInstalled() {
-					fmt.Println("Error: vLLM server is not running. Please start vLLM server and try again.")
+					log.Printf("Error: vLLM server is not running. Please start vLLM server and try again.")
 					return
 				}
 			}
@@ -859,7 +860,7 @@ var configureCmd = &cobra.Command{
 			if err != nil {
 				if provider != "ollama" && provider != "vllm" {
 					// Only prompt for API key if not local providers
-					fmt.Print("Enter API key: ")
+					log.Printf("Enter API key: ")
 					apiKey, _ = reader.ReadString('\n')
 					apiKey = strings.TrimSpace(apiKey)
 				} else {
@@ -880,88 +881,88 @@ var configureCmd = &cobra.Command{
 			switch provider {
 			case "openai":
 				if apiKey == "" {
-					fmt.Println("Error: API key is required for OpenAI")
+					log.Printf("Error: API key is required for OpenAI")
 					return
 				}
 
 				// Fetch and categorize OpenAI models
 				primaryModels, otherModels, err := getOpenAIModelsAndCategorize(apiKey)
 				if err != nil {
-					fmt.Printf("Error fetching OpenAI models: %v\n", err)
+					log.Printf("Error fetching OpenAI models: %v\n", err)
 					return
 				}
 
 				// Use the paginated selection for OpenAI
 				selectedModels, err = promptForOpenAIModelSelection(primaryModels, otherModels)
 				if err != nil {
-					fmt.Printf("Error selecting models: %v\n", err)
+					log.Printf("Error selecting models: %v\n", err)
 					return
 				}
 
 			case "anthropic":
 				if apiKey == "" {
-					fmt.Println("Error: API key is required for Anthropic")
+					log.Printf("Error: API key is required for Anthropic")
 					return
 				}
 				models := getAnthropicModels()
 				selectedModels, err = promptForModelSelection(models)
 				if err != nil {
-					fmt.Printf("Error selecting models: %v\n", err)
+					log.Printf("Error selecting models: %v\n", err)
 					return
 				}
 
 			case "xai":
 				if apiKey == "" {
-					fmt.Println("Error: API key is required for X.AI")
+					log.Printf("Error: API key is required for X.AI")
 					return
 				}
 				models := getXAIModels()
 				selectedModels, err = promptForModelSelection(models)
 				if err != nil {
-					fmt.Printf("Error selecting models: %v\n", err)
+					log.Printf("Error selecting models: %v\n", err)
 					return
 				}
 
 			case "deepseek":
 				if apiKey == "" {
-					fmt.Println("Error: API key is required for Deepseek")
+					log.Printf("Error: API key is required for Deepseek")
 					return
 				}
 				models := getDeepseekModels()
 				selectedModels, err = promptForModelSelection(models)
 				if err != nil {
-					fmt.Printf("Error selecting models: %v\n", err)
+					log.Printf("Error selecting models: %v\n", err)
 					return
 				}
 
 			case "google":
 				if apiKey == "" {
-					fmt.Println("Error: API key is required for Google")
+					log.Printf("Error: API key is required for Google")
 					return
 				}
 				models := getGoogleModels()
 				selectedModels, err = promptForModelSelection(models)
 				if err != nil {
-					fmt.Printf("Error selecting models: %v\n", err)
+					log.Printf("Error selecting models: %v\n", err)
 					return
 				}
 
 			case "moonshot":
 				if apiKey == "" {
-					fmt.Println("Error: API key is required for Moonshot")
+					log.Printf("Error: API key is required for Moonshot")
 					return
 				}
 				models := getMoonshotModels()
 				selectedModels, err = promptForModelSelection(models)
 				if err != nil {
-					fmt.Printf("Error selecting models: %v\n", err)
+					log.Printf("Error selecting models: %v\n", err)
 					return
 				}
 
 			case "ollama":
 				models, err := getOllamaModels()
 				if err != nil {
-					fmt.Printf("Error fetching Ollama models: %v\n", err)
+					log.Printf("Error fetching Ollama models: %v\n", err)
 					return
 				}
 				modelNames := make([]string, len(models))
@@ -969,19 +970,19 @@ var configureCmd = &cobra.Command{
 					modelNames[i] = model.Name
 				}
 				if len(modelNames) == 0 {
-					fmt.Println("No models found. Please pull a model first using 'ollama pull <model>'")
+					log.Printf("No models found. Please pull a model first using 'ollama pull <model>'")
 					return
 				}
 				selectedModels, err = promptForModelSelection(modelNames)
 				if err != nil {
-					fmt.Printf("Error selecting models: %v\n", err)
+					log.Printf("Error selecting models: %v\n", err)
 					return
 				}
 
 			case "vllm":
 				models, err := getVLLMModels()
 				if err != nil {
-					fmt.Printf("Error fetching vLLM models: %v\n", err)
+					log.Printf("Error fetching vLLM models: %v\n", err)
 					return
 				}
 				modelNames := make([]string, len(models))
@@ -989,12 +990,12 @@ var configureCmd = &cobra.Command{
 					modelNames[i] = model.ID
 				}
 				if len(modelNames) == 0 {
-					fmt.Println("No models found. Please start vLLM server with a model first")
+					log.Printf("No models found. Please start vLLM server with a model first")
 					return
 				}
 				selectedModels, err = promptForModelSelection(modelNames)
 				if err != nil {
-					fmt.Printf("Error selecting models: %v\n", err)
+					log.Printf("Error selecting models: %v\n", err)
 					return
 				}
 			}
@@ -1009,7 +1010,7 @@ var configureCmd = &cobra.Command{
 				// Prompt for modes for each model
 				modes, err := promptForModes(reader, modelName)
 				if err != nil {
-					fmt.Printf("Error configuring modes for model %s: %v\n", modelName, err)
+					log.Printf("Error configuring modes for model %s: %v\n", modelName, err)
 					continue
 				}
 
@@ -1020,38 +1021,38 @@ var configureCmd = &cobra.Command{
 				}
 
 				if err := envConfig.AddModelToProvider(provider, newModel); err != nil {
-					fmt.Printf("Error adding model %s: %v\n", modelName, err)
+					log.Printf("Error adding model %s: %v\n", modelName, err)
 					continue
 				}
 			}
 
 			// Prompt to set default generation model if not using a specific flag for it
 			if setDefaultGenerationModelFlag == "" {
-				fmt.Print("\nDo you want to set or update the default model for workflow generation? (y/n): ")
+				log.Printf("\nDo you want to set or update the default model for workflow generation? (y/n): ")
 				setDefaultGenModelInput, _ := reader.ReadString('\n')
 				if strings.TrimSpace(strings.ToLower(setDefaultGenModelInput)) == "y" {
 					allModels := getAllConfiguredModelNames(envConfig)
 					if len(allModels) == 0 {
-						fmt.Println("No models are currently configured. Cannot set a default generation model.")
+						log.Printf("No models are currently configured. Cannot set a default generation model.")
 					} else {
-						fmt.Println("\nAvailable configured models for default generation:")
+						log.Printf("\nAvailable configured models for default generation:")
 						for i, modelName := range allModels {
-							fmt.Printf("%d. %s\n", i+1, modelName)
+							log.Printf("%d. %s\n", i+1, modelName)
 						}
 						var selectedDefaultModel string
 						for {
-							fmt.Print("Enter the number of the model to set as default: ")
+							log.Printf("Enter the number of the model to set as default: ")
 							selectionInput, _ := reader.ReadString('\n')
 							selectionNum, err := strconv.Atoi(strings.TrimSpace(selectionInput))
 							if err != nil || selectionNum < 1 || selectionNum > len(allModels) {
-								fmt.Println("Invalid selection. Please enter a number from the list.")
+								log.Printf("Invalid selection. Please enter a number from the list.")
 								continue
 							}
 							selectedDefaultModel = allModels[selectionNum-1]
 							break
 						}
 						envConfig.DefaultGenerationModel = selectedDefaultModel
-						fmt.Printf("%s Default generation model set to '%s'\n", greenCheckmark, selectedDefaultModel)
+						log.Printf("%s Default generation model set to '%s'\n", greenCheckmark, selectedDefaultModel)
 					}
 				}
 			}
@@ -1060,26 +1061,26 @@ var configureCmd = &cobra.Command{
 		// Create parent directory if it doesn't exist
 		if dir := filepath.Dir(configPath); dir != "." && dir != "/" {
 			if err := os.MkdirAll(dir, 0755); err != nil {
-				fmt.Printf("Error creating directory: %v\n", err)
+				log.Printf("Error creating directory: %v\n", err)
 				return
 			}
 		}
 
 		// Save configuration
 		if err := config.SaveEnvConfig(configPath, envConfig); err != nil {
-			fmt.Printf("Error saving configuration: %v\n", err)
+			log.Printf("Error saving configuration: %v\n", err)
 			return
 		}
 
 		// Re-encrypt if it was encrypted before
 		if wasEncrypted {
 			if err := config.EncryptConfig(configPath, decryptionPassword); err != nil {
-				fmt.Printf("Error re-encrypting configuration: %v\n", err)
+				log.Printf("Error re-encrypting configuration: %v\n", err)
 				return
 			}
 		}
 
-		fmt.Printf("Configuration saved successfully to %s!\n", configPath)
+		log.Printf("Configuration saved successfully to %s!\n", configPath)
 	},
 }
 
@@ -1097,7 +1098,7 @@ func listConfiguration() {
 		configPath := config.GetEnvPath()
 		cfg, err = config.LoadEnvConfigWithPassword(configPath)
 		if err != nil {
-			fmt.Printf("Error loading configuration: %v\n", err)
+			log.Printf("Error loading configuration: %v\n", err)
 			return
 		}
 	} else {
@@ -1107,68 +1108,68 @@ func listConfiguration() {
 
 	// Get the config path for display purposes
 	configPath := config.GetEnvPath()
-	fmt.Printf("Configuration from %s:\n\n", configPath)
+	log.Printf("Configuration from %s:\n\n", configPath)
 
 	// List default generation model
 	if cfg.DefaultGenerationModel != "" {
-		fmt.Printf("Default Generation Model: %s\n\n", cfg.DefaultGenerationModel)
+		log.Printf("Default Generation Model: %s\n\n", cfg.DefaultGenerationModel)
 	}
 
 	// List memory file if configured
 	memoryPath := config.GetMemoryPath(cfg)
 	if memoryPath != "" {
-		fmt.Printf("Memory File: %s\n\n", memoryPath)
+		log.Printf("Memory File: %s\n\n", memoryPath)
 	}
 
 	// List server configuration if it exists
 	if server := cfg.GetServerConfig(); server != nil {
-		fmt.Println("Server Configuration:")
-		fmt.Printf("Port: %d\n", server.Port)
-		fmt.Printf("Data Directory: %s\n", server.DataDir)
-		fmt.Printf("Authentication Enabled: %v\n", server.Enabled)
+		log.Printf("Server Configuration:")
+		log.Printf("Port: %d\n", server.Port)
+		log.Printf("Data Directory: %s\n", server.DataDir)
+		log.Printf("Authentication Enabled: %v\n", server.Enabled)
 		if server.BearerToken != "" {
-			fmt.Printf("Bearer Token: %s\n", server.BearerToken)
+			log.Printf("Bearer Token: %s\n", server.BearerToken)
 		}
-		fmt.Println()
+		log.Printf("\n")
 	}
 
 	// List databases if they exist
 	if len(cfg.Databases) > 0 {
-		fmt.Println("Database Configurations:")
+		log.Printf("Database Configurations:")
 		for name, db := range cfg.Databases {
-			fmt.Printf("\n%s:\n", name)
-			fmt.Printf("  Type: %s\n", db.Type)
-			fmt.Printf("  Host: %s\n", db.Host)
-			fmt.Printf("  Port: %d\n", db.Port)
-			fmt.Printf("  User: %s\n", db.User)
-			fmt.Printf("  Database: %s\n", db.Database)
+			log.Printf("\n%s:\n", name)
+			log.Printf("  Type: %s\n", db.Type)
+			log.Printf("  Host: %s\n", db.Host)
+			log.Printf("  Port: %d\n", db.Port)
+			log.Printf("  User: %s\n", db.User)
+			log.Printf("  Database: %s\n", db.Database)
 		}
-		fmt.Println()
+		log.Printf("\n")
 	}
 
 	// List providers
 	if len(cfg.Providers) == 0 {
-		fmt.Println("No providers configured.")
+		log.Printf("No providers configured.")
 		return
 	}
 
-	fmt.Println("Configured Providers:")
+	log.Printf("Configured Providers:")
 	for name, provider := range cfg.Providers {
-		fmt.Printf("\n%s:\n", name)
+		log.Printf("\n%s:\n", name)
 		if len(provider.Models) == 0 {
-			fmt.Println("  No models configured")
+			log.Printf("  No models configured")
 			continue
 		}
 		for _, model := range provider.Models {
-			fmt.Printf("  - %s (%s)\n", model.Name, model.Type)
+			log.Printf("  - %s (%s)\n", model.Name, model.Type)
 			if len(model.Modes) > 0 {
 				modeStr := make([]string, len(model.Modes))
 				for i, mode := range model.Modes {
 					modeStr[i] = string(mode)
 				}
-				fmt.Printf("    Modes: %s\n", strings.Join(modeStr, ", "))
+				log.Printf("    Modes: %s\n", strings.Join(modeStr, ", "))
 			} else {
-				fmt.Printf("    Modes: none\n")
+				log.Printf("    Modes: none\n")
 			}
 		}
 	}

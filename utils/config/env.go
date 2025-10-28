@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -75,14 +76,14 @@ var Debug bool
 // DebugLog prints debug information if debug mode is enabled
 func DebugLog(format string, args ...interface{}) {
 	if Debug {
-		fmt.Printf("[DEBUG] "+format+"\n", args...)
+		log.Printf("[DEBUG] "+format+"\n", args...)
 	}
 }
 
 // VerboseLog prints verbose information if verbose mode is enabled
 func VerboseLog(format string, args ...interface{}) {
 	if Verbose {
-		fmt.Printf("[VERBOSE] "+format+"\n", args...)
+		log.Printf("[VERBOSE] "+format+"\n", args...)
 	}
 }
 
@@ -98,9 +99,9 @@ func GetEnvPath() string {
 
 // PromptPassword prompts the user for a password securely
 func PromptPassword(prompt string) (string, error) {
-	fmt.Print(prompt)
+	log.Printf("%s", prompt)
 	password, err := term.ReadPassword(int(syscall.Stdin))
-	fmt.Println() // Add newline after password input
+	log.Printf("\n") // Add newline after password input
 	if err != nil {
 		return "", fmt.Errorf("error reading password: %w", err)
 	}

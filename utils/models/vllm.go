@@ -3,10 +3,12 @@ package models
 import (
 	"context"
 	"fmt"
+	"log"
 	"io"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/kris-hansen/comanda/utils/fileutil"
@@ -18,6 +20,7 @@ import (
 type VLLMProvider struct {
 	verbose  bool
 	endpoint string
+	mu       sync.Mutex
 }
 
 // NewVLLMProvider creates a new vLLM provider instance
@@ -36,10 +39,12 @@ func (v *VLLMProvider) Name() string {
 	return "vllm"
 }
 
-// debugf prints debug information if verbose mode is enabled
+// debugf prints debug information if verbose mode is enabled (thread-safe)
 func (v *VLLMProvider) debugf(format string, args ...interface{}) {
 	if v.verbose {
-		fmt.Printf("[DEBUG][vLLM] "+format+"\n", args...)
+		v.mu.Lock()
+		defer v.mu.Unlock()
+		log.Printf("[DEBUG][vLLM] "+format+"\n", args...)
 	}
 }
 

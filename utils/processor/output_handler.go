@@ -2,6 +2,7 @@ package processor
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,9 +18,9 @@ func min(a, b int) int {
 
 // handleOutput processes the model's response according to the output configuration
 func (p *Processor) handleOutput(modelName string, response string, outputs []string, metrics *PerformanceMetrics) error {
-	p.debugf("Handling %d output(s)", len(outputs))
+	p.debugf("[%s] Handling %d output(s)", modelName, len(outputs))
 	for _, output := range outputs {
-		p.debugf("Processing output: %s", output)
+		p.debugf("[%s] Processing output: %s", modelName, output)
 
 		// Handle MEMORY output
 		if output == "MEMORY" || strings.HasPrefix(output, "MEMORY:") {
@@ -83,11 +84,11 @@ func (p *Processor) handleOutput(modelName string, response string, outputs []st
 				p.debugf("Output event sent successfully")
 			} else {
 				// Fallback to direct console output
-				fmt.Printf("\nResponse from %s:\n%s\n", modelName, response)
+				log.Printf("\nResponse from %s:\n%s\n", modelName, response)
 
 				// Print performance metrics if available
 				if metrics != nil {
-					fmt.Printf("\nPerformance Metrics:\n"+
+					log.Printf("\nPerformance Metrics:\n"+
 						"- Input processing: %d ms\n"+
 						"- Model processing: %d ms\n"+
 						"- Action processing: %d ms\n"+
@@ -98,7 +99,7 @@ func (p *Processor) handleOutput(modelName string, response string, outputs []st
 						metrics.ActionProcessingTime)
 				}
 			}
-			p.debugf("Response written to STDOUT")
+			p.debugf("[%s] Response written to STDOUT", modelName)
 		} else {
 			// Determine the output path based on server mode and runtime directory
 			outputPath := output
@@ -124,22 +125,19 @@ func (p *Processor) handleOutput(modelName string, response string, outputs []st
 			}
 
 			// Write to file
-			p.debugf("Writing response to file: %s", outputPath)
-			fmt.Printf("\n==== DEBUG: Writing to file %s ====\n", outputPath)
-			fmt.Printf("Response length: %d characters\n", len(response))
-			fmt.Printf("First 100 characters: %s\n", response[:min(100, len(response))])
+				p.debugf("[%s] Writing response to file: %s", modelName, outputPath)
+			p.debugf("[%s] Response length: %d characters", modelName, len(response))
+			p.debugf("[%s] First 100 characters: %s", modelName, response[:min(100, len(response))])
 
 			if err := os.WriteFile(outputPath, []byte(response), 0644); err != nil {
 				errMsg := fmt.Sprintf("failed to write response to file %s: %v", outputPath, err)
 				p.debugf(errMsg)
-				fmt.Printf("ERROR: %s\n", errMsg)
 				return fmt.Errorf(errMsg)
 			}
-			p.debugf("Response successfully written to file: %s", outputPath)
+			p.debugf("[%s] Response successfully written to file: %s", modelName, outputPath)
 
-			// Print a message to the console to inform the user
-			fmt.Printf("\nResponse written to file: %s\n", outputPath)
-			fmt.Printf("==== END DEBUG ====\n\n")
+			// Print a simple confirmation to the console
+			log.Printf("\nResponse written to file: %s\n", outputPath)
 		}
 	}
 	return nil

@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -395,16 +396,16 @@ func Run(envConfig *config.EnvConfig) error {
 		return fmt.Errorf("server configuration not found")
 	}
 
-	fmt.Printf("Starting server on port %d...\n", serverConfig.Port)
-	fmt.Printf("Data directory: %s\n", serverConfig.DataDir)
-	fmt.Printf("Runtime directories can be specified with the runtimeDir query parameter\n")
+	log.Printf("Starting server on port %d...\n", serverConfig.Port)
+	log.Printf("Data directory: %s\n", serverConfig.DataDir)
+	log.Printf("Runtime directories can be specified with the runtimeDir query parameter\n")
 
 	if serverConfig.Enabled {
-		fmt.Println("Authentication is enabled. Bearer token required.")
-		fmt.Printf("Example usage: curl -H 'Authorization: Bearer %s' 'http://localhost:%d/process?filename=examples/openai-example.yaml'\n",
+		log.Printf("Authentication is enabled. Bearer token required.\n")
+		log.Printf("Example usage: curl -H 'Authorization: Bearer %s' 'http://localhost:%d/process?filename=examples/openai-example.yaml'\n",
 			maskToken(serverConfig.BearerToken), serverConfig.Port)
 	} else {
-		fmt.Printf("Example usage: curl 'http://localhost:%d/process?filename=examples/openai-example.yaml'\n", serverConfig.Port)
+		log.Printf("Example usage: curl 'http://localhost:%d/process?filename=examples/openai-example.yaml'\n", serverConfig.Port)
 	}
 
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {

@@ -3,7 +3,9 @@ package models
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
+	"sync"
 
 	"github.com/kris-hansen/comanda/utils/fileutil"
 	"github.com/kris-hansen/comanda/utils/retry"
@@ -15,6 +17,7 @@ type DeepseekProvider struct {
 	apiKey  string
 	config  ModelConfig
 	verbose bool
+	mu      sync.Mutex
 }
 
 // NewDeepseekProvider creates a new Deepseek provider instance
@@ -34,10 +37,12 @@ func (d *DeepseekProvider) Name() string {
 	return "deepseek"
 }
 
-// debugf prints debug information if verbose mode is enabled
+// debugf prints debug information if verbose mode is enabled (thread-safe)
 func (d *DeepseekProvider) debugf(format string, args ...interface{}) {
 	if d.verbose {
-		fmt.Printf("[DEBUG][Deepseek] "+format+"\n", args...)
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		log.Printf("[DEBUG][Deepseek] "+format+"\n", args...)
 	}
 }
 

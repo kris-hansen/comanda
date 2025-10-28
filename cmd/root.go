@@ -2,10 +2,12 @@ package cmd
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/kris-hansen/comanda/utils/config"    // Required for input.Input
 	"github.com/kris-hansen/comanda/utils/models"    // Required for models.DetectProvider
@@ -23,12 +25,42 @@ var generateModelName string // Flag for specifying model in generateCmd
 // envConfig holds the loaded environment configuration, available to all commands
 var envConfig *config.EnvConfig
 
+// logFile holds the log file handle for proper cleanup
+var logFile *os.File
+
 var rootCmd = &cobra.Command{
 	Use:   "comanda",
 	Short: "A workflow processor for handling model interactions",
 	Long: `comanda is a command line tool that processes workflow configurations
 for model interactions and executes the specified actions.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+	// Configure log output format (remove timestamps for cleaner debug output)
+		if verbose {
+			log.SetFlags(0)
+			
+			// Optional: Set up file-based logging for debugging sessions
+			// This preserves logs even after the session ends
+			if logFileName := os.Getenv("COMANDA_LOG_FILE"); logFileName != "" {
+				if file, err := os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666); err == nil {
+					logFile = file // Store for cleanup
+					log.SetOutput(file)
+					log.Printf("[INFO] Logging session started at %s\n", time.Now().Format(time.RFC3339))
+				} else {
+					// Fallback: warn user but continue with stdout logging
+					log.Printf("[WARN] Failed to open log file '%s': %v. Continuing with stdout logging.\n", logFileName, err)
+				}
+			}
+		}
+		
+		// Ensure log file is properly closed on application exit (outside conditional)
+		defer func() {
+			if logFile != nil {
+				log.Printf("[INFO] Logging session ended at %s\n", time.Now().Format(time.RFC3339))
+				logFile.Sync() // Flush any remaining data
+				logFile.Close()
+			}
+		}()
+
 		// Set global verbose and debug flags
 		config.Verbose = verbose
 		config.Debug = debug
@@ -36,7 +68,7 @@ for model interactions and executes the specified actions.`,
 		// Get environment file path from COMANDA_ENV or default
 		envPath := config.GetEnvPath()
 		if verbose {
-			fmt.Printf("[DEBUG] Loading environment configuration from %s\n", envPath)
+			log.Printf("[DEBUG] Loading environment configuration from %s\n", envPath)
 		}
 
 		// Load environment configuration
@@ -47,7 +79,7 @@ for model interactions and executes the specified actions.`,
 		}
 
 		if verbose {
-			fmt.Println("[DEBUG] Environment configuration loaded successfully")
+			log.Println("[DEBUG] Environment configuration loaded successfully")
 		}
 
 		return nil
@@ -84,8 +116,8 @@ You can optionally specify a model to use for generation, otherwise the default_
 			return fmt.Errorf("no model specified for generation and no default_generation_model configured. Use --model or configure a default")
 		}
 
-		fmt.Printf("Generating workflow using model: %s\n", modelForGeneration)
-		fmt.Printf("Output file: %s\n", outputFilename)
+		log.Printf("Generating workflow using model: %s\n", modelForGeneration)
+		log.Printf("Output file: %s\n", outputFilename)
 
 		// Prepare the full prompt for the LLM
 		// Use the embedded guide instead of reading from file
@@ -115,7 +147,7 @@ CRITICAL INSTRUCTION: Your entire response must be valid YAML syntax that can be
 		providerConfig, err := envConfig.GetProviderConfig(provider.Name())
 		if err != nil {
 			// If provider is not in envConfig, it might be a public one like Ollama, or an error
-			fmt.Printf("Warning: Provider %s not found in env configuration. Assuming it does not require an API key or is pre-configured.\n", provider.Name())
+			log.Printf("Warning: Provider %s not found in env configuration. Assuming it does not require an API key or is pre-configured.\n", provider.Name())
 		} else {
 			if err := provider.Configure(providerConfig.APIKey); err != nil {
 				return fmt.Errorf("failed to configure provider %s: %w", provider.Name(), err)
@@ -168,7 +200,7 @@ CRITICAL INSTRUCTION: Your entire response must be valid YAML syntax that can be
 			return fmt.Errorf("failed to write generated workflow to '%s': %w", outputFilename, err)
 		}
 
-		fmt.Printf("\n%s Workflow successfully generated and saved to %s\n", "\u2705", outputFilename)
+		log.Printf("\n%s Workflow successfully generated and saved to %s\n", "\u2705", outputFilename)
 		return nil
 	},
 }
@@ -233,7 +265,7 @@ var versionCmd = &cobra.Command{
 	Long:  `All software has versions. This is Comanda's.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		versionStr := getVersionFromFile()
-		fmt.Printf("Comanda version: %s\n", versionStr)
+		log.Printf("Comanda version: %s\n", versionStr)
 	},
 }
 
@@ -248,7 +280,7 @@ func Execute() {
 			cmdPath := strings.Trim(strings.TrimPrefix(errMsg, "unknown command"), `"`+` for "comanda"`)
 			// Check if the unknown command might be a filename intended for 'process'
 			if _, statErr := os.Stat(cmdPath); statErr == nil || os.IsNotExist(statErr) { // if it exists or looks like a path
-				fmt.Printf("To process a file, use the 'process' command:\n\n   comanda process %s\n\n", cmdPath)
+			log.Printf("To process a file, use the 'process' command:\n\n   comanda process %s\n\n", cmdPath)
 			} else {
 				fmt.Fprintln(os.Stderr, err) // Default error for other unknown commands
 			}
