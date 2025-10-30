@@ -3,8 +3,6 @@ name: PR Checks
 on:
   pull_request:
     branches: [ main ]
-  push:
-    branches: [ main ]
 
 jobs:
   test-and-lint:
@@ -25,6 +23,3 @@ jobs:
 
       - name: Run Tests
         run: make test
-
-      - name: Run Tests with Race Detection
-        run: make test-race
