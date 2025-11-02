@@ -73,25 +73,25 @@ var showServerCmd = &cobra.Command{
 			return
 		}
 
-	server := envConfig.GetServerConfig()
-	log.Printf("\nServer Configuration:\n")
-	log.Printf("Port: %d\n", server.Port)
-	log.Printf("Data Directory: %s\n", server.DataDir)
-	log.Printf("Authentication Enabled: %v\n", server.Enabled)
-	if server.BearerToken != "" {
-		log.Printf("Bearer Token: %s\n", server.BearerToken)
-	}
+		server := envConfig.GetServerConfig()
+		log.Printf("\nServer Configuration:\n")
+		log.Printf("Port: %d\n", server.Port)
+		log.Printf("Data Directory: %s\n", server.DataDir)
+		log.Printf("Authentication Enabled: %v\n", server.Enabled)
+		if server.BearerToken != "" {
+			log.Printf("Bearer Token: %s\n", server.BearerToken)
+		}
 
-	// Display CORS configuration
-	log.Printf("\nCORS Configuration:\n")
-	log.Printf("Enabled: %v\n", server.CORS.Enabled)
-	if server.CORS.Enabled {
-		log.Printf("Allowed Origins: %s\n", strings.Join(server.CORS.AllowedOrigins, ", "))
-		log.Printf("Allowed Methods: %s\n", strings.Join(server.CORS.AllowedMethods, ", "))
-		log.Printf("Allowed Headers: %s\n", strings.Join(server.CORS.AllowedHeaders, ", "))
-		log.Printf("Max Age: %d seconds\n", server.CORS.MaxAge)
-	}
-	log.Printf("\n")
+		// Display CORS configuration
+		log.Printf("\nCORS Configuration:\n")
+		log.Printf("Enabled: %v\n", server.CORS.Enabled)
+		if server.CORS.Enabled {
+			log.Printf("Allowed Origins: %s\n", strings.Join(server.CORS.AllowedOrigins, ", "))
+			log.Printf("Allowed Methods: %s\n", strings.Join(server.CORS.AllowedMethods, ", "))
+			log.Printf("Allowed Headers: %s\n", strings.Join(server.CORS.AllowedHeaders, ", "))
+			log.Printf("Max Age: %d seconds\n", server.CORS.MaxAge)
+		}
+		log.Printf("\n")
 	},
 }
 

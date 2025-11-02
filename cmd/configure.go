@@ -109,7 +109,7 @@ func getOpenAIModelsAndCategorize(apiKey string) ([]string, []string, error) {
 			apiModels[model.ID] = true
 		}
 	} else {
-			log.Printf("Warning: Could not fetch models from OpenAI API: %v\nFalling back to known models.\n", err)
+		log.Printf("Warning: Could not fetch models from OpenAI API: %v\nFalling back to known models.\n", err)
 	}
 
 	var primaryModels []string

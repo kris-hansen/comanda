@@ -125,7 +125,7 @@ func (p *Processor) handleOutput(modelName string, response string, outputs []st
 			}
 
 			// Write to file
-				p.debugf("[%s] Writing response to file: %s", modelName, outputPath)
+			p.debugf("[%s] Writing response to file: %s", modelName, outputPath)
 			p.debugf("[%s] Response length: %d characters", modelName, len(response))
 			p.debugf("[%s] First 100 characters: %s", modelName, response[:min(100, len(response))])
 
