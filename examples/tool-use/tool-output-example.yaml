@@ -1,0 +1,42 @@
+# Tool Output Example
+# This example demonstrates using shell tools to process output from workflow steps.
+#
+# SECURITY WARNING: Tool use allows shell command execution. This feature
+# should only be used with workflows from trusted sources.
+#
+# Supported formats:
+# - "tool: <command>"     - Pipe step output through command
+# - "STDOUT|<command>"    - Same as above, explicit STDOUT prefix
+
+# Example 1: Filter JSON with jq
+filter_json:
+  input: sample-data.json
+  model: NA
+  action:
+    - Return the JSON data as-is
+  output: "tool: jq '.items[] | select(.status == \"active\")'"
+  tool:
+    allowlist:
+      - jq
+
+# Example 2: Using grep to filter output
+filter_with_grep:
+  input: logfile.txt
+  model: NA
+  action:
+    - Return the log content
+  output: "STDOUT|grep -i 'error'"
+  tool:
+    allowlist:
+      - grep
+
+# Example 3: Using awk to format output
+format_with_awk:
+  input: data.csv
+  model: NA
+  action:
+    - Return the CSV data
+  output: "tool: awk -F',' '{print $1, $3}'"
+  tool:
+    allowlist:
+      - awk

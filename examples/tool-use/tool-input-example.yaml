@@ -1,0 +1,40 @@
+# Tool Input Example
+# This example demonstrates using shell tools as input sources for workflow steps.
+#
+# SECURITY WARNING: Tool use allows shell command execution. This feature
+# should only be used with workflows from trusted sources.
+#
+# Supported formats:
+# - "tool: <command>"        - Run command, use stdout as input
+# - "tool: STDIN|<command>"  - Pipe previous step's output through command
+
+# Example 1: Simple tool input - list files
+list_directory:
+  input: "tool: ls -la"
+  model: NA
+  action:
+    - Format this directory listing as a summary
+  output: STDOUT
+
+# Example 2: Tool with arguments
+count_go_files:
+  input: "tool: find . -name '*.go' -type f | wc -l"
+  model: NA
+  action:
+    - Report the count of Go files found
+  output: STDOUT
+  tool:
+    allowlist:
+      - find
+      - wc
+
+# Example 3: Using date tool
+show_date:
+  input: "tool: date '+%Y-%m-%d %H:%M:%S'"
+  model: NA
+  action:
+    - Display the current date and time
+  output: STDOUT
+  tool:
+    allowlist:
+      - date

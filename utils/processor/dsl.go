@@ -898,6 +898,66 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 		}
 	}
 
+	// Handle tool input (e.g., "tool: ls -la" or "tool: STDIN|grep pattern")
+	if len(inputs) == 1 && IsToolInput(inputs[0]) {
+		p.debugf("Processing tool input for step: %s", step.Name)
+
+		// Parse the tool command
+		command, usesStdin, err := ParseToolInput(inputs[0])
+		if err != nil {
+			return "", fmt.Errorf("failed to parse tool input for step '%s': %w", step.Name, err)
+		}
+
+		// Create tool executor with step-level configuration
+		toolConfig := &ToolConfig{}
+		if step.Config.ToolConfig != nil {
+			toolConfig.Allowlist = step.Config.ToolConfig.Allowlist
+			toolConfig.Denylist = step.Config.ToolConfig.Denylist
+			toolConfig.Timeout = step.Config.ToolConfig.Timeout
+		}
+		executor := NewToolExecutor(toolConfig, p.verbose, p.debugf)
+
+		// Prepare stdin content if needed
+		var stdinContent string
+		if usesStdin {
+			stdinContent = p.lastOutput
+			p.debugf("Tool input uses STDIN, providing %d bytes of content", len(stdinContent))
+		}
+
+		// Execute the tool
+		stdout, stderr, err := executor.Execute(command, stdinContent)
+		if err != nil {
+			// Include stderr in the error message for debugging
+			if stderr != "" {
+				return "", fmt.Errorf("tool execution failed for step '%s': %w\nstderr: %s", step.Name, err, stderr)
+			}
+			return "", fmt.Errorf("tool execution failed for step '%s': %w", step.Name, err)
+		}
+
+		if stderr != "" {
+			p.debugf("Tool stderr: %s", stderr)
+		}
+
+		p.debugf("Tool output (%d bytes): %s", len(stdout), stdout[:min(200, len(stdout))])
+
+		// Create a temporary file with the tool output
+		tmpFile, err := os.CreateTemp("", "comanda-tool-*.txt")
+		if err != nil {
+			return "", fmt.Errorf("failed to create temp file for tool output: %w", err)
+		}
+		tmpPath := tmpFile.Name()
+		defer os.Remove(tmpPath)
+
+		if _, err := tmpFile.WriteString(stdout); err != nil {
+			tmpFile.Close()
+			return "", fmt.Errorf("failed to write tool output to temp file: %w", err)
+		}
+		tmpFile.Close()
+
+		// Update inputs to use the temporary file
+		inputs = []string{tmpPath}
+	}
+
 	// Check if chunking is enabled for this step
 	var chunkResult *chunker.ChunkResult
 	if step.Config.Chunk != nil && len(inputs) == 1 {
@@ -1157,7 +1217,7 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 
 				// Write this result to its corresponding output file
 				p.debugf("Writing file %d/%d result to output", fileIndex, totalCount)
-				if err := p.handleOutput(modelNames[0], result, substitutedOutputs, metrics); err != nil {
+				if err := p.handleOutputWithToolConfig(modelNames[0], result, substitutedOutputs, metrics, step.Config.ToolConfig); err != nil {
 					errMsg := fmt.Sprintf("Output processing failed for file %d of step '%s': %v",
 						fileIndex, step.Name, err)
 					p.debugf("Output processing error: %s", errMsg)
@@ -1175,7 +1235,7 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 
 			p.debugf("Processing regular output for step '%s': model=%s outputs=%v",
 				step.Name, modelNames[0], outputs)
-			if err := p.handleOutput(modelNames[0], response, outputs, metrics); err != nil {
+			if err := p.handleOutputWithToolConfig(modelNames[0], response, outputs, metrics, step.Config.ToolConfig); err != nil {
 				errMsg := fmt.Sprintf("Output processing failed for step '%s': %v (model=%s outputs=%v)",
 					step.Name, err, modelNames[0], outputs)
 				p.debugf("Output processing error: %s", errMsg)
