@@ -2,24 +2,46 @@
 
 # COMandA (Chain Of Models and Actions)
 
-Transform and process data with AI-powered workflows. **COMandA** is the command-line LLM orchestration engine that lets you build, chain, and deploy AI processing pipelines using simple YAML configurations.
+**Terraform for AI inference.** COMandA is a command-line tool that makes AI pipelines declarative and reproducible—define your LLM workflows in YAML, version control them, and run them anywhere.
 
-comanda acts as a robust infrastructure layer for your AI tasks, similar to how Docker provides a platform for containerization. It empowers developers to define, manage, and execute complex LLM-based processes directly from the command line, integrating seamlessly into existing development and deployment environments.
+![COMandA workflow diagram](comanda-diagram.jpg)
 
-## Why comanda? Key Differentiators
+## What Can You Do With It?
 
-comanda is engineered to be a powerful and developer-centric LLM orchestration tool. Here's how it stands out:
+```bash
+# Analyze a CSV and get insights
+comanda process analyze-sales.yaml < quarterly_data.csv
 
-*   **🔧 Command-line Native:** Compiles directly into your system PATH. You can pipe to it or from it.
-    *   **Benefit:** Enables seamless integration with your existing scripts, CI/CD pipelines, and development workflows. Manage AI processes with the simplicity of standard command-line utilities.
-*   **🤖 Self-improving Workflows:** Create agentic workflows that can generate and optimize new processing pipelines automatically.
-    *   **Benefit:** Build sophisticated systems that adapt and learn, allowing for dynamic and intelligent automation of complex tasks.
-*   **🌐 Server Mode:** Abstract multiple LLM providers (OpenAI, Anthropic, Google, Ollama, vLLM, etc.) behind a unified API.
-    *   **Benefit:** Achieve consistent and scalable inference across diverse models. Easily switch providers or integrate new models without overhauling your application logic.
-*   **📄 Declarative YAML Workflows:** Define complex multi-step AI processes using simple, human-readable YAML.
-    *   **Benefit:** Easily version, share, and manage your AI pipelines. Focus on the logic of your workflows, not on boilerplate code.
-*   **🚀 Rapid Prototyping & Generation:** Generate executable comanda YAML workflows from natural language prompts.
-    *   **Benefit:** Quickly bootstrap new AI tasks and iterate faster, significantly reducing development time for new pipelines.
+# Compare how different models handle the same task
+comanda process model-comparison.yaml
+
+# Scrape a website and summarize it
+comanda process summarize-url.yaml
+
+# Run it as a server for your apps
+comanda server
+curl -X POST "http://localhost:8080/process?filename=classify.yaml" -d '{"input":"customer feedback text"}'
+```
+
+### Real-World Use Cases
+
+- **Data Analysis Pipelines**: Feed CSVs, JSONs, or databases through multiple AI steps—clean, analyze, summarize
+- **Content Processing**: Bulk process documents, extract information, generate reports
+- **Multi-Model Comparison**: Run the same prompt through GPT-4, Claude, and Gemini in parallel, then compare
+- **AI-Powered APIs**: Expose your YAML workflows as HTTP endpoints for web apps
+- **Batch Operations**: Process hundreds of files with wildcard patterns and error handling
+- **Agentic Workflows**: Build self-improving pipelines where one step's output determines the next step
+
+## Why comanda?
+
+| Feature | What It Means |
+|---------|---------------|
+| **Command-line native** | Pipes, redirects, scripts—works like `grep` or `jq` but with AI |
+| **YAML workflows** | Version control your AI pipelines, share them, iterate quickly |
+| **Multi-provider** | OpenAI, Anthropic, Google, X.AI, Ollama, vLLM—switch models without code changes |
+| **Parallel processing** | Run independent steps concurrently, compare models side-by-side |
+| **Server mode** | Turn any workflow into an API endpoint with streaming support |
+| **File & DB support** | Read/write files, databases, URLs, screenshots—not just text |
 
 ## 🚀 Quick Start
 
