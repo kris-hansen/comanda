@@ -230,12 +230,12 @@ var DefaultAllowlist = []string{
 
 // ToolExecutor handles safe execution of shell tools
 type ToolExecutor struct {
-	config     *ToolConfig
-	allowlist  map[string]bool
-	denylist   map[string]bool
-	mu         sync.RWMutex
-	verbose    bool
-	debugFunc  func(format string, args ...interface{})
+	config    *ToolConfig
+	allowlist map[string]bool
+	denylist  map[string]bool
+	mu        sync.RWMutex
+	verbose   bool
+	debugFunc func(format string, args ...interface{})
 }
 
 // NewToolExecutor creates a new tool executor with the given configuration
@@ -398,7 +398,7 @@ func (te *ToolExecutor) Execute(command string, stdin string) (stdout string, st
 	case <-time.After(timeout):
 		// Kill the process
 		if ctx.Process != nil {
-			ctx.Process.Kill()
+			_ = ctx.Process.Kill() // Ignore error - process may have already exited
 		}
 		return "", "", fmt.Errorf("command execution timed out after %d seconds", te.config.Timeout)
 	}
