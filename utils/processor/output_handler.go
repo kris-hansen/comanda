@@ -18,9 +18,66 @@ func min(a, b int) int {
 
 // handleOutput processes the model's response according to the output configuration
 func (p *Processor) handleOutput(modelName string, response string, outputs []string, metrics *PerformanceMetrics) error {
+	return p.handleOutputWithToolConfig(modelName, response, outputs, metrics, nil)
+}
+
+// handleOutputWithToolConfig processes the model's response with optional tool configuration
+func (p *Processor) handleOutputWithToolConfig(modelName string, response string, outputs []string, metrics *PerformanceMetrics, toolConfig *ToolListConfig) error {
 	p.debugf("[%s] Handling %d output(s)", modelName, len(outputs))
 	for _, output := range outputs {
 		p.debugf("[%s] Processing output: %s", modelName, output)
+
+		// Check for tool output (e.g., "tool: jq '.data'" or "STDOUT|grep 'pattern'")
+		if IsToolOutput(output) {
+			p.debugf("[%s] Processing tool output: %s", modelName, output)
+
+			// Parse the tool command
+			command, _, err := ParseToolOutput(output)
+			if err != nil {
+				return fmt.Errorf("failed to parse tool output: %w", err)
+			}
+
+			// Create tool executor
+			executorConfig := &ToolConfig{}
+			if toolConfig != nil {
+				executorConfig.Allowlist = toolConfig.Allowlist
+				executorConfig.Denylist = toolConfig.Denylist
+				executorConfig.Timeout = toolConfig.Timeout
+			}
+			executor := NewToolExecutor(executorConfig, p.verbose, p.debugf)
+
+			// Execute the tool with the response as stdin
+			stdout, stderr, err := executor.Execute("STDIN|"+command, response)
+			if err != nil {
+				if stderr != "" {
+					return fmt.Errorf("tool output execution failed: %w\nstderr: %s", err, stderr)
+				}
+				return fmt.Errorf("tool output execution failed: %w", err)
+			}
+
+			if stderr != "" {
+				p.debugf("[%s] Tool stderr: %s", modelName, stderr)
+			}
+
+			// Output the tool's stdout
+			response = stdout
+			p.debugf("[%s] Tool output (%d bytes)", modelName, len(response))
+
+			// Now send this through STDOUT handling
+			if p.progress != nil {
+				if err := p.progress.WriteProgress(ProgressUpdate{
+					Type:               ProgressOutput,
+					Stdout:             response,
+					PerformanceMetrics: metrics,
+				}); err != nil {
+					p.debugf("[%s] Error sending tool output event: %v", modelName, err)
+					return err
+				}
+			} else {
+				log.Printf("\nTool Output from %s:\n%s\n", modelName, response)
+			}
+			continue
+		}
 
 		// Handle MEMORY output
 		if output == "MEMORY" || strings.HasPrefix(output, "MEMORY:") {

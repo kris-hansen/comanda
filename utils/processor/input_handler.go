@@ -30,6 +30,10 @@ func (p *Processor) isSpecialInput(input string) bool {
 			return true
 		}
 	}
+	// Check for tool input
+	if IsToolInput(input) {
+		return true
+	}
 	return false
 }
 
@@ -156,6 +160,13 @@ func (p *Processor) processInputs(inputs []string) error {
 			}
 			if inputPath == "STDIN" {
 				p.debugf("Skipping STDIN input as it's handled in Process()")
+				continue
+			}
+			// Handle tool input
+			if IsToolInput(inputPath) {
+				p.debugf("Processing tool input: %s", inputPath)
+				// Tool inputs are processed separately and their output is stored in lastOutput
+				// The actual execution happens in processStep when we have the full context
 				continue
 			}
 			p.debugf("Processing special input: %s", inputPath)

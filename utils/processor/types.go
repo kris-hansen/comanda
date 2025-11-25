@@ -8,18 +8,26 @@ type ChunkConfig struct {
 	MaxChunks int    `yaml:"max_chunks"` // Limit total chunks to prevent overload
 }
 
+// ToolListConfig allows specifying tool allowlist/denylist at the step level
+type ToolListConfig struct {
+	Allowlist []string `yaml:"allowlist"` // Commands explicitly allowed
+	Denylist  []string `yaml:"denylist"`  // Commands explicitly denied (takes precedence)
+	Timeout   int      `yaml:"timeout"`   // Timeout in seconds for tool execution
+}
+
 // StepConfig represents the configuration for a single step
 type StepConfig struct {
-	Type       string       `yaml:"type"`            // Step type (default is standard LLM step)
-	Input      interface{}  `yaml:"input"`           // Can be string or map[string]interface{}
-	Model      interface{}  `yaml:"model"`           // Can be string or []string
-	Action     interface{}  `yaml:"action"`          // Can be string or []string
-	Output     interface{}  `yaml:"output"`          // Can be string or []string
-	NextAction interface{}  `yaml:"next-action"`     // Can be string or []string
-	BatchMode  string       `yaml:"batch_mode"`      // How to process multiple files: "combined" (default) or "individual"
-	SkipErrors bool         `yaml:"skip_errors"`     // Whether to continue processing if some files fail
-	Chunk      *ChunkConfig `yaml:"chunk,omitempty"` // Configuration for chunking large files
-	Memory     bool         `yaml:"memory"`          // Whether to include memory context in this step
+	Type       string          `yaml:"type"`            // Step type (default is standard LLM step)
+	Input      interface{}     `yaml:"input"`           // Can be string, map, or "tool: command"
+	Model      interface{}     `yaml:"model"`           // Can be string or []string
+	Action     interface{}     `yaml:"action"`          // Can be string or []string
+	Output     interface{}     `yaml:"output"`          // Can be string, []string, or "tool: command" / "STDOUT|command"
+	NextAction interface{}     `yaml:"next-action"`     // Can be string or []string
+	BatchMode  string          `yaml:"batch_mode"`      // How to process multiple files: "combined" (default) or "individual"
+	SkipErrors bool            `yaml:"skip_errors"`     // Whether to continue processing if some files fail
+	Chunk      *ChunkConfig    `yaml:"chunk,omitempty"` // Configuration for chunking large files
+	Memory     bool            `yaml:"memory"`          // Whether to include memory context in this step
+	ToolConfig *ToolListConfig `yaml:"tool,omitempty"`  // Tool execution configuration for this step
 
 	// OpenAI Responses API specific fields
 	Instructions       string                   `yaml:"instructions"`         // System message
