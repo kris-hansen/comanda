@@ -3,6 +3,7 @@ package processor
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"os/exec"
 	"strings"
 	"sync"
@@ -291,6 +292,7 @@ func (te *ToolExecutor) IsAllowed(command string) (bool, string) {
 
 	// Check denylist first (takes precedence)
 	if te.denylist[baseCmd] {
+		log.Printf("[SECURITY] Blocked command '%s': command is in the denylist and cannot be executed", baseCmd)
 		return false, fmt.Sprintf("command '%s' is in the denylist and cannot be executed", baseCmd)
 	}
 
