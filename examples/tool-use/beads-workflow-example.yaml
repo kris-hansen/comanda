@@ -1,0 +1,31 @@
+# Beads Workflow Example
+# This example demonstrates how to use the 'bd' (beads) tool to list issues
+# and generate a summary workflow.
+#
+# SECURITY NOTE: Tool use allows shell command execution. Only run workflows
+# from trusted sources. Commands are subject to allowlist/denylist controls.
+
+# Step 1: List all beads issues using the bd tool
+list_beads:
+  input: "tool: bd list --json"
+  model: NA
+  action:
+    - Pass through the JSON data without modification
+  output: STDOUT
+  tool:
+    allowlist:
+      - bd
+    timeout: 30
+
+# Alternative example: Use tool with filtering
+# This pipes STDIN through a grep command to filter results
+# list_filtered_beads:
+#   input: "tool: bd list"
+#   model: NA
+#   action:
+#     - Pass through the data
+#   output: "STDOUT|grep -i 'open'"
+#   tool:
+#     allowlist:
+#       - bd
+#       - grep
