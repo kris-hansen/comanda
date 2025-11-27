@@ -34,21 +34,20 @@ var rootCmd = &cobra.Command{
 	Long: `comanda is a command line tool that processes workflow configurations
 for model interactions and executes the specified actions.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		// Configure log output format (remove timestamps for cleaner debug output)
-		if verbose {
-			log.SetFlags(0)
+		// Configure log output format - remove timestamps for cleaner CLI output
+		// Server mode sets its own log flags with timestamps
+		log.SetFlags(0)
 
-			// Optional: Set up file-based logging for debugging sessions
-			// This preserves logs even after the session ends
-			if logFileName := os.Getenv("COMANDA_LOG_FILE"); logFileName != "" {
-				if file, err := os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666); err == nil {
-					logFile = file // Store for cleanup
-					log.SetOutput(file)
-					log.Printf("[INFO] Logging session started at %s\n", time.Now().Format(time.RFC3339))
-				} else {
-					// Fallback: warn user but continue with stdout logging
-					log.Printf("[WARN] Failed to open log file '%s': %v. Continuing with stdout logging.\n", logFileName, err)
-				}
+		// Optional: Set up file-based logging for debugging sessions
+		// This preserves logs even after the session ends
+		if logFileName := os.Getenv("COMANDA_LOG_FILE"); logFileName != "" {
+			if file, err := os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666); err == nil {
+				logFile = file // Store for cleanup
+				log.SetOutput(file)
+				log.Printf("[INFO] Logging session started at %s\n", time.Now().Format(time.RFC3339))
+			} else {
+				// Fallback: warn user but continue with stdout logging
+				log.Printf("[WARN] Failed to open log file '%s': %v. Continuing with stdout logging.\n", logFileName, err)
 			}
 		}
 
