@@ -40,20 +40,26 @@ const greenCheckmark = "\u2705"
 
 // Primary OpenAI models based on the latest o-series and flagship models
 var primaryOpenAIModels = []string{
-	"gpt-4o",               // Appears first in user's list
-	"gpt-4o-audio-preview", // Appears second
-	"o1",                   // Appears third
-	"o3-mini",              // Appears fourth
-	"o1-pro",               // Appears fifth
-	"o4-mini",              // Appears sixth
-	"gpt-4.1",              // Appears seventh
-	// Models from the image that might not be returned by ListModels API
-	"o3-pro",            // Responses API only model
-	"o3",                // Base model
-	"chatgpt-4o-latest", // ChatGPT variant
+	// GPT-5.1 series (latest)
+	"gpt-5.1",
+	"gpt-5.1-mini",
+	"gpt-5.1-nano",
+	// GPT-5 series
 	"gpt-5",
 	"gpt-5-mini",
 	"gpt-5-nano",
+	// GPT-4.1 and 4o series
+	"gpt-4.1",
+	"gpt-4o",
+	"gpt-4o-audio-preview",
+	"chatgpt-4o-latest",
+	// o-series reasoning models
+	"o3-pro",
+	"o3",
+	"o3-mini",
+	"o1-pro",
+	"o1",
+	"o4-mini",
 }
 
 // Patterns for unsupported model types that should be excluded from selection
