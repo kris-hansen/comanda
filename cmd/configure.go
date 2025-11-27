@@ -189,6 +189,39 @@ func getOpenAIModels(apiKey string) ([]string, error) {
 	return allModels, nil
 }
 
+// getAnthropicModelsAndCategorize fetches and categorizes Anthropic models
+// Primary models are the main Claude family models, others are additional models from the API
+func getAnthropicModelsAndCategorize(apiKey string) ([]string, []string, error) {
+	// Get primary models from the registry (these are the known, curated models)
+	registry := models.GetRegistry()
+	primaryModels := registry.GetModels("anthropic")
+
+	// Try to fetch additional models from the API
+	var otherModels []string
+	if apiKey != "" {
+		apiModels, err := models.ListAnthropicModels(apiKey)
+		if err != nil {
+			log.Printf("Warning: Could not fetch models from Anthropic API: %v\nUsing known models only.\n", err)
+		} else {
+			// Create a set of primary models for quick lookup
+			primarySet := make(map[string]bool)
+			for _, m := range primaryModels {
+				primarySet[m] = true
+			}
+
+			// Add any API models not in the primary list to other models
+			for _, apiModel := range apiModels {
+				if !primarySet[apiModel] {
+					otherModels = append(otherModels, apiModel)
+				}
+			}
+			sort.Strings(otherModels)
+		}
+	}
+
+	return primaryModels, otherModels, nil
+}
+
 func getAnthropicModels() []string {
 	// Get models from the central registry
 	registry := models.GetRegistry()
@@ -521,6 +554,74 @@ func promptForOpenAIModelSelection(primaryModels []string, otherModels []string)
 		} else if input == "p" && !showingPrimary {
 			showingPrimary = true
 			log.Printf("\nPrimary OpenAI Models:\n")
+			for i, model := range primaryModels {
+				log.Printf("%d. %s\n", i+1, model)
+			}
+			continue
+		}
+
+		// Parse selection
+		selected, err := parseModelSelection(input, len(allModels))
+		if err != nil {
+			log.Printf("Error: %v\nPlease try again.\n", err)
+			continue
+		}
+
+		if len(selected) == 0 {
+			log.Printf("No valid selections made. Please try again.\n")
+			continue
+		}
+
+		// Convert selected numbers to model names
+		selectedModels := make([]string, len(selected))
+		for i, num := range selected {
+			selectedModels[i] = allModels[num-1]
+		}
+
+		return selectedModels, nil
+	}
+}
+
+// promptForAnthropicModelSelection handles the paginated selection of Anthropic models
+func promptForAnthropicModelSelection(primaryModels []string, otherModels []string) ([]string, error) {
+	reader := bufio.NewReader(os.Stdin)
+
+	// Display primary models first
+	log.Printf("\nPrimary Anthropic Models:\n")
+	for i, model := range primaryModels {
+		log.Printf("%d. %s\n", i+1, model)
+	}
+
+	// Combined list for selection validation
+	allModels := append([]string{}, primaryModels...)
+	allModels = append(allModels, otherModels...)
+
+	// Track which page we're on
+	showingPrimary := true
+
+	for {
+		var prompt string
+		if showingPrimary && len(otherModels) > 0 {
+			prompt = "\nEnter model numbers, or 'm' to see more models from API: "
+		} else {
+			prompt = "\nEnter model numbers, or 'p' to see primary models: "
+		}
+
+		log.Printf(prompt)
+		input, _ := reader.ReadString('\n')
+		input = strings.TrimSpace(input)
+
+		// Handle pagination
+		if input == "m" && showingPrimary {
+			showingPrimary = false
+			log.Printf("\nOther Anthropic Models (from API):\n")
+			for i, model := range otherModels {
+				log.Printf("%d. %s\n", i+len(primaryModels)+1, model)
+			}
+			continue
+		} else if input == "p" && !showingPrimary {
+			showingPrimary = true
+			log.Printf("\nPrimary Anthropic Models:\n")
 			for i, model := range primaryModels {
 				log.Printf("%d. %s\n", i+1, model)
 			}
@@ -910,8 +1011,20 @@ var configureCmd = &cobra.Command{
 					log.Printf("Error: API key is required for Anthropic")
 					return
 				}
-				models := getAnthropicModels()
-				selectedModels, err = promptForModelSelection(models)
+
+				// Fetch and categorize Anthropic models (API discovery + registry)
+				primaryModels, otherModels, err := getAnthropicModelsAndCategorize(apiKey)
+				if err != nil {
+					log.Printf("Error fetching Anthropic models: %v\n", err)
+					return
+				}
+
+				// Use paginated selection if there are other models from the API
+				if len(otherModels) > 0 {
+					selectedModels, err = promptForAnthropicModelSelection(primaryModels, otherModels)
+				} else {
+					selectedModels, err = promptForModelSelection(primaryModels)
+				}
 				if err != nil {
 					log.Printf("Error selecting models: %v\n", err)
 					return
