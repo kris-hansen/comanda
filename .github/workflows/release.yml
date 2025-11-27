@@ -237,7 +237,7 @@ jobs:
           FORMULA_FILE="${{ env.FORMULA_NAME }}"
           # Remove 'v' prefix for version number
           VERSION_NO_V=$(echo "${{ env.NEW_VERSION }}" | sed 's/^v//')
-          
+
           echo "Updating $FORMULA_FILE for version $VERSION_NO_V"
           # Update version
           sed -i.bak "s/^  version .*/  version \"${VERSION_NO_V}\"/" "$FORMULA_FILE"
@@ -245,10 +245,12 @@ jobs:
           sed -i.bak "s|^  url .*|  url \"https://github.com/${{ env.COMMA_REPO_OWNER }}/${{ env.COMMA_REPO_NAME }}/archive/refs/tags/${{ env.NEW_VERSION }}.tar.gz\"|" "$FORMULA_FILE"
           # Update sha256 for the source tarball
           sed -i.bak "s/^  sha256 .*/  sha256 \"${{ env.SOURCE_SHA256 }}\"/" "$FORMULA_FILE"
+          # Update install method with version ldflags
+          sed -i.bak 's|system "go", "build", \*std_go_args(ldflags: "-s -w")|system "go", "build", *std_go_args(ldflags: "-s -w -X github.com/kris-hansen/comanda/cmd.version=v#{version}")|' "$FORMULA_FILE"
           # Remove existing bottle block
           sed -i.bak '/^[[:space:]]*bottle do/,/^[[:space:]]*end/d' "$FORMULA_FILE"
           rm -f "${FORMULA_FILE}.bak"
-          
+
           echo "--- Updated $FORMULA_FILE (Initial) ---"
           cat "$FORMULA_FILE"
           echo "---------------------------------------"
