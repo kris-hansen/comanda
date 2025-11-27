@@ -34,21 +34,20 @@ var rootCmd = &cobra.Command{
 	Long: `comanda is a command line tool that processes workflow configurations
 for model interactions and executes the specified actions.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		// Configure log output format (remove timestamps for cleaner debug output)
-		if verbose {
-			log.SetFlags(0)
+		// Configure log output format - remove timestamps for cleaner CLI output
+		// Server mode sets its own log flags with timestamps
+		log.SetFlags(0)
 
-			// Optional: Set up file-based logging for debugging sessions
-			// This preserves logs even after the session ends
-			if logFileName := os.Getenv("COMANDA_LOG_FILE"); logFileName != "" {
-				if file, err := os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666); err == nil {
-					logFile = file // Store for cleanup
-					log.SetOutput(file)
-					log.Printf("[INFO] Logging session started at %s\n", time.Now().Format(time.RFC3339))
-				} else {
-					// Fallback: warn user but continue with stdout logging
-					log.Printf("[WARN] Failed to open log file '%s': %v. Continuing with stdout logging.\n", logFileName, err)
-				}
+		// Optional: Set up file-based logging for debugging sessions
+		// This preserves logs even after the session ends
+		if logFileName := os.Getenv("COMANDA_LOG_FILE"); logFileName != "" {
+			if file, err := os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666); err == nil {
+				logFile = file // Store for cleanup
+				log.SetOutput(file)
+				log.Printf("[INFO] Logging session started at %s\n", time.Now().Format(time.RFC3339))
+			} else {
+				// Fallback: warn user but continue with stdout logging
+				log.Printf("[WARN] Failed to open log file '%s': %v. Continuing with stdout logging.\n", logFileName, err)
 			}
 		}
 
@@ -215,32 +214,16 @@ func init() {
 	rootCmd.AddCommand(versionCmd) // Add the version command
 }
 
-// getVersionFromFile attempts to read the version from the VERSION file
-func getVersionFromFile() string {
-	// Try to find the VERSION file in the executable's directory first
-	execPath, err := os.Executable()
-	if err == nil {
-		execDir := filepath.Dir(execPath)
-		versionPath := filepath.Join(execDir, "VERSION")
-		content, err := os.ReadFile(versionPath)
-		if err == nil {
-			return strings.TrimSpace(string(content))
-		}
+// getVersion returns the version string.
+// Priority: build-time ldflags > VERSION file (for development)
+func getVersion() string {
+	// 1. Use build-time injected version if available (set via ldflags)
+	if version != "" {
+		return version
 	}
 
-	// If not found, try the current working directory
-	cwd, err := os.Getwd()
-	if err == nil {
-		versionPath := filepath.Join(cwd, "VERSION")
-		content, err := os.ReadFile(versionPath)
-		if err == nil {
-			return strings.TrimSpace(string(content))
-		}
-	}
-
-	// If still not found, try relative to the source file (for development)
-	// This assumes the VERSION file is in the project root
-	// and cmd/root.go is in the cmd directory
+	// 2. For local development: try to read VERSION file from project root
+	// This allows `go run .` to show the correct version without ldflags
 	_, filename, _, ok := runtime.Caller(0)
 	if ok {
 		sourceDir := filepath.Dir(filename)
@@ -248,16 +231,11 @@ func getVersionFromFile() string {
 		versionPath := filepath.Join(projectRoot, "VERSION")
 		content, err := os.ReadFile(versionPath)
 		if err == nil {
-			return strings.TrimSpace(string(content))
+			return "v" + strings.TrimSpace(string(content)) + "-dev"
 		}
 	}
 
-	// Fallback to the build-time version or unknown
-	if version != "" {
-		return version
-	}
-
-	return "unknown"
+	return "unknown (build with: go build -ldflags \"-X 'github.com/kris-hansen/comanda/cmd.version=vX.Y.Z'\")"
 }
 
 // versionCmd represents the version command
@@ -266,8 +244,7 @@ var versionCmd = &cobra.Command{
 	Short: "Print the version number of Comanda",
 	Long:  `All software has versions. This is Comanda's.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		versionStr := getVersionFromFile()
-		log.Printf("Comanda version: %s\n", versionStr)
+		log.Printf("Comanda version: %s\n", getVersion())
 	},
 }
 
