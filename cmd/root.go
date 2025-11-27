@@ -214,32 +214,16 @@ func init() {
 	rootCmd.AddCommand(versionCmd) // Add the version command
 }
 
-// getVersionFromFile attempts to read the version from the VERSION file
-func getVersionFromFile() string {
-	// Try to find the VERSION file in the executable's directory first
-	execPath, err := os.Executable()
-	if err == nil {
-		execDir := filepath.Dir(execPath)
-		versionPath := filepath.Join(execDir, "VERSION")
-		content, err := os.ReadFile(versionPath)
-		if err == nil {
-			return strings.TrimSpace(string(content))
-		}
+// getVersion returns the version string.
+// Priority: build-time ldflags > VERSION file (for development)
+func getVersion() string {
+	// 1. Use build-time injected version if available (set via ldflags)
+	if version != "" {
+		return version
 	}
 
-	// If not found, try the current working directory
-	cwd, err := os.Getwd()
-	if err == nil {
-		versionPath := filepath.Join(cwd, "VERSION")
-		content, err := os.ReadFile(versionPath)
-		if err == nil {
-			return strings.TrimSpace(string(content))
-		}
-	}
-
-	// If still not found, try relative to the source file (for development)
-	// This assumes the VERSION file is in the project root
-	// and cmd/root.go is in the cmd directory
+	// 2. For local development: try to read VERSION file from project root
+	// This allows `go run .` to show the correct version without ldflags
 	_, filename, _, ok := runtime.Caller(0)
 	if ok {
 		sourceDir := filepath.Dir(filename)
@@ -247,16 +231,11 @@ func getVersionFromFile() string {
 		versionPath := filepath.Join(projectRoot, "VERSION")
 		content, err := os.ReadFile(versionPath)
 		if err == nil {
-			return strings.TrimSpace(string(content))
+			return "v" + strings.TrimSpace(string(content)) + "-dev"
 		}
 	}
 
-	// Fallback to the build-time version or unknown
-	if version != "" {
-		return version
-	}
-
-	return "unknown"
+	return "unknown (build with: go build -ldflags \"-X 'github.com/kris-hansen/comanda/cmd.version=vX.Y.Z'\")"
 }
 
 // versionCmd represents the version command
@@ -265,8 +244,7 @@ var versionCmd = &cobra.Command{
 	Short: "Print the version number of Comanda",
 	Long:  `All software has versions. This is Comanda's.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		versionStr := getVersionFromFile()
-		log.Printf("Comanda version: %s\n", versionStr)
+		log.Printf("Comanda version: %s\n", getVersion())
 	},
 }
 
