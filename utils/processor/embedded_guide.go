@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/kris-hansen/comanda/utils/models"
+	"gopkg.in/yaml.v3"
 )
 
 // GetEmbeddedLLMGuide returns the Comanda YAML DSL Guide for LLM consumption
@@ -39,6 +40,79 @@ func GetEmbeddedLLMGuideWithModels(availableModels []string) string {
 	)
 
 	return guide
+}
+
+// ValidateWorkflowModels parses a workflow YAML and validates that all model
+// references are in the list of available models. Returns a list of invalid
+// model names found, or nil if all models are valid.
+func ValidateWorkflowModels(yamlContent string, availableModels []string) []string {
+	if len(availableModels) == 0 {
+		// No validation possible without a list of available models
+		return nil
+	}
+
+	// Create a set for fast lookup
+	validModels := make(map[string]bool)
+	for _, m := range availableModels {
+		validModels[strings.ToLower(m)] = true
+	}
+
+	// Parse the YAML into a generic map structure
+	var workflow map[string]interface{}
+	if err := yaml.Unmarshal([]byte(yamlContent), &workflow); err != nil {
+		// If we can't parse, we can't validate - let runtime handle it
+		return nil
+	}
+
+	var invalidModels []string
+	seen := make(map[string]bool) // Avoid duplicates
+
+	// Walk through each step and extract model references
+	for _, stepValue := range workflow {
+		stepMap, ok := stepValue.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		// Check direct model field
+		invalidModels = append(invalidModels, extractInvalidModels(stepMap["model"], validModels, seen)...)
+
+		// Check generate block
+		if generate, ok := stepMap["generate"].(map[string]interface{}); ok {
+			invalidModels = append(invalidModels, extractInvalidModels(generate["model"], validModels, seen)...)
+		}
+	}
+
+	return invalidModels
+}
+
+// extractInvalidModels extracts model names from a model field value and returns
+// those not in the validModels set
+func extractInvalidModels(modelField interface{}, validModels map[string]bool, seen map[string]bool) []string {
+	var invalid []string
+
+	switch v := modelField.(type) {
+	case string:
+		if v != "" && strings.ToUpper(v) != "NA" {
+			lower := strings.ToLower(v)
+			if !validModels[lower] && !seen[lower] {
+				invalid = append(invalid, v)
+				seen[lower] = true
+			}
+		}
+	case []interface{}:
+		for _, item := range v {
+			if s, ok := item.(string); ok && s != "" && strings.ToUpper(s) != "NA" {
+				lower := strings.ToLower(s)
+				if !validModels[lower] && !seen[lower] {
+					invalid = append(invalid, s)
+					seen[lower] = true
+				}
+			}
+		}
+	}
+
+	return invalid
 }
 
 // formatModelsList formats a list of models as a comma-separated string with code formatting
