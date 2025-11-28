@@ -120,25 +120,12 @@ You can optionally specify a model to use for generation, otherwise the default_
 		log.Printf("Generating workflow using model: %s\n", modelForGeneration)
 		log.Printf("Output file: %s\n", outputFilename)
 
-		// Prepare the full prompt for the LLM
-		// Use the embedded guide instead of reading from file
-		dslGuide := processor.EmbeddedLLMGuide
-
-		fullPrompt := fmt.Sprintf(`SYSTEM: You are a YAML generator. You MUST output ONLY valid YAML content. No explanations, no markdown, no code blocks, no commentary - just raw YAML.
-
---- BEGIN COMANDA DSL SPECIFICATION ---
-%s
---- END COMANDA DSL SPECIFICATION ---
-
-User's request: %s
-
-CRITICAL INSTRUCTION: Your entire response must be valid YAML syntax that can be directly saved to a .yaml file. Do not include ANY text before or after the YAML content. Start your response with the first line of YAML and end with the last line of YAML.`,
-			dslGuide, userPrompt)
+		// Get available models from the environment config
+		// This ensures the LLM only uses models that are actually configured
+		availableModels := envConfig.GetAllConfiguredModels()
+		dslGuide := processor.GetEmbeddedLLMGuideWithModels(availableModels)
 
 		// Get the provider
-		// Note: This assumes models.DetectProvider and provider.Configure are correctly set up.
-		// The provider instance needs to be configured with an API key.
-		// This logic might need to be more robust, potentially calling a configure method on the provider.
 		provider := models.DetectProvider(modelForGeneration)
 		if provider == nil {
 			return fmt.Errorf("could not detect provider for model: %s", modelForGeneration)
@@ -147,7 +134,6 @@ CRITICAL INSTRUCTION: Your entire response must be valid YAML syntax that can be
 		// Attempt to configure the provider with API key from envConfig
 		providerConfig, err := envConfig.GetProviderConfig(provider.Name())
 		if err != nil {
-			// If provider is not in envConfig, it might be a public one like Ollama, or an error
 			log.Printf("Warning: Provider %s not found in env configuration. Assuming it does not require an API key or is pre-configured.\n", provider.Name())
 		} else {
 			if err := provider.Configure(providerConfig.APIKey); err != nil {
@@ -156,43 +142,41 @@ CRITICAL INSTRUCTION: Your entire response must be valid YAML syntax that can be
 		}
 		provider.SetVerbose(verbose)
 
-		// Call the LLM
-		// The SendPrompt method is part of the models.Provider interface.
-		generatedResponse, err := provider.SendPrompt(modelForGeneration, fullPrompt)
-		if err != nil {
-			return fmt.Errorf("LLM execution failed for model '%s': %w", modelForGeneration, err)
-		}
+		// Generate workflow with validation and retry
+		var yamlContent string
+		var invalidModels []string
+		maxAttempts := 2
 
-		// Extract YAML content from the response
-		yamlContent := generatedResponse
-
-		// Check if the response contains code blocks
-		if strings.Contains(generatedResponse, "```yaml") {
-			// Extract content between ```yaml and ```
-			startMarker := "```yaml"
-			endMarker := "```"
-
-			startIdx := strings.Index(generatedResponse, startMarker)
-			if startIdx != -1 {
-				startIdx += len(startMarker)
-				// Find the next ``` after the start marker
-				remaining := generatedResponse[startIdx:]
-				endIdx := strings.Index(remaining, endMarker)
-				if endIdx != -1 {
-					yamlContent = strings.TrimSpace(remaining[:endIdx])
-				}
+		for attempt := 1; attempt <= maxAttempts; attempt++ {
+			// Build the prompt
+			var prompt string
+			if attempt == 1 {
+				prompt = buildGeneratePrompt(dslGuide, userPrompt, nil)
+			} else {
+				// Retry with specific feedback about invalid models
+				log.Printf("Retrying generation due to invalid model(s): %v\n", invalidModels)
+				prompt = buildGeneratePrompt(dslGuide, userPrompt, invalidModels)
 			}
-		} else if strings.Contains(generatedResponse, "```") {
-			// Try generic code block
-			parts := strings.Split(generatedResponse, "```")
-			if len(parts) >= 3 {
-				// Take the content of the first code block
-				yamlContent = strings.TrimSpace(parts[1])
-				// Remove language identifier if present (e.g., "yaml" at the start)
-				lines := strings.Split(yamlContent, "\n")
-				if len(lines) > 0 && !strings.Contains(lines[0], ":") {
-					yamlContent = strings.Join(lines[1:], "\n")
-				}
+
+			// Call the LLM
+			generatedResponse, err := provider.SendPrompt(modelForGeneration, prompt)
+			if err != nil {
+				return fmt.Errorf("LLM execution failed for model '%s': %w", modelForGeneration, err)
+			}
+
+			// Extract YAML content from the response
+			yamlContent = extractYAMLContent(generatedResponse)
+
+			// Validate model names in the generated workflow
+			invalidModels = processor.ValidateWorkflowModels(yamlContent, availableModels)
+			if len(invalidModels) == 0 {
+				// All models are valid, we're done
+				break
+			}
+
+			if attempt == maxAttempts {
+				// Final attempt still has invalid models - warn but continue
+				log.Printf("Warning: Generated workflow contains invalid model(s): %v. These may fail at runtime.\n", invalidModels)
 			}
 		}
 
@@ -204,6 +188,61 @@ CRITICAL INSTRUCTION: Your entire response must be valid YAML syntax that can be
 		log.Printf("\n%s Workflow successfully generated and saved to %s\n", "\u2705", outputFilename)
 		return nil
 	},
+}
+
+// buildGeneratePrompt creates the prompt for workflow generation
+func buildGeneratePrompt(dslGuide, userPrompt string, invalidModels []string) string {
+	basePrompt := fmt.Sprintf(`SYSTEM: You are a YAML generator. You MUST output ONLY valid YAML content. No explanations, no markdown, no code blocks, no commentary - just raw YAML.
+
+--- BEGIN COMANDA DSL SPECIFICATION ---
+%s
+--- END COMANDA DSL SPECIFICATION ---
+
+User's request: %s
+
+CRITICAL INSTRUCTION: Your entire response must be valid YAML syntax that can be directly saved to a .yaml file. Do not include ANY text before or after the YAML content. Start your response with the first line of YAML and end with the last line of YAML.`,
+		dslGuide, userPrompt)
+
+	if len(invalidModels) > 0 {
+		basePrompt += fmt.Sprintf(`
+
+IMPORTANT CORRECTION: Your previous response used invalid model name(s): %v
+You MUST only use models from the "Supported Models" list in the specification above. Please regenerate the workflow using ONLY valid model names.`, invalidModels)
+	}
+
+	return basePrompt
+}
+
+// extractYAMLContent extracts YAML from an LLM response, handling code blocks
+func extractYAMLContent(response string) string {
+	yamlContent := response
+
+	// Check if the response contains code blocks
+	if strings.Contains(response, "```yaml") {
+		startMarker := "```yaml"
+		endMarker := "```"
+
+		startIdx := strings.Index(response, startMarker)
+		if startIdx != -1 {
+			startIdx += len(startMarker)
+			remaining := response[startIdx:]
+			endIdx := strings.Index(remaining, endMarker)
+			if endIdx != -1 {
+				yamlContent = strings.TrimSpace(remaining[:endIdx])
+			}
+		}
+	} else if strings.Contains(response, "```") {
+		parts := strings.Split(response, "```")
+		if len(parts) >= 3 {
+			yamlContent = strings.TrimSpace(parts[1])
+			lines := strings.Split(yamlContent, "\n")
+			if len(lines) > 0 && !strings.Contains(lines[0], ":") {
+				yamlContent = strings.Join(lines[1:], "\n")
+			}
+		}
+	}
+
+	return yamlContent
 }
 
 func init() {
