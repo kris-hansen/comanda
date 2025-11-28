@@ -34,42 +34,62 @@ func NewModelRegistry() *ModelRegistry {
 func (r *ModelRegistry) initializeDefaultModels() {
 	// Anthropic models
 	r.RegisterModels("anthropic", []string{
-		"claude-3-5-sonnet-20241022",
-		"claude-3-5-sonnet-latest",
-		"claude-3-5-haiku-latest",
+		// Claude 4.5 series (latest)
+		"claude-sonnet-4-5-20250929",
+		"claude-sonnet-4-5",
+		"claude-haiku-4-5-20251001",
+		"claude-haiku-4-5",
+		"claude-opus-4-5-20251101",
+		"claude-opus-4-5",
+		// Claude 4.x series
+		"claude-opus-4-1-20250805",
+		"claude-opus-4-1",
+		"claude-opus-4-20250514",
+		"claude-sonnet-4-20250514",
+		// Claude 3.7 series
 		"claude-3-7-sonnet-20250219",
 		"claude-3-7-sonnet-latest",
+		// Claude 3.5 series (legacy)
+		"claude-3-5-sonnet-20241022",
+		"claude-3-5-sonnet-latest",
 		"claude-3-5-haiku-20241022",
-		"claude-opus-4-20250514",
-		"claude-opus-4-1-20250805",
-		"claude-sonnet-4-20250514",
-		"claude-sonnet-4-5-20250929",
+		"claude-3-5-haiku-latest",
 	})
 	r.RegisterFamilies("anthropic", []string{
+		"claude-opus-4-5",
+		"claude-sonnet-4-5",
+		"claude-haiku-4-5",
+		"claude-opus-4-1",
+		"claude-opus-4",
+		"claude-sonnet-4",
+		"claude-3-7-sonnet",
 		"claude-3-5-sonnet",
 		"claude-3-5-haiku",
-		"claude-3-7-sonnet",
-		"claude-opus-4",
-		"claude-opus-4-1",
-		"claude-sonnet-4",
-		"claude-sonnet-4-5",
 	})
 
 	// OpenAI models - primary models only, the full list is fetched from the API
 	r.RegisterModels("openai", []string{
-		"gpt-4o",
-		"gpt-4o-audio-preview",
-		"o1",
-		"o3-mini",
-		"o1-pro",
-		"o4-mini",
-		"gpt-4.1",
-		"o3-pro",
-		"o3",
-		"chatgpt-4o-latest",
+		// GPT-5.1 series (latest)
+		"gpt-5.1",
+		"gpt-5.1-mini",
+		"gpt-5.1-nano",
+		// GPT-5 series
 		"gpt-5",
 		"gpt-5-mini",
 		"gpt-5-nano",
+		// GPT-4.1 series
+		"gpt-4.1",
+		// GPT-4o series
+		"gpt-4o",
+		"gpt-4o-audio-preview",
+		"chatgpt-4o-latest",
+		// o-series reasoning models
+		"o3-pro",
+		"o3",
+		"o3-mini",
+		"o1-pro",
+		"o1",
+		"o4-mini",
 	})
 
 	// X.AI models
@@ -90,17 +110,22 @@ func (r *ModelRegistry) initializeDefaultModels() {
 
 	// Google models
 	r.RegisterModels("google", []string{
+		// Gemini 3 series (latest)
+		"gemini-3-pro-preview",
+		// Gemini 2.5 series
 		"gemini-2.5-pro",
 		"gemini-2.5-flash",
 		"gemini-2.5-flash-lite",
+		// Gemini 1.5 series (legacy)
 		"gemini-1.5-flash",
 		"gemini-1.5-pro",
 		"gemini-1.0-pro",
 		"aqa",
 	})
 	r.RegisterFamilies("google", []string{
-		"gemini-1.5",
+		"gemini-3",
 		"gemini-2.5",
+		"gemini-1.5",
 	})
 
 	// Moonshot models
