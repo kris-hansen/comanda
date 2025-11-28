@@ -121,8 +121,10 @@ You can optionally specify a model to use for generation, otherwise the default_
 		log.Printf("Output file: %s\n", outputFilename)
 
 		// Prepare the full prompt for the LLM
-		// Use the embedded guide instead of reading from file
-		dslGuide := processor.EmbeddedLLMGuide
+		// Use the embedded guide with available models from the environment config
+		// This ensures the LLM only uses models that are actually configured
+		availableModels := envConfig.GetAllConfiguredModels()
+		dslGuide := processor.GetEmbeddedLLMGuideWithModels(availableModels)
 
 		fullPrompt := fmt.Sprintf(`SYSTEM: You are a YAML generator. You MUST output ONLY valid YAML content. No explanations, no markdown, no code blocks, no commentary - just raw YAML.
 
