@@ -74,7 +74,10 @@ func (s *Server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 	config.DebugLog("Generate request: prompt_length=%d, model=%s", len(req.Prompt), modelForGeneration)
 
 	// Prepare the full prompt for the LLM
-	dslGuide := processor.EmbeddedLLMGuide
+	// Use the embedded guide with available models from the environment config
+	// This ensures the LLM only uses models that are actually configured
+	availableModels := s.envConfig.GetAllConfiguredModels()
+	dslGuide := processor.GetEmbeddedLLMGuideWithModels(availableModels)
 
 	fullPrompt := fmt.Sprintf(`SYSTEM: You are a YAML generator. You MUST output ONLY valid YAML content. No explanations, no markdown, no code blocks, no commentary - just raw YAML.
 
