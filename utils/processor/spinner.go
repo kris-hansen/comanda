@@ -69,7 +69,7 @@ func (s *Spinner) Start(message string) {
 				s.mu.Lock()
 				msg := fmt.Sprintf("%s... Done!", s.message)
 				if !s.disabled {
-					log.Printf("\r%s     \n", msg)
+					fmt.Printf("\r%s     \n", msg)
 				}
 				// Send completion update
 				if s.progress != nil {
@@ -84,7 +84,7 @@ func (s *Spinner) Start(message string) {
 				s.mu.Lock()
 				if !s.disabled {
 					spinMsg := fmt.Sprintf("%s... %s", s.message, s.chars[s.index])
-					log.Printf("\r%s", spinMsg)
+					fmt.Printf("\r%s", spinMsg)
 					// Don't send spinner updates through progress writer
 					s.index = (s.index + 1) % len(s.chars)
 				}
