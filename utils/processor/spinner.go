@@ -2,7 +2,6 @@ package processor
 
 import (
 	"fmt"
-	"log"
 	"sync"
 	"time"
 )
@@ -67,6 +66,7 @@ func (s *Spinner) Start(message string) {
 			select {
 			case <-s.stop:
 				s.mu.Lock()
+				defer s.mu.Unlock()
 				msg := fmt.Sprintf("%s... Done!", s.message)
 				if !s.disabled {
 					fmt.Printf("\r%s     \n", msg)
@@ -78,7 +78,6 @@ func (s *Spinner) Start(message string) {
 						Message: msg,
 					})
 				}
-				s.mu.Unlock()
 				return
 			default:
 				s.mu.Lock()
