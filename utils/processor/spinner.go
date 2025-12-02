@@ -66,14 +66,17 @@ func (s *Spinner) Start(message string) {
 			select {
 			case <-s.stop:
 				s.mu.Lock()
-				defer s.mu.Unlock()
 				msg := fmt.Sprintf("%s... Done!", s.message)
-				if !s.disabled {
+				disabled := s.disabled
+				progress := s.progress
+				s.mu.Unlock()
+
+				if !disabled {
 					fmt.Printf("\r%s     \n", msg)
 				}
 				// Send completion update
-				if s.progress != nil {
-					s.progress.WriteProgress(ProgressUpdate{
+				if progress != nil {
+					progress.WriteProgress(ProgressUpdate{
 						Type:    ProgressStep,
 						Message: msg,
 					})
