@@ -2,7 +2,6 @@ package processor
 
 import (
 	"fmt"
-	"log"
 	"sync"
 	"time"
 )
@@ -68,23 +67,26 @@ func (s *Spinner) Start(message string) {
 			case <-s.stop:
 				s.mu.Lock()
 				msg := fmt.Sprintf("%s... Done!", s.message)
-				if !s.disabled {
-					log.Printf("\r%s     \n", msg)
+				disabled := s.disabled
+				progress := s.progress
+				s.mu.Unlock()
+
+				if !disabled {
+					fmt.Printf("\r%s     \n", msg)
 				}
 				// Send completion update
-				if s.progress != nil {
-					s.progress.WriteProgress(ProgressUpdate{
+				if progress != nil {
+					progress.WriteProgress(ProgressUpdate{
 						Type:    ProgressStep,
 						Message: msg,
 					})
 				}
-				s.mu.Unlock()
 				return
 			default:
 				s.mu.Lock()
 				if !s.disabled {
 					spinMsg := fmt.Sprintf("%s... %s", s.message, s.chars[s.index])
-					log.Printf("\r%s", spinMsg)
+					fmt.Printf("\r%s", spinMsg)
 					// Don't send spinner updates through progress writer
 					s.index = (s.index + 1) % len(s.chars)
 				}
