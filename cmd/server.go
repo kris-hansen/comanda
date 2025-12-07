@@ -91,6 +91,18 @@ var showServerCmd = &cobra.Command{
 			log.Printf("Allowed Headers: %s\n", strings.Join(server.CORS.AllowedHeaders, ", "))
 			log.Printf("Max Age: %d seconds\n", server.CORS.MaxAge)
 		}
+
+		// Display OpenAI compatibility configuration
+		log.Printf("\nOpenAI Compatibility:\n")
+		log.Printf("Enabled: %v\n", server.OpenAICompat.Enabled)
+		if server.OpenAICompat.Enabled {
+			prefix := server.OpenAICompat.Prefix
+			if prefix == "" {
+				prefix = "/v1"
+			}
+			log.Printf("API Prefix: %s\n", prefix)
+			log.Printf("Endpoints: %s/models, %s/chat/completions\n", prefix, prefix)
+		}
 		log.Printf("\n")
 	},
 }
@@ -426,6 +438,57 @@ func configureCORS(reader *bufio.Reader, envConfig *config.EnvConfig) error {
 	return nil
 }
 
+var openaiCompatCmd = &cobra.Command{
+	Use:   "openai-compat [on|off]",
+	Short: "Toggle OpenAI compatibility mode",
+	Long: `Enable or disable OpenAI-compatible API endpoints (/v1/models, /v1/chat/completions).
+
+When enabled, tools like Cline can connect to Comanda using the OpenAI API format.
+Workflows are exposed as models, and chat completions execute the specified workflow.
+
+Example configuration for Cline:
+  API Provider: OpenAI Compatible
+  Base URL: http://localhost:8080/v1
+  API Key: <your-comanda-bearer-token>
+  Model: <workflow-name>`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		enable := strings.ToLower(args[0])
+		if enable != "on" && enable != "off" {
+			log.Printf("Error: Please specify either 'on' or 'off'\n")
+			return
+		}
+
+		configPath := config.GetEnvPath()
+		envConfig, err := config.LoadEnvConfigWithPassword(configPath)
+		if err != nil {
+			log.Printf("Error loading configuration: %v\n", err)
+			return
+		}
+
+		serverConfig := envConfig.GetServerConfig()
+		serverConfig.OpenAICompat.Enabled = enable == "on"
+
+		// Set default prefix if not set
+		if serverConfig.OpenAICompat.Prefix == "" {
+			serverConfig.OpenAICompat.Prefix = "/v1"
+		}
+
+		envConfig.UpdateServerConfig(*serverConfig)
+
+		if err := config.SaveEnvConfig(configPath, envConfig); err != nil {
+			log.Printf("Error saving configuration: %v\n", err)
+			return
+		}
+
+		if serverConfig.OpenAICompat.Enabled {
+			log.Printf("OpenAI compatibility mode enabled at %s\n", serverConfig.OpenAICompat.Prefix)
+		} else {
+			log.Printf("OpenAI compatibility mode disabled\n")
+		}
+	},
+}
+
 func init() {
 	serverCmd.AddCommand(configureServerCmd)
 	serverCmd.AddCommand(showServerCmd)
@@ -434,5 +497,6 @@ func init() {
 	serverCmd.AddCommand(toggleAuthCmd)
 	serverCmd.AddCommand(newTokenCmd)
 	serverCmd.AddCommand(corsCmd)
+	serverCmd.AddCommand(openaiCompatCmd)
 	rootCmd.AddCommand(serverCmd)
 }

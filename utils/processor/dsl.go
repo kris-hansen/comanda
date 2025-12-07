@@ -34,20 +34,21 @@ type ProcessStepConfig struct {
 
 // Processor handles the DSL processing pipeline
 type Processor struct {
-	config       *DSLConfig
-	envConfig    *config.EnvConfig
-	serverConfig *config.ServerConfig // Add server config
-	handler      *input.Handler
-	validator    *input.Validator
-	providers    map[string]models.Provider
-	verbose      bool
-	lastOutput   string
-	spinner      *Spinner
-	variables    map[string]string // Store variables from STDIN
-	progress     ProgressWriter    // Progress writer for streaming updates
-	runtimeDir   string            // Runtime directory for file operations
-	memory       *MemoryManager    // Memory manager for COMANDA.md file
-	mu           sync.Mutex        // Mutex for thread-safe debug logging
+	config         *DSLConfig
+	envConfig      *config.EnvConfig
+	serverConfig   *config.ServerConfig // Add server config
+	handler        *input.Handler
+	validator      *input.Validator
+	providers      map[string]models.Provider
+	verbose        bool
+	lastOutput     string
+	spinner        *Spinner
+	variables      map[string]string // Store variables from STDIN
+	progress       ProgressWriter    // Progress writer for streaming updates
+	runtimeDir     string            // Runtime directory for file operations
+	memory         *MemoryManager    // Memory manager for COMANDA.md file
+	externalMemory string            // External memory context (e.g., from OpenAI messages)
+	mu             sync.Mutex        // Mutex for thread-safe debug logging
 }
 
 // UnmarshalYAML is a custom unmarshaler for DSLConfig to handle mixed types at the root level
@@ -253,6 +254,12 @@ func (p *Processor) SetLastOutput(output string) {
 // LastOutput returns the last output value
 func (p *Processor) LastOutput() string {
 	return p.lastOutput
+}
+
+// SetMemoryContext sets external memory context (e.g., from OpenAI chat messages)
+// This context is used alongside or instead of file-based memory
+func (p *Processor) SetMemoryContext(context string) {
+	p.externalMemory = context
 }
 
 // GetMemoryFilePath returns the path to the memory file, or empty string if not configured
@@ -1076,8 +1083,23 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 		}
 
 		// If memory is enabled for this step, inject memory content
-		if step.Config.Memory && p.memory != nil && p.memory.HasMemory() {
-			memoryContent := p.memory.GetMemory()
+		if step.Config.Memory {
+			var memoryContent string
+
+			// Combine file-based memory and external memory context
+			if p.memory != nil && p.memory.HasMemory() {
+				memoryContent = p.memory.GetMemory()
+			}
+
+			// Append external memory context if available
+			if p.externalMemory != "" {
+				if memoryContent != "" {
+					memoryContent = memoryContent + "\n\n" + p.externalMemory
+				} else {
+					memoryContent = p.externalMemory
+				}
+			}
+
 			if memoryContent != "" {
 				// Prepend memory context to the action
 				memoryPrefix := fmt.Sprintf("Context from project memory:\n---\n%s\n---\n\n", memoryContent)

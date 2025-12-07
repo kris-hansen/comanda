@@ -1,0 +1,23 @@
+# Simple Assistant Workflow for OpenAI Compatibility Mode
+#
+# A basic workflow that acts as a general-purpose assistant.
+# Uses memory to maintain conversation context across requests.
+#
+# Usage with Cline:
+#   API Provider: OpenAI Compatible
+#   Base URL: http://localhost:8080/v1
+#   API Key: <your-comanda-bearer-token>
+#   Model: openai-compat/assistant
+#
+# Enable OpenAI compatibility mode first:
+#   comanda server openai-compat on
+#   comanda server
+
+respond:
+  input: STDIN
+  model: claude-opus-4-5-20250514
+  memory: true
+  action: |
+    You are a helpful AI assistant. Respond to the user's message thoughtfully and comprehensively.
+    Use the conversation history from memory to maintain context.
+  output: STDOUT

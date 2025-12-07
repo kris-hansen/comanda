@@ -1,0 +1,53 @@
+# Dual LLM Workflow for OpenAI Compatibility Mode
+#
+# This workflow demonstrates a pattern for Cline integration where:
+# 1. Two flagship models (GPT and Claude) process the same input
+# 2. A synthesis step combines the best of both responses
+#
+# Usage with Cline:
+#   API Provider: OpenAI Compatible
+#   Base URL: http://localhost:8080/v1
+#   API Key: <your-comanda-bearer-token>
+#   Model: openai-compat/dual-llm
+#
+# Enable OpenAI compatibility mode first:
+#   comanda server openai-compat on
+#   comanda server
+
+gpt-response:
+  input: STDIN
+  model: gpt-4.1
+  memory: true
+  action: |
+    You are a helpful AI assistant. Please provide a thoughtful and comprehensive response to the user's request.
+  output: $GPT_RESPONSE
+
+claude-response:
+  input: STDIN
+  model: claude-opus-4-5-20250514
+  memory: true
+  action: |
+    You are a helpful AI assistant. Please provide a thoughtful and comprehensive response to the user's request.
+  output: $CLAUDE_RESPONSE
+
+synthesize:
+  input: |
+    I have received responses from two AI models to the same request. Please synthesize the best response by:
+    1. Identifying the key insights from each response
+    2. Combining the strongest elements from both
+    3. Ensuring the final response is coherent and comprehensive
+    4. Maintaining a natural conversational tone
+
+    === GPT Response ===
+    $GPT_RESPONSE
+
+    === Claude Response ===
+    $CLAUDE_RESPONSE
+
+    Please provide the synthesized best response:
+  model: claude-opus-4-5-20250514
+  action: |
+    Synthesize the two AI responses above into a single, optimal response.
+    Focus on accuracy, completeness, and clarity.
+    Do not mention that this is a synthesis - just provide the best combined answer.
+  output: STDOUT
