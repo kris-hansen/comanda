@@ -588,7 +588,10 @@ func (p *Processor) Process() error {
 			modelNames := p.NormalizeStringSlice(step.Config.Model)
 			p.debugf("Normalized model names for step %s: %v", step.Name, modelNames)
 			if err := p.validateModel(modelNames, []string{"STDIN"}); err != nil { // STDIN is a placeholder here
-				p.debugf("Model validation failed for step %s: %v", step.Name, err)
+				p.spinner.Stop()
+				errMsg := fmt.Sprintf("Model validation failed for step '%s': %v", step.Name, err)
+				p.debugf("Model validation error: %s", errMsg)
+				p.emitError(fmt.Errorf(errMsg))
 				return fmt.Errorf("model validation failed for step %s: %w", step.Name, err)
 			}
 		}
@@ -617,7 +620,10 @@ func (p *Processor) Process() error {
 				modelNames := p.NormalizeStringSlice(step.Config.Model)
 				p.debugf("Normalized model names for parallel step %s: %v", step.Name, modelNames)
 				if err := p.validateModel(modelNames, []string{"STDIN"}); err != nil { // STDIN is a placeholder
-					p.debugf("Model validation failed for parallel step %s: %v", step.Name, err)
+					p.spinner.Stop()
+					errMsg := fmt.Sprintf("Model validation failed for parallel step '%s': %v", step.Name, err)
+					p.debugf("Model validation error: %s", errMsg)
+					p.emitError(fmt.Errorf(errMsg))
 					return fmt.Errorf("model validation failed for parallel step %s: %w", step.Name, err)
 				}
 			}
