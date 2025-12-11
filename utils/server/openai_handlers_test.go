@@ -320,6 +320,34 @@ func TestExtractInputFromMessages(t *testing.T) {
 			},
 			expected: "Question",
 		},
+		{
+			name: "Array content format (multi-modal)",
+			messages: []ChatMessage{
+				{Role: "user", Content: []interface{}{
+					map[string]interface{}{
+						"type": "text",
+						"text": "Hello from array",
+					},
+				}},
+			},
+			expected: "Hello from array",
+		},
+		{
+			name: "Multiple text parts in array",
+			messages: []ChatMessage{
+				{Role: "user", Content: []interface{}{
+					map[string]interface{}{
+						"type": "text",
+						"text": "Part 1",
+					},
+					map[string]interface{}{
+						"type": "text",
+						"text": "Part 2",
+					},
+				}},
+			},
+			expected: "Part 1\nPart 2",
+		},
 	}
 
 	for _, tt := range tests {

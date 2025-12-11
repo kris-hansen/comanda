@@ -46,7 +46,7 @@ func extractInputFromMessages(messages []ChatMessage) string {
 	// Find the last user message
 	for i := len(messages) - 1; i >= 0; i-- {
 		if messages[i].Role == "user" {
-			return messages[i].Content
+			return messages[i].GetTextContent()
 		}
 	}
 	return ""
@@ -57,13 +57,14 @@ func buildMemoryContext(messages []ChatMessage) string {
 	var parts []string
 
 	for _, msg := range messages {
+		content := msg.GetTextContent()
 		switch msg.Role {
 		case "system":
-			parts = append(parts, fmt.Sprintf("System: %s", msg.Content))
+			parts = append(parts, fmt.Sprintf("System: %s", content))
 		case "user":
-			parts = append(parts, fmt.Sprintf("User: %s", msg.Content))
+			parts = append(parts, fmt.Sprintf("User: %s", content))
 		case "assistant":
-			parts = append(parts, fmt.Sprintf("Assistant: %s", msg.Content))
+			parts = append(parts, fmt.Sprintf("Assistant: %s", content))
 		}
 	}
 

@@ -1,12 +1,51 @@
 package server
 
+import "strings"
+
 // OpenAI API Compatibility Types
 // These types match the OpenAI API specification for chat completions
 
 // ChatMessage represents a message in the conversation
+// Content can be a string or an array of content parts (for multi-modal)
 type ChatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role       string      `json:"role"`
+	Content    interface{} `json:"content"` // string or []ContentPart
+	RawContent string      `json:"-"`       // Extracted text content
+}
+
+// ContentPart represents a part of multi-modal content
+type ContentPart struct {
+	Type string `json:"type"`
+	Text string `json:"text,omitempty"`
+	// ImageURL could be added here for image support
+}
+
+// GetTextContent extracts the text content from the message
+// Handles both string content and array of content parts
+func (m *ChatMessage) GetTextContent() string {
+	if m.RawContent != "" {
+		return m.RawContent
+	}
+
+	switch v := m.Content.(type) {
+	case string:
+		return v
+	case []interface{}:
+		// Array of content parts
+		var texts []string
+		for _, part := range v {
+			if partMap, ok := part.(map[string]interface{}); ok {
+				if partMap["type"] == "text" {
+					if text, ok := partMap["text"].(string); ok {
+						texts = append(texts, text)
+					}
+				}
+			}
+		}
+		return strings.Join(texts, "\n")
+	default:
+		return ""
+	}
 }
 
 // ChatCompletionRequest represents the OpenAI chat completion request
