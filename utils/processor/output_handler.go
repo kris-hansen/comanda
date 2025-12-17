@@ -188,8 +188,8 @@ func (p *Processor) handleOutputWithToolConfig(modelName string, response string
 
 			if err := os.WriteFile(outputPath, []byte(response), 0644); err != nil {
 				errMsg := fmt.Sprintf("failed to write response to file %s: %v", outputPath, err)
-				p.debugf(errMsg)
-				return fmt.Errorf(errMsg)
+				p.debugf("%s", errMsg)
+				return fmt.Errorf("%s", errMsg)
 			}
 			p.debugf("[%s] Response successfully written to file: %s", modelName, outputPath)
 
