@@ -709,8 +709,36 @@ func getAllConfiguredModelNames(envConfig *config.EnvConfig) []string {
 
 var configureCmd = &cobra.Command{
 	Use:   "configure",
-	Short: "Configure model settings",
-	Long:  `Configure model settings including provider model name and API key`,
+	Short: "Manage API keys, models, and settings",
+	Long: `Configure Comanda settings including API keys, models, and preferences.
+
+Running without flags starts interactive configuration mode, which guides you
+through setting up providers (Anthropic, OpenAI, Ollama, etc.) and their models.
+
+Configuration is stored in ~/.comanda/config.yaml
+
+Flag Groups:
+  Model Management    --list, --remove, --set-default-generation-model, --default
+  Security            --encrypt, --decrypt
+  Database            --database
+  Memory              --memory, --init-memory`,
+	Example: `  # Interactive setup (recommended for first-time users)
+  comanda configure
+
+  # List all configured providers and models
+  comanda configure --list
+
+  # Update an API key for a provider
+  comanda configure --update-key anthropic
+
+  # Set the default model for workflow generation
+  comanda configure --set-default-generation-model claude-sonnet-4-20250514
+
+  # Encrypt configuration file (protects API keys)
+  comanda configure --encrypt
+
+  # Remove a model
+  comanda configure --remove "my-old-model"`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if listFlag {
 			listConfiguration()

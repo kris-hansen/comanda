@@ -16,8 +16,30 @@ import (
 
 var serverCmd = &cobra.Command{
 	Use:   "server",
-	Short: "Start and manage the HTTP server",
-	Long:  `Start the HTTP server for processing YAML files, or manage server configuration`,
+	Short: "Run the HTTP server for remote workflow execution",
+	Long: `Start the Comanda HTTP server or manage its configuration.
+
+Running 'comanda server' without a subcommand starts the server on the
+configured port (default: 8080).
+
+Endpoints:
+  POST /process                Execute a workflow (multipart form or JSON)
+  GET  /health                 Health check endpoint
+
+OpenAI-Compatible Endpoints (when enabled):
+  GET  /v1/models              List available workflows as models
+  POST /v1/chat/completions    Execute workflow via chat completion API`,
+	Example: `  # Start the server
+  comanda server
+
+  # Start with verbose logging
+  comanda server --verbose
+
+  # View current configuration
+  comanda server show
+
+  # Enable OpenAI-compatible API mode
+  comanda server openai-compat on`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Default behavior (no subcommand) is to start the server
 		configPath := config.GetEnvPath()
@@ -36,8 +58,12 @@ var serverCmd = &cobra.Command{
 
 var configureServerCmd = &cobra.Command{
 	Use:   "configure",
-	Short: "Configure server settings",
-	Long:  `Configure server settings including port, data directory, and authentication`,
+	Short: "Configure server settings interactively",
+	Long: `Interactively configure server settings including:
+  - Port number
+  - Data directory (where workflows are stored)
+  - Bearer token authentication
+  - CORS settings`,
 	Run: func(cmd *cobra.Command, args []string) {
 		configPath := config.GetEnvPath()
 		envConfig, err := config.LoadEnvConfigWithPassword(configPath)
@@ -63,8 +89,12 @@ var configureServerCmd = &cobra.Command{
 
 var showServerCmd = &cobra.Command{
 	Use:   "show",
-	Short: "Show current server configuration",
-	Long:  `Display the current server configuration settings`,
+	Short: "Display current server configuration",
+	Long: `Display all server configuration settings including:
+  - Port and data directory
+  - Authentication status and bearer token
+  - CORS configuration
+  - OpenAI compatibility mode status`,
 	Run: func(cmd *cobra.Command, args []string) {
 		configPath := config.GetEnvPath()
 		envConfig, err := config.LoadEnvConfigWithPassword(configPath)
@@ -108,9 +138,10 @@ var showServerCmd = &cobra.Command{
 }
 
 var updatePortCmd = &cobra.Command{
-	Use:   "port [port]",
-	Short: "Update server port",
-	Long:  `Update the port number that the server listens on`,
+	Use:   "port <port-number>",
+	Short: "Set the server port",
+	Long:  `Set the port number that the server listens on (default: 8080).`,
+	Example: `  comanda server port 3000`,
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		port, err := strconv.Atoi(args[0])
@@ -140,9 +171,14 @@ var updatePortCmd = &cobra.Command{
 }
 
 var updateDataDirCmd = &cobra.Command{
-	Use:   "datadir [path]",
-	Short: "Update data directory",
-	Long:  `Update the directory path where server data is stored`,
+	Use:   "datadir <path>",
+	Short: "Set the workflow data directory",
+	Long: `Set the directory where workflow YAML files are stored.
+
+The server looks for workflow files in this directory when processing requests.
+The directory will be created if it doesn't exist.`,
+	Example: `  comanda server datadir /var/comanda/workflows
+  comanda server datadir ./my-workflows`,
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		dataDir := args[0]
@@ -206,9 +242,18 @@ var updateDataDirCmd = &cobra.Command{
 }
 
 var toggleAuthCmd = &cobra.Command{
-	Use:   "auth [on|off]",
-	Short: "Toggle authentication",
-	Long:  `Enable or disable server authentication`,
+	Use:   "auth <on|off>",
+	Short: "Enable or disable bearer token authentication",
+	Long: `Enable or disable bearer token authentication for the HTTP server.
+
+When enabled, all requests must include the header:
+  Authorization: Bearer <token>
+
+A token is automatically generated when auth is first enabled.
+Use 'comanda server newtoken' to generate a new token.
+Use 'comanda server show' to view the current token.`,
+	Example: `  comanda server auth on
+  comanda server auth off`,
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		enable := strings.ToLower(args[0])
@@ -251,8 +296,11 @@ var toggleAuthCmd = &cobra.Command{
 
 var newTokenCmd = &cobra.Command{
 	Use:   "newtoken",
-	Short: "Generate new bearer token",
-	Long:  `Generate a new bearer token for server authentication`,
+	Short: "Generate a new bearer token",
+	Long: `Generate a new bearer token for server authentication.
+
+This replaces any existing token. The new token is displayed and saved
+to the configuration file.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		configPath := config.GetEnvPath()
 		envConfig, err := config.LoadEnvConfigWithPassword(configPath)
@@ -337,8 +385,18 @@ func configureServer(reader *bufio.Reader, envConfig *config.EnvConfig) error {
 
 var corsCmd = &cobra.Command{
 	Use:   "cors",
-	Short: "Configure CORS settings",
-	Long:  `Configure Cross-Origin Resource Sharing (CORS) settings for the server`,
+	Short: "Configure CORS settings interactively",
+	Long: `Configure Cross-Origin Resource Sharing (CORS) settings for the server.
+
+CORS controls which web domains can make requests to the server from browsers.
+This is required when integrating Comanda with web applications.
+
+The interactive prompts will ask for:
+  - Enable/disable CORS
+  - Allowed origins (domains that can access the API)
+  - Allowed HTTP methods
+  - Allowed headers
+  - Max age (how long browsers cache CORS preflight responses)`,
 	Run: func(cmd *cobra.Command, args []string) {
 		configPath := config.GetEnvPath()
 		envConfig, err := config.LoadEnvConfigWithPassword(configPath)
@@ -439,8 +497,8 @@ func configureCORS(reader *bufio.Reader, envConfig *config.EnvConfig) error {
 }
 
 var openaiCompatCmd = &cobra.Command{
-	Use:   "openai-compat [on|off]",
-	Short: "Toggle OpenAI compatibility mode",
+	Use:   "openai-compat <on|off>",
+	Short: "Enable or disable OpenAI-compatible API endpoints",
 	Long: `Enable or disable OpenAI-compatible API endpoints (/v1/models, /v1/chat/completions).
 
 When enabled, tools like Cline can connect to Comanda using the OpenAI API format.
