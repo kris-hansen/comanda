@@ -138,11 +138,11 @@ var showServerCmd = &cobra.Command{
 }
 
 var updatePortCmd = &cobra.Command{
-	Use:   "port <port-number>",
-	Short: "Set the server port",
-	Long:  `Set the port number that the server listens on (default: 8080).`,
+	Use:     "port <port-number>",
+	Short:   "Set the server port",
+	Long:    `Set the port number that the server listens on (default: 8080).`,
 	Example: `  comanda server port 3000`,
-	Args:  cobra.ExactArgs(1),
+	Args:    cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		port, err := strconv.Atoi(args[0])
 		if err != nil {
@@ -179,7 +179,7 @@ The server looks for workflow files in this directory when processing requests.
 The directory will be created if it doesn't exist.`,
 	Example: `  comanda server datadir /var/comanda/workflows
   comanda server datadir ./my-workflows`,
-	Args:  cobra.ExactArgs(1),
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		dataDir := args[0]
 
@@ -254,7 +254,7 @@ Use 'comanda server newtoken' to generate a new token.
 Use 'comanda server show' to view the current token.`,
 	Example: `  comanda server auth on
   comanda server auth off`,
-	Args:  cobra.ExactArgs(1),
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		enable := strings.ToLower(args[0])
 		if enable != "on" && enable != "off" {
