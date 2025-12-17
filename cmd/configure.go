@@ -539,7 +539,7 @@ func promptForOpenAIModelSelection(primaryModels []string, otherModels []string)
 			prompt = "\nEnter model numbers, or 'p' to see primary models: "
 		}
 
-		log.Printf(prompt)
+		log.Printf("%s", prompt)
 		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(input)
 
@@ -607,7 +607,7 @@ func promptForAnthropicModelSelection(primaryModels []string, otherModels []stri
 			prompt = "\nEnter model numbers, or 'p' to see primary models: "
 		}
 
-		log.Printf(prompt)
+		log.Printf("%s", prompt)
 		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(input)
 

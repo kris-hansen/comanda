@@ -579,7 +579,7 @@ func (p *Processor) Process() error {
 			p.spinner.Stop()
 			errMsg := fmt.Sprintf("Validation failed for step '%s': %v", step.Name, err)
 			p.debugf("Step validation error: %s", errMsg)
-			p.emitError(fmt.Errorf(errMsg))
+			p.emitError(fmt.Errorf("%s", errMsg))
 			return fmt.Errorf("validation error: %w", err)
 		}
 
@@ -591,7 +591,7 @@ func (p *Processor) Process() error {
 				p.spinner.Stop()
 				errMsg := fmt.Sprintf("Model validation failed for step '%s': %v", step.Name, err)
 				p.debugf("Model validation error: %s", errMsg)
-				p.emitError(fmt.Errorf(errMsg))
+				p.emitError(fmt.Errorf("%s", errMsg))
 				return fmt.Errorf("model validation failed for step %s: %w", step.Name, err)
 			}
 		}
@@ -611,7 +611,7 @@ func (p *Processor) Process() error {
 				p.spinner.Stop()
 				errMsg := fmt.Sprintf("Validation failed for parallel step '%s': %v", step.Name, err)
 				p.debugf("Parallel step validation error: %s", errMsg)
-				p.emitError(fmt.Errorf(errMsg))
+				p.emitError(fmt.Errorf("%s", errMsg))
 				return fmt.Errorf("validation error: %w", err)
 			}
 
@@ -623,7 +623,7 @@ func (p *Processor) Process() error {
 					p.spinner.Stop()
 					errMsg := fmt.Sprintf("Model validation failed for parallel step '%s': %v", step.Name, err)
 					p.debugf("Model validation error: %s", errMsg)
-					p.emitError(fmt.Errorf(errMsg))
+					p.emitError(fmt.Errorf("%s", errMsg))
 					return fmt.Errorf("model validation failed for parallel step %s: %w", step.Name, err)
 				}
 			}
@@ -637,7 +637,7 @@ func (p *Processor) Process() error {
 		p.spinner.Stop()
 		errMsg := fmt.Sprintf("Dependency validation failed: %v", err)
 		p.debugf("Dependency validation error: %s", errMsg)
-		p.emitError(fmt.Errorf(errMsg))
+		p.emitError(fmt.Errorf("%s", errMsg))
 		return fmt.Errorf("dependency validation error: %w", err)
 	}
 
@@ -751,7 +751,7 @@ func (p *Processor) Process() error {
 			p.spinner.Stop()
 			errMsg := fmt.Sprintf("Error processing step '%s': %v", step.Name, err)
 			p.debugf("Step processing error: %s", errMsg)
-			p.emitError(fmt.Errorf(errMsg))
+			p.emitError(fmt.Errorf("%s", errMsg))
 			return fmt.Errorf("step processing error: %w", err)
 		}
 
@@ -994,8 +994,8 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 			chunkResult, err = chunker.SplitFile(inputFile, chunkConfig)
 			if err != nil {
 				errMsg := fmt.Sprintf("Failed to chunk file '%s' for step '%s': %v", inputFile, step.Name, err)
-				p.debugf(errMsg)
-				return "", fmt.Errorf(errMsg)
+				p.debugf("%s", errMsg)
+				return "", fmt.Errorf("%s", errMsg)
 			}
 
 			p.debugf("Successfully chunked file '%s' into %d chunks", inputFile, chunkResult.TotalChunks)
