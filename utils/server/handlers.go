@@ -420,7 +420,7 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *config.
 					errMsg := fmt.Sprintf("Processing failed: %v", err)
 					config.DebugLog("Streaming error: %s", errMsg)
 					if sw != nil {
-						sw.SendError(fmt.Errorf(errMsg))
+						sw.SendError(fmt.Errorf("%s", errMsg))
 					}
 				} else {
 					config.DebugLog("Processing completed successfully")

@@ -382,6 +382,22 @@ func (s *Server) routes() {
 
 	// Generate endpoint - requires auth
 	s.mux.HandleFunc("/generate", s.combinedMiddleware(s.handleGenerate))
+
+	// OpenAI compatibility endpoints (if enabled)
+	if s.config.OpenAICompat.Enabled {
+		prefix := s.config.OpenAICompat.Prefix
+		if prefix == "" {
+			prefix = "/v1"
+		}
+
+		// GET /v1/models - List available models (workflows)
+		s.mux.HandleFunc(prefix+"/models", s.combinedMiddleware(s.handleListModels))
+
+		// POST /v1/chat/completions - Chat completion endpoint
+		s.mux.HandleFunc(prefix+"/chat/completions", s.combinedMiddleware(s.handleChatCompletions))
+
+		log.Printf("OpenAI compatibility mode enabled at %s\n", prefix)
+	}
 }
 
 // Run creates and starts the HTTP server with the given configuration

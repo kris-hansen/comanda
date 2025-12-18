@@ -30,9 +30,17 @@ var logFile *os.File
 
 var rootCmd = &cobra.Command{
 	Use:   "comanda",
-	Short: "A workflow processor for handling model interactions",
-	Long: `comanda is a command line tool that processes workflow configurations
-for model interactions and executes the specified actions.`,
+	Short: "A workflow automation tool for orchestrating LLM interactions",
+	Long: `Comanda is a workflow automation tool that orchestrates LLM interactions
+through YAML-defined pipelines.
+
+Getting Started:
+  1. comanda configure        Set up your API keys and models
+  2. comanda generate         Create a workflow from natural language
+  3. comanda process          Execute a workflow
+
+Configuration is stored in ~/.comanda/config.yaml
+For documentation, visit: https://github.com/kris-hansen/comanda`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// Configure log output format - remove timestamps for cleaner CLI output
 		// Server mode sets its own log flags with timestamps
@@ -91,14 +99,24 @@ for model interactions and executes the specified actions.`,
 }
 
 var generateCmd = &cobra.Command{
-	Use:   "generate <output_filename.yaml> \"<prompt_for_workflow_generation>\"",
-	Short: "Generate a new Comanda workflow YAML file using an LLM",
-	Long: `Generates a new Comanda workflow YAML file based on a natural language prompt.
-The generated workflow is saved to the specified output filename.
-You can optionally specify a model to use for generation, otherwise the default_generation_model from your configuration will be used.`,
+	Use:   "generate <output.yaml> \"<prompt>\"",
+	Short: "Create a workflow from natural language",
+	Long: `Generate a new Comanda workflow YAML file from a natural language description.
+
+The LLM will create a valid workflow based on your prompt and save it to the
+specified file. Uses default_generation_model from your config unless
+overridden with --model.`,
+	Example: `  # Generate a summarization workflow
+  comanda generate summarize.yaml "Create a workflow that summarizes text input"
+
+  # Generate with a specific model
+  comanda generate analyze.yaml "Analyze sentiment of text" -m claude-sonnet-4-20250514
+
+  # Generate a multi-step workflow
+  comanda generate pipeline.yaml "Extract key points, translate to Spanish, format as bullets"`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if len(args) != 2 {
-			return fmt.Errorf("requires exactly two arguments: <output_filename.yaml> and \"<prompt_for_workflow_generation>\"\nExample: comanda generate my_workflow.yaml \"Create a workflow to summarize a file and save it.\"")
+			return fmt.Errorf("requires two arguments: <output.yaml> and \"<prompt>\"")
 		}
 		return nil
 	},
@@ -280,8 +298,8 @@ func getVersion() string {
 // versionCmd represents the version command
 var versionCmd = &cobra.Command{
 	Use:   "version",
-	Short: "Print the version number of Comanda",
-	Long:  `All software has versions. This is Comanda's.`,
+	Short: "Print version information",
+	Long:  `Display the current Comanda version.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		log.Printf("Comanda version: %s\n", getVersion())
 	},
