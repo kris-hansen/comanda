@@ -34,20 +34,21 @@ type ProcessStepConfig struct {
 
 // Processor handles the DSL processing pipeline
 type Processor struct {
-	config       *DSLConfig
-	envConfig    *config.EnvConfig
-	serverConfig *config.ServerConfig // Add server config
-	handler      *input.Handler
-	validator    *input.Validator
-	providers    map[string]models.Provider
-	verbose      bool
-	lastOutput   string
-	spinner      *Spinner
-	variables    map[string]string // Store variables from STDIN
-	progress     ProgressWriter    // Progress writer for streaming updates
-	runtimeDir   string            // Runtime directory for file operations
-	memory       *MemoryManager    // Memory manager for COMANDA.md file
-	mu           sync.Mutex        // Mutex for thread-safe debug logging
+	config         *DSLConfig
+	envConfig      *config.EnvConfig
+	serverConfig   *config.ServerConfig // Add server config
+	handler        *input.Handler
+	validator      *input.Validator
+	providers      map[string]models.Provider
+	verbose        bool
+	lastOutput     string
+	spinner        *Spinner
+	variables      map[string]string // Store variables from STDIN
+	progress       ProgressWriter    // Progress writer for streaming updates
+	runtimeDir     string            // Runtime directory for file operations
+	memory         *MemoryManager    // Memory manager for COMANDA.md file
+	externalMemory string            // External memory context (e.g., from OpenAI messages)
+	mu             sync.Mutex        // Mutex for thread-safe debug logging
 }
 
 // UnmarshalYAML is a custom unmarshaler for DSLConfig to handle mixed types at the root level
@@ -253,6 +254,12 @@ func (p *Processor) SetLastOutput(output string) {
 // LastOutput returns the last output value
 func (p *Processor) LastOutput() string {
 	return p.lastOutput
+}
+
+// SetMemoryContext sets external memory context (e.g., from OpenAI chat messages)
+// This context is used alongside or instead of file-based memory
+func (p *Processor) SetMemoryContext(context string) {
+	p.externalMemory = context
 }
 
 // GetMemoryFilePath returns the path to the memory file, or empty string if not configured
@@ -572,7 +579,7 @@ func (p *Processor) Process() error {
 			p.spinner.Stop()
 			errMsg := fmt.Sprintf("Validation failed for step '%s': %v", step.Name, err)
 			p.debugf("Step validation error: %s", errMsg)
-			p.emitError(fmt.Errorf(errMsg))
+			p.emitError(fmt.Errorf("%s", errMsg))
 			return fmt.Errorf("validation error: %w", err)
 		}
 
@@ -581,7 +588,10 @@ func (p *Processor) Process() error {
 			modelNames := p.NormalizeStringSlice(step.Config.Model)
 			p.debugf("Normalized model names for step %s: %v", step.Name, modelNames)
 			if err := p.validateModel(modelNames, []string{"STDIN"}); err != nil { // STDIN is a placeholder here
-				p.debugf("Model validation failed for step %s: %v", step.Name, err)
+				p.spinner.Stop()
+				errMsg := fmt.Sprintf("Model validation failed for step '%s': %v", step.Name, err)
+				p.debugf("Model validation error: %s", errMsg)
+				p.emitError(fmt.Errorf("%s", errMsg))
 				return fmt.Errorf("model validation failed for step %s: %w", step.Name, err)
 			}
 		}
@@ -601,7 +611,7 @@ func (p *Processor) Process() error {
 				p.spinner.Stop()
 				errMsg := fmt.Sprintf("Validation failed for parallel step '%s': %v", step.Name, err)
 				p.debugf("Parallel step validation error: %s", errMsg)
-				p.emitError(fmt.Errorf(errMsg))
+				p.emitError(fmt.Errorf("%s", errMsg))
 				return fmt.Errorf("validation error: %w", err)
 			}
 
@@ -610,7 +620,10 @@ func (p *Processor) Process() error {
 				modelNames := p.NormalizeStringSlice(step.Config.Model)
 				p.debugf("Normalized model names for parallel step %s: %v", step.Name, modelNames)
 				if err := p.validateModel(modelNames, []string{"STDIN"}); err != nil { // STDIN is a placeholder
-					p.debugf("Model validation failed for parallel step %s: %v", step.Name, err)
+					p.spinner.Stop()
+					errMsg := fmt.Sprintf("Model validation failed for parallel step '%s': %v", step.Name, err)
+					p.debugf("Model validation error: %s", errMsg)
+					p.emitError(fmt.Errorf("%s", errMsg))
 					return fmt.Errorf("model validation failed for parallel step %s: %w", step.Name, err)
 				}
 			}
@@ -624,7 +637,7 @@ func (p *Processor) Process() error {
 		p.spinner.Stop()
 		errMsg := fmt.Sprintf("Dependency validation failed: %v", err)
 		p.debugf("Dependency validation error: %s", errMsg)
-		p.emitError(fmt.Errorf(errMsg))
+		p.emitError(fmt.Errorf("%s", errMsg))
 		return fmt.Errorf("dependency validation error: %w", err)
 	}
 
@@ -738,7 +751,7 @@ func (p *Processor) Process() error {
 			p.spinner.Stop()
 			errMsg := fmt.Sprintf("Error processing step '%s': %v", step.Name, err)
 			p.debugf("Step processing error: %s", errMsg)
-			p.emitError(fmt.Errorf(errMsg))
+			p.emitError(fmt.Errorf("%s", errMsg))
 			return fmt.Errorf("step processing error: %w", err)
 		}
 
@@ -981,8 +994,8 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 			chunkResult, err = chunker.SplitFile(inputFile, chunkConfig)
 			if err != nil {
 				errMsg := fmt.Sprintf("Failed to chunk file '%s' for step '%s': %v", inputFile, step.Name, err)
-				p.debugf(errMsg)
-				return "", fmt.Errorf(errMsg)
+				p.debugf("%s", errMsg)
+				return "", fmt.Errorf("%s", errMsg)
 			}
 
 			p.debugf("Successfully chunked file '%s' into %d chunks", inputFile, chunkResult.TotalChunks)
@@ -1076,8 +1089,23 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 		}
 
 		// If memory is enabled for this step, inject memory content
-		if step.Config.Memory && p.memory != nil && p.memory.HasMemory() {
-			memoryContent := p.memory.GetMemory()
+		if step.Config.Memory {
+			var memoryContent string
+
+			// Combine file-based memory and external memory context
+			if p.memory != nil && p.memory.HasMemory() {
+				memoryContent = p.memory.GetMemory()
+			}
+
+			// Append external memory context if available
+			if p.externalMemory != "" {
+				if memoryContent != "" {
+					memoryContent = memoryContent + "\n\n" + p.externalMemory
+				} else {
+					memoryContent = p.externalMemory
+				}
+			}
+
 			if memoryContent != "" {
 				// Prepend memory context to the action
 				memoryPrefix := fmt.Sprintf("Context from project memory:\n---\n%s\n---\n\n", memoryContent)

@@ -18,10 +18,27 @@ import (
 var runtimeDir string
 
 var processCmd = &cobra.Command{
-	Use:   "process [files...]",
-	Short: "Process YAML workflow files",
-	Long:  `Process one or more workflow files and execute the specified actions.`,
-	Args:  cobra.MinimumNArgs(1),
+	Use:   "process <workflow.yaml> [additional workflows...]",
+	Short: "Execute one or more workflow files",
+	Long: `Execute one or more Comanda workflow files. Each workflow defines a pipeline
+of steps that process input through configured LLM models.
+
+Input can be provided via:
+  - File paths specified in the workflow
+  - STDIN (pipe data into a workflow)
+  - Previous step outputs (chained workflows)`,
+	Example: `  # Run a single workflow
+  comanda process summarize.yaml
+
+  # Run multiple workflows in sequence
+  comanda process extract.yaml transform.yaml
+
+  # Pipe input to a workflow
+  echo "Analyze this text" | comanda process analyze.yaml
+
+  # Use a runtime directory for file operations
+  comanda process workflow.yaml --runtime-dir ./data`,
+	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		// The environment configuration is already loaded in rootCmd's PersistentPreRunE
 		// and available in the package-level envConfig variable
