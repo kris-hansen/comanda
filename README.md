@@ -38,7 +38,7 @@ curl -X POST "http://localhost:8080/process?filename=classify.yaml" -d '{"input"
 |---------|---------------|
 | **Command-line native** | Pipes, redirects, scripts—works like `grep` or `jq` but with AI |
 | **YAML workflows** | Version control your AI pipelines, share them, iterate quickly |
-| **Multi-provider** | OpenAI, Anthropic, Google, X.AI, Ollama, vLLM—switch models without code changes |
+| **Multi-provider** | OpenAI, Anthropic, Google, X.AI, Ollama, vLLM, Claude Code—switch models without code changes |
 | **Parallel processing** | Run independent steps concurrently, compare models side-by-side |
 | **Server mode** | Turn any workflow into an API endpoint with streaming support |
 | **File & DB support** | Read/write files, databases, URLs, screenshots—not just text |
@@ -133,7 +133,7 @@ Explore the [Features](#features) and [Examples](examples/README.md) to learn mo
 ## Features
 
 - 🔗 Chain multiple LLM operations together using simple YAML configuration
-- 🤖 Support for multiple LLM providers (OpenAI, Anthropic, Google, X.AI, Ollama, vLLM, Moonshot, Deepseek)
+- 🤖 Support for multiple LLM providers (OpenAI, Anthropic, Google, X.AI, Ollama, vLLM, Moonshot, Deepseek, Claude Code)
 - 📄 File-based operations and transformations
 - 🖼️ Support for image analysis with vision models (screenshots and common image formats)
 - 🌐 Direct URL input support for web content analysis
@@ -291,6 +291,42 @@ comanda configure
 # Select: vllm
 # comanda will automatically detect models running on your vLLM server
 ```
+
+#### Claude Code CLI Support
+
+comanda supports [Claude Code](https://claude.com/claude-code), Anthropic's official CLI for Claude. This allows you to use the local `claude` binary as a provider, leveraging its agentic capabilities for programming tasks.
+
+**Setup Requirements:**
+1. Install Claude Code following the official instructions
+2. Authenticate with `claude` (one-time setup)
+3. Verify installation: `claude --version`
+
+**Configuration:**
+- No API key needed in comanda - uses Claude Code's own authentication
+- Models are automatically available when the `claude` binary is found in PATH
+
+**Available Models:**
+| Model | Description |
+|-------|-------------|
+| `claude-code` | Default Claude Code model |
+| `claude-code-opus` | Uses Claude Opus 4.5 |
+| `claude-code-sonnet` | Uses Claude Sonnet 4.5 |
+| `claude-code-haiku` | Uses Claude Haiku 4.5 |
+
+**Example Workflow:**
+```yaml
+review-code:
+  input: STDIN
+  model: claude-code
+  action: "Review this code for bugs and suggest improvements"
+  output: STDOUT
+```
+
+```bash
+cat myfile.go | comanda process review-code.yaml
+```
+
+See [examples/claude-code/](examples/claude-code/) for more examples.
 
 Configure your providers and models using the interactive configuration command:
 

@@ -1,0 +1,17 @@
+# Explain Code with Claude Code
+# Uses the local claude CLI to explain code in plain English
+#
+# Usage: comanda process examples/claude-code/explain-code.yaml < complex_function.py
+
+explain:
+  input: STDIN
+  model: claude-code-sonnet
+  action: |
+    Explain this code in plain English. Include:
+    1. What the code does at a high level
+    2. How it works step by step
+    3. Any notable patterns or techniques used
+    4. Potential edge cases or limitations
+
+    Write for a developer who is new to this codebase.
+  output: STDOUT

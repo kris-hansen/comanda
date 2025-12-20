@@ -1,0 +1,19 @@
+# Code Review with Claude Code
+# Uses the local claude CLI for intelligent code review
+#
+# Usage: comanda process examples/claude-code/code-review.yaml < myfile.go
+# Or:    cat myfile.go | comanda process examples/claude-code/code-review.yaml
+
+review:
+  input: STDIN
+  model: claude-code
+  action: |
+    Review this code thoroughly. Look for:
+    1. Bugs and logical errors
+    2. Security vulnerabilities
+    3. Performance issues
+    4. Code style and best practices
+    5. Missing error handling
+
+    Provide specific, actionable feedback with code examples where helpful.
+  output: STDOUT

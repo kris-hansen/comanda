@@ -138,6 +138,17 @@ func (r *ModelRegistry) initializeDefaultModels() {
 	r.RegisterFamilies("moonshot", []string{
 		"moonshot-",
 	})
+
+	// Claude Code models (local CLI)
+	r.RegisterModels("claude-code", []string{
+		"claude-code",
+		"claude-code-opus",
+		"claude-code-sonnet",
+		"claude-code-haiku",
+	})
+	r.RegisterFamilies("claude-code", []string{
+		"claude-code",
+	})
 }
 
 // RegisterModels adds models to the registry for a specific provider
