@@ -228,6 +228,16 @@ func defaultDetectProvider(modelName string) Provider {
 		}
 	}
 
+	// Check Claude Code (local CLI)
+	claudeCodeProvider := NewClaudeCodeProvider()
+	if claudeCodeProvider.SupportsModel(modelName) {
+		// Check if the claude binary is available
+		if IsClaudeCodeAvailable() {
+			config.DebugLog("[Provider] Found local Claude Code provider for model %s", modelName)
+			return claudeCodeProvider
+		}
+	}
+
 	// Order third-party providers from most specific to most general
 	providers := []Provider{
 		NewGoogleProvider(),    // Handles gemini- models

@@ -164,6 +164,37 @@ consolidate_results:
 - Single model: `model: gpt-4o-mini`
 - No model (for non-LLM operations): `model: NA`
 - Multiple models (for comparison): `model: [gpt-4o-mini, claude-3-opus-20240229]`
+- **IMPORTANT**: When specifying a model, you **must** use one of the supported models configured in Comanda. Do not use model names that are not configured.
+
+### Model Selection Guidelines
+
+**CRITICAL: Choose models appropriate for task complexity:**
+
+**Use inexpensive/fast models (nano, mini, lite, flash, haiku) for:**
+- Simple text transformations and formatting
+- Data extraction and parsing
+- Straightforward summarization
+- Repetitive processing tasks
+- High-volume batch operations
+
+**Use flagship models (opus, pro, o1, o3, gpt-5) for:**
+- Complex reasoning and analysis
+- Creative writing and nuanced content
+- Multi-step problem solving
+- Tasks requiring deep understanding
+- Small token window tasks where quality matters most
+
+**Model tiers (from cheapest to most expensive):**
+- **Nano/Lite tier**: `gpt-5.1-nano`, `gpt-5-nano`, `gemini-2.5-flash-lite`
+- **Mini/Flash tier**: `gpt-5.1-mini`, `gpt-5-mini`, `o4-mini`, `o3-mini`, `gemini-2.5-flash`, `claude-haiku-4-5`
+- **Standard tier**: `gpt-4o`, `gpt-4.1`, `gemini-2.5-pro`, `claude-sonnet-4-5`
+- **Flagship tier**: `gpt-5`, `gpt-5.1`, `o1`, `o3`, `o1-pro`, `o3-pro`, `claude-opus-4-5`, `gemini-3-pro-preview`
+
+**Claude Code models** (for agentic programming tasks via local Claude CLI):
+- `claude-code` - Default Claude Code model
+- `claude-code-opus` - Uses Claude Opus 4.5
+- `claude-code-sonnet` - Uses Claude Sonnet 4.5
+- `claude-code-haiku` - Uses Claude Haiku 4.5
 
 ### Actions
 - Single instruction: `action: "Summarize this text."`
@@ -177,6 +208,38 @@ consolidate_results:
 - Database: `output: { database: { type: "postgres", table: "results_table" } }`
 - Output with alias (if supported for variable creation from output): `output: STDOUT as $step_output_var`
 
+### Tool Use (Shell Command Execution)
+
+Comanda supports executing shell commands as part of workflows using the `tool:` prefix.
+
+**Tool Input Formats:**
+- Simple command: `input: "tool: ls -la"`
+- Pipe previous output to command: `input: "tool: STDIN|grep pattern"`
+
+**Tool Output Formats:**
+- Pipe LLM output through command: `output: "tool: jq '.data'"`
+- Pipe STDOUT through command: `output: "STDOUT|grep pattern"`
+
+**Security Controls:**
+Tools execute with security controls - a default allowlist of safe read-only commands and a denylist of dangerous commands.
+
+**Safe commands (allowlist):** `ls`, `cat`, `head`, `tail`, `grep`, `awk`, `sed`, `jq`, `yq`, `sort`, `uniq`, `wc`, `cut`, `tr`, `diff`, `find`, `date`, `echo`, `base64`, etc.
+
+**Blocked commands (denylist):** `rm`, `sudo`, `chmod`, `curl`, `wget`, `ssh`, `bash`, `sh`, etc.
+
+**Step-level tool configuration:**
+```yaml
+step_name:
+  input: "tool: ls -la"
+  model: NA
+  tool_config:
+    allowlist: [ls, cat, grep, jq]  # Override default allowlist
+    denylist: [rm]                  # Additional commands to block
+    timeout: 60                      # Timeout in seconds (default: 30)
+  action: NA
+  output: STDOUT
+```
+
 ## Variables
 - Definition: `input: data.txt as $initial_data`
 - Reference: `action: "Compare this analysis with $initial_data"`
@@ -184,17 +247,18 @@ consolidate_results:
 
 ## Validation Rules Summary (for LLM)
 
-1.  A step definition must clearly be one of: Standard, Generate, or Process.
+1.  When specifying a model name, you **must** use one of the supported models configured in Comanda. Do not use model names that are not explicitly configured as supported.
+2.  A step definition must clearly be one of: Standard, Generate, or Process.
     *   A step cannot mix top-level keys from different types (e.g., a `generate` step should not have a top-level `model` or `output` key; these belong inside the `generate` block).
-2.  **Standard Step:**
+3.  **Standard Step:**
     *   Must contain `input`, `model`, `action`, `output` (unless `type: openai-responses`, where `action` might be replaced by `instructions`).
     *   `input` can be `NA`. `model` can be `NA`.
-3.  **Generate Step:**
+4.  **Generate Step:**
     *   Must contain a `generate` block.
     *   `generate` block must contain `action` (string prompt) and `output` (string filename).
     *   `generate.model` is optional (uses default if omitted).
     *   Top-level `input` for the step is optional (can be `NA` or provide context).
-4.  **Process Step:**
+5.  **Process Step:**
     *   Must contain a `process` block.
     *   `process` block must contain `workflow_file` (string path).
     *   `process.inputs` is optional.
@@ -265,5 +329,54 @@ final_summary:
 ```
 
 This file-based approach is the correct way to handle any workflow where a step's logic depends on having discrete access to multiple prior outputs.
+
+## CRITICAL: Workflow Simplicity Guidelines
+
+**ALWAYS prefer the simplest possible workflow.** Over-engineered workflows are harder to debug, maintain, and understand.
+
+**Key principles:**
+1. **Minimize steps**: If a task can be done in 1 step, don't use 3. Most tasks need 1-2 steps.
+2. **Avoid unnecessary chaining**: Don't chain steps unless the output of one is genuinely needed by the next.
+3. **Use direct file I/O**: If you need to read a file and process it, that's ONE step, not three.
+4. **Prefer STDIN/STDOUT**: Use simple STDIN/STDOUT chaining over complex file intermediates when sequential processing suffices.
+5. **One model per workflow when possible**: Don't use multiple models unless comparing outputs or the task genuinely requires different capabilities.
+
+**Examples of OVER-ENGINEERED workflows (AVOID):**
+```yaml
+# BAD: Too many steps for a simple task
+read_file:
+  input: document.txt
+  model: NA
+  action: NA
+  output: temp_content.txt
+
+analyze_content:
+  input: temp_content.txt
+  model: gpt-4o-mini
+  action: "Analyze this"
+  output: temp_analysis.txt
+
+format_output:
+  input: temp_analysis.txt
+  model: gpt-4o-mini
+  action: "Format nicely"
+  output: STDOUT
+```
+
+**GOOD: Simple and direct:**
+```yaml
+# GOOD: One step does the job
+analyze_document:
+  input: document.txt
+  model: gpt-4o-mini
+  action: "Analyze this document and format the output nicely"
+  output: STDOUT
+```
+
+**When multiple steps ARE appropriate:**
+- Processing different source files independently, then combining results
+- Using tool commands to pre-process data before LLM analysis
+- Generating a workflow dynamically, then executing it
+- Tasks that genuinely require different models for different capabilities
 
 This guide covers the core concepts and syntax of Comanda's YAML DSL, including meta-processing capabilities. LLMs should use this structure to generate valid workflow files.

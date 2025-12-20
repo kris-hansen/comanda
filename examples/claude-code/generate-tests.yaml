@@ -1,0 +1,20 @@
+# Generate Tests with Claude Code
+# Uses the local claude CLI to generate unit tests for code
+#
+# Usage: comanda process examples/claude-code/generate-tests.yaml < mymodule.py
+
+generate-tests:
+  input: STDIN
+  model: claude-code-opus
+  action: |
+    Generate comprehensive unit tests for this code.
+
+    Requirements:
+    1. Use appropriate testing framework for the language
+    2. Cover happy path and edge cases
+    3. Include tests for error conditions
+    4. Add meaningful test names that describe behavior
+    5. Include setup/teardown if needed
+
+    Output only the test code, ready to save to a file.
+  output: STDOUT
