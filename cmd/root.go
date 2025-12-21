@@ -141,6 +141,13 @@ overridden with --model.`,
 		// Get available models from the environment config
 		// This ensures the LLM only uses models that are actually configured
 		availableModels := envConfig.GetAllConfiguredModels()
+
+		// Add Claude Code models if the claude binary is available
+		if models.IsClaudeCodeAvailable() {
+			claudeCodeModels := []string{"claude-code", "claude-code-opus", "claude-code-sonnet", "claude-code-haiku"}
+			availableModels = append(availableModels, claudeCodeModels...)
+		}
+
 		dslGuide := processor.GetEmbeddedLLMGuideWithModels(availableModels)
 
 		// Get the provider
