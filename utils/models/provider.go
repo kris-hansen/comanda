@@ -242,6 +242,19 @@ func defaultDetectProvider(modelName string) Provider {
 		return nil
 	}
 
+	// Check Gemini CLI (local CLI)
+	geminiCLIProvider := NewGeminiCLIProvider()
+	if geminiCLIProvider.SupportsModel(modelName) {
+		// Check if the gemini binary is available
+		if IsGeminiCLIAvailable() {
+			config.DebugLog("[Provider] Found local Gemini CLI provider for model %s", modelName)
+			return geminiCLIProvider
+		}
+		// Model is a gemini-cli model but binary not found - return nil to give clear error
+		config.DebugLog("[Provider] Model %s requires Gemini CLI but 'gemini' binary not found in PATH", modelName)
+		return nil
+	}
+
 	// Order third-party providers from most specific to most general
 	providers := []Provider{
 		NewGoogleProvider(),    // Handles gemini- models

@@ -149,6 +149,17 @@ func (r *ModelRegistry) initializeDefaultModels() {
 	r.RegisterFamilies("claude-code", []string{
 		"claude-code",
 	})
+
+	// Gemini CLI models (local CLI)
+	r.RegisterModels("gemini-cli", []string{
+		"gemini-cli",
+		"gemini-cli-pro",
+		"gemini-cli-flash",
+		"gemini-cli-flash-lite",
+	})
+	r.RegisterFamilies("gemini-cli", []string{
+		"gemini-cli",
+	})
 }
 
 // RegisterModels adds models to the registry for a specific provider
