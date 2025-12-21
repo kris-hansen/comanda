@@ -111,6 +111,12 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 		provider := models.DetectProvider(modelName)
 		p.debugf("Provider detection result for %s: found=%v", modelName, provider != nil)
 		if provider == nil {
+			// Check if this is a Claude Code model - give specific error about missing CLI
+			if models.NewClaudeCodeProvider().SupportsModel(modelName) {
+				errMsg := fmt.Sprintf("model %s requires Claude Code CLI, but 'claude' binary not found. Install Claude Code from https://claude.ai/download or ensure it's in your PATH", modelName)
+				p.debugf("Validation failed: %s", errMsg)
+				return fmt.Errorf("%s", errMsg)
+			}
 			errMsg := fmt.Sprintf("unsupported model: %s (no provider found)", modelName)
 			p.debugf("Validation failed: %s", errMsg)
 			return fmt.Errorf("%s", errMsg)
@@ -147,6 +153,17 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 			p.debugf("Ollama model tag %s confirmed to exist locally.", modelName)
 		}
 		// --- End Ollama specific check ---
+
+		// --- Skip envConfig checks for Claude Code provider ---
+		// Claude Code uses the local 'claude' binary and doesn't require API key configuration
+		if providerName == "claude-code" {
+			p.debugf("Skipping envConfig check for claude-code provider (uses local binary)")
+			provider.SetVerbose(p.verbose)
+			p.providers[provider.Name()] = provider
+			p.debugf("Model %s is supported by provider %s", modelName, provider.Name())
+			continue
+		}
+		// --- End Claude Code specific check ---
 
 		// Get model configuration from environment
 		p.debugf("Getting model configuration for %s from provider %s", modelName, providerName)
@@ -205,6 +222,15 @@ func (p *Processor) configureProviders() error {
 		// Handle Ollama provider separately since it doesn't need an API key, but expects "LOCAL"
 		if providerName == "ollama" {
 			if err := provider.Configure("LOCAL"); err != nil { // Pass "LOCAL" as expected by OllamaProvider.Configure
+				return fmt.Errorf("failed to configure provider %s: %w", providerName, err)
+			}
+			p.debugf("Successfully configured local provider %s", providerName)
+			continue
+		}
+
+		// Handle Claude Code provider - uses local claude binary, no API key needed
+		if providerName == "claude-code" {
+			if err := provider.Configure("LOCAL"); err != nil {
 				return fmt.Errorf("failed to configure provider %s: %w", providerName, err)
 			}
 			p.debugf("Successfully configured local provider %s", providerName)
