@@ -616,6 +616,47 @@ generate_haiku:
   output: STDOUT
 ` + "```" + `
 
+### OpenAI Codex Models (Local Agentic AI)
+
+**IMPORTANT: Recognizing OpenAI Codex requests:**
+If the user's prompt mentions any of the following, they want to use an ` + "`openai-codex`" + ` model:
+- "openai codex" (case insensitive)
+- "OpenAI Codex"
+- "use codex"
+- "with codex"
+- "using codex"
+- "via codex"
+- "openai-codex"
+- just "codex" (when referring to the CLI tool)
+
+**What is OpenAI Codex?**
+OpenAI Codex (` + "`openai-codex`" + `, ` + "`openai-codex-o3`" + `, ` + "`openai-codex-o4-mini`" + `, ` + "`openai-codex-gpt-4.1`" + `, ` + "`openai-codex-gpt-4o`" + `) is a special model family that uses the local OpenAI Codex CLI (` + "`codex`" + ` binary) instead of API calls. It provides:
+- **Agentic capabilities**: Can autonomously perform multi-step tasks
+- **Local execution**: Runs via the Codex CLI installed on the user's machine
+- **Tool use**: Can interact with files, run commands, and perform complex operations
+
+**When to use OpenAI Codex models:**
+- When the user explicitly mentions "codex" or "openai codex" in their request
+- When agentic/autonomous capabilities are needed with OpenAI models
+- When the workflow should leverage Codex's tool-use abilities
+- When local CLI execution is preferred over API calls
+
+**OpenAI Codex model variants:**
+- ` + "`openai-codex`" + `: Base variant (uses default Codex model)
+- ` + "`openai-codex-o3`" + `: Uses o3 model (most capable reasoning)
+- ` + "`openai-codex-o4-mini`" + ` or ` + "`openai-codex-mini`" + `: Uses o4-mini (fast/affordable)
+- ` + "`openai-codex-gpt-4.1`" + `: Uses GPT-4.1
+- ` + "`openai-codex-gpt-4o`" + `: Uses GPT-4o
+
+**Example using OpenAI Codex:**
+` + "```yaml" + `
+generate_haiku:
+  input: NA
+  model: openai-codex
+  action: "Generate a beautiful haiku about nature"
+  output: STDOUT
+` + "```" + `
+
 ### Model Selection Guidelines
 
 **CRITICAL: Choose models appropriate for task complexity:**

@@ -123,6 +123,12 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 				p.debugf("Validation failed: %s", errMsg)
 				return fmt.Errorf("%s", errMsg)
 			}
+			// Check if this is an OpenAI Codex model - give specific error about missing CLI
+			if models.NewOpenAICodexProvider().SupportsModel(modelName) {
+				errMsg := fmt.Sprintf("model %s requires OpenAI Codex CLI, but 'codex' binary not found. Install OpenAI Codex CLI via 'npm install -g @openai/codex' or ensure it's in your PATH", modelName)
+				p.debugf("Validation failed: %s", errMsg)
+				return fmt.Errorf("%s", errMsg)
+			}
 			errMsg := fmt.Sprintf("unsupported model: %s (no provider found)", modelName)
 			p.debugf("Validation failed: %s", errMsg)
 			return fmt.Errorf("%s", errMsg)
@@ -182,6 +188,17 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 		}
 		// --- End Gemini CLI specific check ---
 
+		// --- Skip envConfig checks for OpenAI Codex provider ---
+		// OpenAI Codex uses the local 'codex' binary and doesn't require API key configuration here
+		if providerName == "openai-codex" {
+			p.debugf("Skipping envConfig check for openai-codex provider (uses local binary)")
+			provider.SetVerbose(p.verbose)
+			p.providers[provider.Name()] = provider
+			p.debugf("Model %s is supported by provider %s", modelName, provider.Name())
+			continue
+		}
+		// --- End OpenAI Codex specific check ---
+
 		// Get model configuration from environment
 		p.debugf("Getting model configuration for %s from provider %s", modelName, providerName)
 		modelConfig, err := p.envConfig.GetModelConfig(providerName, modelName)
@@ -232,9 +249,10 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 // localProviders lists providers that use local binaries and don't require API keys.
 // Add new local provider names here as needed.
 var localProviders = map[string]bool{
-	"ollama":      true,
-	"claude-code": true,
-	"gemini-cli":  true,
+	"ollama":       true,
+	"claude-code":  true,
+	"gemini-cli":   true,
+	"openai-codex": true,
 }
 
 // isLocalProvider checks if a provider uses local configuration (no API key needed)

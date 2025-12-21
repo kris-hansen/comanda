@@ -1,0 +1,19 @@
+# Test Generation with OpenAI Codex
+# Uses the local codex CLI to generate unit tests
+#
+# Usage: comanda process examples/openai-codex/generate-tests.yaml < myfile.go
+# Or:    cat myfile.go | comanda process examples/openai-codex/generate-tests.yaml
+
+generate:
+  input: STDIN
+  model: openai-codex
+  action: |
+    Generate comprehensive unit tests for this code:
+    1. Test all public functions and methods
+    2. Include edge cases and error conditions
+    3. Use table-driven tests where appropriate
+    4. Add meaningful test names that describe the scenario
+    5. Include setup and teardown if needed
+
+    Output only the test code, ready to be saved to a test file.
+  output: STDOUT
