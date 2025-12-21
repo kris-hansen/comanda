@@ -212,6 +212,18 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 	return nil
 }
 
+// localProviders lists providers that use local binaries and don't require API keys.
+// Add new local provider names here as needed.
+var localProviders = map[string]bool{
+	"ollama":      true,
+	"claude-code": true,
+}
+
+// isLocalProvider checks if a provider uses local configuration (no API key needed)
+func isLocalProvider(name string) bool {
+	return localProviders[name]
+}
+
 // configureProviders sets up all detected providers with API keys
 func (p *Processor) configureProviders() error {
 	p.debugf("Configuring providers")
@@ -219,17 +231,8 @@ func (p *Processor) configureProviders() error {
 	for providerName, provider := range p.providers {
 		p.debugf("Configuring provider %s", providerName)
 
-		// Handle Ollama provider separately since it doesn't need an API key, but expects "LOCAL"
-		if providerName == "ollama" {
-			if err := provider.Configure("LOCAL"); err != nil { // Pass "LOCAL" as expected by OllamaProvider.Configure
-				return fmt.Errorf("failed to configure provider %s: %w", providerName, err)
-			}
-			p.debugf("Successfully configured local provider %s", providerName)
-			continue
-		}
-
-		// Handle Claude Code provider - uses local claude binary, no API key needed
-		if providerName == "claude-code" {
+		// Handle local providers (no API key needed, use "LOCAL" configuration)
+		if isLocalProvider(providerName) {
 			if err := provider.Configure("LOCAL"); err != nil {
 				return fmt.Errorf("failed to configure provider %s: %w", providerName, err)
 			}
