@@ -42,6 +42,48 @@ step_three:
   output: STDOUT
 ```
 
+### Multi-Agent Collaboration (`multi-agent/`)
+Examples demonstrating how to leverage Claude Code, Gemini CLI, and OpenAI Codex together:
+- `architecture-planning.yaml` - Parallel analysis with synthesis for comprehensive architecture design
+- `architecture-review.yaml` - Sequential refinement where each agent improves the previous work
+- `architecture-decision.yaml` - Voting/consensus pattern for specific architectural decisions
+
+```yaml
+# Example: Parallel multi-agent analysis
+parallel-process:
+  claude-analysis:
+    input: STDIN
+    model: claude-code
+    action: "Analyze system design aspects"
+    output: $CLAUDE_RESULT
+
+  gemini-analysis:
+    input: STDIN
+    model: gemini-cli
+    action: "Analyze patterns and best practices"
+    output: $GEMINI_RESULT
+
+  codex-analysis:
+    input: STDIN
+    model: openai-codex
+    action: "Analyze implementation structure"
+    output: $CODEX_RESULT
+
+synthesize:
+  input: |
+    Claude: $CLAUDE_RESULT
+    Gemini: $GEMINI_RESULT
+    Codex: $CODEX_RESULT
+  model: claude-code
+  action: "Synthesize into unified recommendation"
+  output: STDOUT
+```
+
+Usage:
+```bash
+echo "Design a real-time collaborative editor" | comanda process multi-agent/architecture-planning.yaml
+```
+
 ### Server Examples (`server-examples/`)
 Examples demonstrating server functionality and STDIN input:
 - `stdin-example.yaml` - Shows STDIN input usage with server POST requests
@@ -159,11 +201,16 @@ Each example includes comments explaining its functionality and any specific req
    - `model-examples/google-example.yaml` (Google AI integration)
    - `model-examples/xai-example.yaml` (X.AI integration)
 
-4. **Data Examples**: Demonstrate data processing capabilities
+4. **Multi-Agent Examples**: Combine multiple agentic coding tools
+   - `multi-agent/architecture-planning.yaml` (parallel analysis + synthesis)
+   - `multi-agent/architecture-review.yaml` (sequential refinement)
+   - `multi-agent/architecture-decision.yaml` (voting/consensus ADRs)
+
+5. **Data Examples**: Demonstrate data processing capabilities
    - `database-connections/postgres/db-example.yaml` (database operations)
    - `parallel-processing/parallel-data-processing.yaml` (parallel data analysis)
 
-5. **Server Examples**: Show HTTP server functionality
+6. **Server Examples**: Show HTTP server functionality
    - `server-examples/stdin-example.yaml` (POST request with string input)
    ```bash
    # Check if YAML supports POST

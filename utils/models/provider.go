@@ -255,6 +255,19 @@ func defaultDetectProvider(modelName string) Provider {
 		return nil
 	}
 
+	// Check OpenAI Codex (local CLI)
+	openaiCodexProvider := NewOpenAICodexProvider()
+	if openaiCodexProvider.SupportsModel(modelName) {
+		// Check if the codex binary is available
+		if IsOpenAICodexAvailable() {
+			config.DebugLog("[Provider] Found local OpenAI Codex provider for model %s", modelName)
+			return openaiCodexProvider
+		}
+		// Model is an openai-codex model but binary not found - return nil to give clear error
+		config.DebugLog("[Provider] Model %s requires OpenAI Codex CLI but 'codex' binary not found in PATH", modelName)
+		return nil
+	}
+
 	// Order third-party providers from most specific to most general
 	providers := []Provider{
 		NewGoogleProvider(),    // Handles gemini- models
