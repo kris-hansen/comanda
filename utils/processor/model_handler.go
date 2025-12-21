@@ -117,6 +117,12 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 				p.debugf("Validation failed: %s", errMsg)
 				return fmt.Errorf("%s", errMsg)
 			}
+			// Check if this is a Gemini CLI model - give specific error about missing CLI
+			if models.NewGeminiCLIProvider().SupportsModel(modelName) {
+				errMsg := fmt.Sprintf("model %s requires Gemini CLI, but 'gemini' binary not found. Install Gemini CLI via 'npm install -g @google/gemini-cli' or ensure it's in your PATH", modelName)
+				p.debugf("Validation failed: %s", errMsg)
+				return fmt.Errorf("%s", errMsg)
+			}
 			errMsg := fmt.Sprintf("unsupported model: %s (no provider found)", modelName)
 			p.debugf("Validation failed: %s", errMsg)
 			return fmt.Errorf("%s", errMsg)
@@ -164,6 +170,17 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 			continue
 		}
 		// --- End Claude Code specific check ---
+
+		// --- Skip envConfig checks for Gemini CLI provider ---
+		// Gemini CLI uses the local 'gemini' binary and doesn't require API key configuration here
+		if providerName == "gemini-cli" {
+			p.debugf("Skipping envConfig check for gemini-cli provider (uses local binary)")
+			provider.SetVerbose(p.verbose)
+			p.providers[provider.Name()] = provider
+			p.debugf("Model %s is supported by provider %s", modelName, provider.Name())
+			continue
+		}
+		// --- End Gemini CLI specific check ---
 
 		// Get model configuration from environment
 		p.debugf("Getting model configuration for %s from provider %s", modelName, providerName)
@@ -217,6 +234,7 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 var localProviders = map[string]bool{
 	"ollama":      true,
 	"claude-code": true,
+	"gemini-cli":  true,
 }
 
 // isLocalProvider checks if a provider uses local configuration (no API key needed)
