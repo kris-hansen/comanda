@@ -1,0 +1,20 @@
+# Generate Tests with Gemini CLI
+# Uses the local gemini CLI to generate unit tests
+#
+# Usage: comanda process examples/gemini-cli/generate-tests.yaml < myfile.go
+# Or:    cat myfile.go | comanda process examples/gemini-cli/generate-tests.yaml
+
+generate:
+  input: STDIN
+  model: gemini-cli-pro
+  action: |
+    Generate comprehensive unit tests for this code:
+    1. Identify all testable functions and methods
+    2. Create test cases for normal operation
+    3. Add edge case tests (empty inputs, boundaries, etc.)
+    4. Include error condition tests
+    5. Use appropriate mocking where needed
+
+    Follow the testing conventions of the language being used.
+    Include helpful test names that describe what is being tested.
+  output: STDOUT

@@ -148,6 +148,12 @@ overridden with --model.`,
 			availableModels = append(availableModels, claudeCodeModels...)
 		}
 
+		// Add Gemini CLI models if the gemini binary is available
+		if models.IsGeminiCLIAvailable() {
+			geminiCLIModels := []string{"gemini-cli", "gemini-cli-pro", "gemini-cli-flash", "gemini-cli-flash-lite"}
+			availableModels = append(availableModels, geminiCLIModels...)
+		}
+
 		dslGuide := processor.GetEmbeddedLLMGuideWithModels(availableModels)
 
 		// Get the provider
