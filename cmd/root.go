@@ -154,6 +154,12 @@ overridden with --model.`,
 			availableModels = append(availableModels, geminiCLIModels...)
 		}
 
+		// Add OpenAI Codex models if the codex binary is available
+		if models.IsOpenAICodexAvailable() {
+			openaiCodexModels := []string{"openai-codex", "openai-codex-o3", "openai-codex-o4-mini", "openai-codex-mini", "openai-codex-gpt-4.1", "openai-codex-gpt-4o"}
+			availableModels = append(availableModels, openaiCodexModels...)
+		}
+
 		dslGuide := processor.GetEmbeddedLLMGuideWithModels(availableModels)
 
 		// Get the provider
