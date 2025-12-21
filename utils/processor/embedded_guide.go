@@ -577,6 +577,45 @@ step_name_for_processing:
 ### Supported Models
 {{SUPPORTED_MODELS}}
 
+### Claude Code Models (Local Agentic AI)
+
+**IMPORTANT: Recognizing Claude Code requests:**
+If the user's prompt mentions any of the following, they want to use a ` + "`claude-code`" + ` model:
+- "claude code" (case insensitive)
+- "Claude Code"
+- "use claude code"
+- "with claude code"
+- "using claude code"
+- "via claude code"
+- "claude-code"
+
+**What is Claude Code?**
+Claude Code (` + "`claude-code`" + `, ` + "`claude-code-opus`" + `, ` + "`claude-code-sonnet`" + `, ` + "`claude-code-haiku`" + `) is a special model family that uses the local Claude Code CLI (` + "`claude`" + ` binary) instead of API calls. It provides:
+- **Agentic capabilities**: Can autonomously perform multi-step tasks
+- **Local execution**: Runs via the Claude CLI installed on the user's machine
+- **Tool use**: Can interact with files, run commands, and perform complex operations
+
+**When to use Claude Code models:**
+- When the user explicitly mentions "claude code" in their request
+- When agentic/autonomous capabilities are needed
+- When the workflow should leverage Claude Code's tool-use abilities
+- When local CLI execution is preferred over API calls
+
+**Claude Code model variants:**
+- ` + "`claude-code`" + `: Base variant (uses default Claude Code model)
+- ` + "`claude-code-opus`" + `: Uses Claude Opus 4.5 (most capable)
+- ` + "`claude-code-sonnet`" + `: Uses Claude Sonnet 4.5 (balanced)
+- ` + "`claude-code-haiku`" + `: Uses Claude Haiku 4.5 (fastest/cheapest)
+
+**Example using Claude Code:**
+` + "```yaml" + `
+generate_haiku:
+  input: NA
+  model: claude-code
+  action: "Generate a beautiful haiku about nature"
+  output: STDOUT
+` + "```" + `
+
 ### Model Selection Guidelines
 
 **CRITICAL: Choose models appropriate for task complexity:**

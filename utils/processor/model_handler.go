@@ -111,6 +111,12 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 		provider := models.DetectProvider(modelName)
 		p.debugf("Provider detection result for %s: found=%v", modelName, provider != nil)
 		if provider == nil {
+			// Check if this is a Claude Code model - give specific error about missing CLI
+			if models.NewClaudeCodeProvider().SupportsModel(modelName) {
+				errMsg := fmt.Sprintf("model %s requires Claude Code CLI, but 'claude' binary not found. Install Claude Code from https://claude.ai/download or ensure it's in your PATH", modelName)
+				p.debugf("Validation failed: %s", errMsg)
+				return fmt.Errorf("%s", errMsg)
+			}
 			errMsg := fmt.Sprintf("unsupported model: %s (no provider found)", modelName)
 			p.debugf("Validation failed: %s", errMsg)
 			return fmt.Errorf("%s", errMsg)
@@ -147,6 +153,17 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 			p.debugf("Ollama model tag %s confirmed to exist locally.", modelName)
 		}
 		// --- End Ollama specific check ---
+
+		// --- Skip envConfig checks for Claude Code provider ---
+		// Claude Code uses the local 'claude' binary and doesn't require API key configuration
+		if providerName == "claude-code" {
+			p.debugf("Skipping envConfig check for claude-code provider (uses local binary)")
+			provider.SetVerbose(p.verbose)
+			p.providers[provider.Name()] = provider
+			p.debugf("Model %s is supported by provider %s", modelName, provider.Name())
+			continue
+		}
+		// --- End Claude Code specific check ---
 
 		// Get model configuration from environment
 		p.debugf("Getting model configuration for %s from provider %s", modelName, providerName)
@@ -195,6 +212,18 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 	return nil
 }
 
+// localProviders lists providers that use local binaries and don't require API keys.
+// Add new local provider names here as needed.
+var localProviders = map[string]bool{
+	"ollama":      true,
+	"claude-code": true,
+}
+
+// isLocalProvider checks if a provider uses local configuration (no API key needed)
+func isLocalProvider(name string) bool {
+	return localProviders[name]
+}
+
 // configureProviders sets up all detected providers with API keys
 func (p *Processor) configureProviders() error {
 	p.debugf("Configuring providers")
@@ -202,9 +231,9 @@ func (p *Processor) configureProviders() error {
 	for providerName, provider := range p.providers {
 		p.debugf("Configuring provider %s", providerName)
 
-		// Handle Ollama provider separately since it doesn't need an API key, but expects "LOCAL"
-		if providerName == "ollama" {
-			if err := provider.Configure("LOCAL"); err != nil { // Pass "LOCAL" as expected by OllamaProvider.Configure
+		// Handle local providers (no API key needed, use "LOCAL" configuration)
+		if isLocalProvider(providerName) {
+			if err := provider.Configure("LOCAL"); err != nil {
 				return fmt.Errorf("failed to configure provider %s: %w", providerName, err)
 			}
 			p.debugf("Successfully configured local provider %s", providerName)
