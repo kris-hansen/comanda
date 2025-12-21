@@ -236,6 +236,10 @@ func defaultDetectProvider(modelName string) Provider {
 			config.DebugLog("[Provider] Found local Claude Code provider for model %s", modelName)
 			return claudeCodeProvider
 		}
+		// Model is a claude-code model but binary not found - return nil to give clear error
+		// rather than falling through to Ollama which would give a confusing error
+		config.DebugLog("[Provider] Model %s requires Claude Code CLI but 'claude' binary not found in PATH", modelName)
+		return nil
 	}
 
 	// Order third-party providers from most specific to most general
