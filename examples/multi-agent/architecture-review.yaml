@@ -1,0 +1,98 @@
+# Multi-Agent Architecture Review Workflow
+#
+# This workflow uses a sequential refinement pattern where each agent
+# builds upon and critiques the previous agent's work:
+#
+# 1. Claude Code: Creates initial architecture proposal
+# 2. Gemini CLI: Reviews and improves with alternative perspectives
+# 3. OpenAI Codex: Final review with implementation feasibility check
+#
+# This pattern is useful when you want iterative improvement rather than
+# parallel analysis.
+#
+# Usage:
+#   echo "Microservices platform for e-commerce" | comanda process architecture-review.yaml
+
+# Step 1: Claude Code creates the initial architecture
+initial-proposal:
+  input: STDIN
+  model: claude-code
+  action: |
+    You are a senior architect creating an initial architecture proposal.
+
+    Based on the requirements below, create a comprehensive architecture design:
+
+    1. System overview and key components
+    2. Data model and storage strategy
+    3. API design and service boundaries
+    4. Technology recommendations
+    5. Deployment architecture
+
+    Be thorough but acknowledge this is a first draft that will be reviewed.
+
+    Requirements:
+  output: $INITIAL_ARCHITECTURE
+
+# Step 2: Gemini CLI reviews and enhances
+gemini-review:
+  input: |
+    # Architecture Review Task
+
+    Review the following architecture proposal and improve it.
+
+    ## Original Requirements
+    (The user wants to build a system based on the input that led to this architecture)
+
+    ## Current Proposal
+    $INITIAL_ARCHITECTURE
+  model: gemini-cli
+  action: |
+    You are a critical architecture reviewer. Your task is to:
+
+    1. **Strengths**: Identify what's good about this architecture
+    2. **Weaknesses**: Point out potential issues, scaling problems, or anti-patterns
+    3. **Alternatives**: Suggest alternative approaches where beneficial
+    4. **Improvements**: Provide specific improvements with rationale
+    5. **Missing Elements**: Add any critical aspects that were overlooked
+
+    Format as:
+    ## Review Summary
+    ## Strengths
+    ## Areas for Improvement
+    ## Recommended Changes
+    ## Enhanced Architecture
+    (Include the improved architecture incorporating your feedback)
+  output: $REVIEWED_ARCHITECTURE
+
+# Step 3: OpenAI Codex does implementation feasibility check
+final-review:
+  input: |
+    # Implementation Feasibility Review
+
+    This architecture has been through initial design and peer review.
+    Now perform a final implementation feasibility check.
+
+    ## Reviewed Architecture
+    $REVIEWED_ARCHITECTURE
+  model: openai-codex
+  action: |
+    You are a principal engineer reviewing architecture for implementation feasibility.
+
+    Evaluate this architecture for:
+
+    1. **Implementation Complexity**: Is this realistically buildable? Estimate effort.
+    2. **Technical Risks**: What could go wrong during implementation?
+    3. **Dependencies**: Are there critical external dependencies or unknowns?
+    4. **Team Skills**: What expertise would the team need?
+    5. **MVP Path**: What's the minimal viable implementation?
+    6. **Code Structure**: Provide a concrete project structure
+
+    Create a final implementation-ready specification with:
+    - Concrete directory structure
+    - Key files to create first
+    - Interface definitions (pseudocode is fine)
+    - Implementation order recommendation
+    - Risk mitigation strategies
+
+    Be practical and specific - this should be actionable for developers.
+  output: STDOUT

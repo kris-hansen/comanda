@@ -1,0 +1,147 @@
+# Multi-Agent Architecture Planning Workflow
+#
+# This workflow leverages Claude Code, Gemini CLI, and OpenAI Codex together
+# to create comprehensive software architecture plans. Each agent contributes
+# its unique strengths:
+#
+# - Claude Code: Deep reasoning about system design and trade-offs
+# - Gemini CLI: Broad knowledge of patterns and Google-scale solutions
+# - OpenAI Codex: Practical implementation focus and code structure
+#
+# Usage:
+#   echo "Build a real-time collaborative document editor" | comanda process architecture-planning.yaml
+#   comanda process architecture-planning.yaml < requirements.txt
+#
+# The workflow runs all three agents in parallel for efficiency, then
+# synthesizes their perspectives into a unified architecture document.
+
+# Phase 1: Parallel Analysis - Each agent tackles different aspects
+parallel-process:
+  # Claude Code: System design and component architecture
+  claude-system-design:
+    input: STDIN
+    model: claude-code
+    action: |
+      You are a senior software architect. Analyze the following project requirements
+      and provide a detailed system design.
+
+      Focus on:
+      1. High-level component architecture (what are the major components?)
+      2. Data flow between components
+      3. Key design decisions and trade-offs
+      4. Potential technical challenges and mitigations
+      5. Scalability considerations
+
+      Format your response as structured markdown with clear sections.
+      Be specific about technologies where appropriate but focus on the "why".
+
+      Requirements:
+    output: $CLAUDE_SYSTEM_DESIGN
+
+  # Gemini CLI: Patterns, best practices, and technology recommendations
+  gemini-patterns:
+    input: STDIN
+    model: gemini-cli
+    action: |
+      You are a solutions architect with deep knowledge of design patterns
+      and industry best practices. Analyze these project requirements.
+
+      Focus on:
+      1. Applicable design patterns (with justification for each)
+      2. Technology stack recommendations (languages, frameworks, databases)
+      3. API design approach (REST, GraphQL, gRPC - with reasoning)
+      4. Security architecture considerations
+      5. Observability and monitoring strategy
+
+      Format your response as structured markdown.
+      Include links to relevant documentation or resources where helpful.
+
+      Requirements:
+    output: $GEMINI_PATTERNS
+
+  # OpenAI Codex: Implementation structure and code organization
+  codex-implementation:
+    input: STDIN
+    model: openai-codex
+    action: |
+      You are a principal engineer focused on clean code and maintainability.
+      Analyze these project requirements from an implementation perspective.
+
+      Focus on:
+      1. Repository structure and project organization
+      2. Module/package boundaries and dependencies
+      3. Key interfaces and abstractions to define
+      4. Testing strategy (unit, integration, e2e)
+      5. Development workflow and CI/CD considerations
+
+      Format your response as structured markdown.
+      Include example directory structures or interface definitions where helpful.
+
+      Requirements:
+    output: $CODEX_IMPLEMENTATION
+
+# Phase 2: Synthesis - Combine all perspectives into unified architecture
+synthesize-architecture:
+  input: |
+    # Multi-Agent Architecture Analysis Results
+
+    You have received architecture analysis from three different AI agents,
+    each focusing on different aspects. Your task is to synthesize these
+    into a unified, cohesive architecture document.
+
+    ---
+    ## Claude Code: System Design & Components
+    $CLAUDE_SYSTEM_DESIGN
+
+    ---
+    ## Gemini CLI: Patterns & Technology Recommendations
+    $GEMINI_PATTERNS
+
+    ---
+    ## OpenAI Codex: Implementation Structure
+    $CODEX_IMPLEMENTATION
+
+    ---
+  model: claude-code
+  action: |
+    Synthesize the above three architecture analyses into a single, cohesive
+    architecture document. Your goal is to:
+
+    1. Identify areas of agreement and reinforce those recommendations
+    2. Resolve any conflicts by choosing the best approach with justification
+    3. Fill in any gaps by combining complementary insights
+    4. Create a clear, actionable architecture specification
+
+    Structure your output as:
+
+    # Architecture Specification
+
+    ## Executive Summary
+    (2-3 paragraph overview)
+
+    ## System Architecture
+    (Component diagram description, data flow)
+
+    ## Technology Stack
+    (Consolidated recommendations with rationale)
+
+    ## Design Patterns & Principles
+    (Key patterns to apply)
+
+    ## Project Structure
+    (Directory layout, module organization)
+
+    ## Key Interfaces
+    (Critical abstractions to define first)
+
+    ## Security & Observability
+    (Cross-cutting concerns)
+
+    ## Implementation Roadmap
+    (Suggested order of implementation)
+
+    ## Open Questions
+    (Items needing further discussion)
+
+    Be decisive - make clear recommendations rather than listing options.
+  output: STDOUT
