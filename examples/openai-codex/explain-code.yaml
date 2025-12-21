@@ -1,0 +1,19 @@
+# Code Explanation with OpenAI Codex
+# Uses the local codex CLI for intelligent code explanation
+#
+# Usage: comanda process examples/openai-codex/explain-code.yaml < myfile.go
+# Or:    cat myfile.go | comanda process examples/openai-codex/explain-code.yaml
+
+explain:
+  input: STDIN
+  model: openai-codex
+  action: |
+    Explain this code in detail:
+    1. What is the overall purpose of this code?
+    2. Walk through the main functions and their responsibilities
+    3. Explain any complex algorithms or patterns used
+    4. Note any dependencies or external services it interacts with
+    5. Summarize any potential issues or areas for improvement
+
+    Structure your explanation for a developer who is new to this codebase.
+  output: STDOUT

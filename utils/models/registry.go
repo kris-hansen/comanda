@@ -160,6 +160,19 @@ func (r *ModelRegistry) initializeDefaultModels() {
 	r.RegisterFamilies("gemini-cli", []string{
 		"gemini-cli",
 	})
+
+	// OpenAI Codex models (local CLI)
+	r.RegisterModels("openai-codex", []string{
+		"openai-codex",
+		"openai-codex-o3",
+		"openai-codex-o4-mini",
+		"openai-codex-mini",
+		"openai-codex-gpt-4.1",
+		"openai-codex-gpt-4o",
+	})
+	r.RegisterFamilies("openai-codex", []string{
+		"openai-codex",
+	})
 }
 
 // RegisterModels adds models to the registry for a specific provider
