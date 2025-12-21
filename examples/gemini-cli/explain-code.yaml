@@ -1,0 +1,20 @@
+# Explain Code with Gemini CLI
+# Uses the local gemini CLI to generate code explanations
+#
+# Usage: comanda process examples/gemini-cli/explain-code.yaml < myfile.go
+# Or:    cat myfile.go | comanda process examples/gemini-cli/explain-code.yaml
+
+explain:
+  input: STDIN
+  model: gemini-cli-flash
+  action: |
+    Explain this code in detail:
+    1. What does this code do at a high level?
+    2. Walk through the main logic flow
+    3. Explain any complex or non-obvious parts
+    4. Note any patterns or idioms being used
+    5. Suggest any improvements or best practices
+
+    Write the explanation in clear, accessible language suitable for a developer
+    who is new to this codebase.
+  output: STDOUT
