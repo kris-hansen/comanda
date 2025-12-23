@@ -31,10 +31,7 @@ func (p *Processor) isSpecialInput(input string) bool {
 		}
 	}
 	// Check for tool input
-	if IsToolInput(input) {
-		return true
-	}
-	return false
+	return IsToolInput(input)
 }
 
 // isURL checks if the input string is a valid URL
