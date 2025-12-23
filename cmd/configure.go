@@ -690,6 +690,66 @@ func promptForModes(reader *bufio.Reader, modelName string) ([]config.ModelMode,
 	return modes, nil
 }
 
+// getClaudeCodeModels returns the available Claude Code CLI models
+func getClaudeCodeModels() []string {
+	return []string{"claude-code", "claude-code-opus", "claude-code-sonnet", "claude-code-haiku"}
+}
+
+// getGeminiCLIModels returns the available Gemini CLI models
+func getGeminiCLIModels() []string {
+	return []string{"gemini-cli", "gemini-cli-pro", "gemini-cli-flash", "gemini-cli-flash-lite"}
+}
+
+// getOpenAICodexModels returns the available OpenAI Codex CLI models
+func getOpenAICodexModels() []string {
+	return []string{"openai-codex", "openai-codex-o3", "openai-codex-o4-mini", "openai-codex-mini", "openai-codex-gpt-4.1", "openai-codex-gpt-4o"}
+}
+
+// configureCLIAgent handles the configuration flow for CLI-based agents
+func configureCLIAgent(reader *bufio.Reader, envConfig *config.EnvConfig, providerName string, displayName string, availableModels []string) {
+	log.Printf("\n%s %s CLI is installed and ready to use!\n", greenCheckmark, displayName)
+	log.Printf("\nAvailable models:\n")
+	for i, model := range availableModels {
+		log.Printf("  %d. %s\n", i+1, model)
+	}
+
+	log.Printf("\nThese models are automatically available for use in workflows.\n")
+	log.Printf("No API key is required - the CLI handles authentication.\n")
+
+	// Ask if user wants to set a default generation model
+	log.Printf("\nWould you like to set one of these as your default generation model? (y/n): ")
+	setDefault, _ := reader.ReadString('\n')
+	if strings.TrimSpace(strings.ToLower(setDefault)) == "y" {
+		log.Printf("Enter the number of the model to set as default: ")
+		selectionInput, _ := reader.ReadString('\n')
+		selectionNum, err := strconv.Atoi(strings.TrimSpace(selectionInput))
+		if err != nil || selectionNum < 1 || selectionNum > len(availableModels) {
+			log.Printf("Invalid selection. Skipping default model configuration.\n")
+			return
+		}
+		selectedModel := availableModels[selectionNum-1]
+		envConfig.DefaultGenerationModel = selectedModel
+		log.Printf("%s Default generation model set to '%s'\n", greenCheckmark, selectedModel)
+	} else {
+		log.Printf("\nYou can use %s models in workflows by specifying the model name.\n", displayName)
+		log.Printf("Example: model: %s\n", availableModels[0])
+	}
+
+	// Always ensure config directory exists and save the config
+	configPath := config.GetEnvPath()
+	if dir := filepath.Dir(configPath); dir != "." && dir != "/" {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			log.Printf("Error creating config directory: %v\n", err)
+			return
+		}
+	}
+	if err := config.SaveEnvConfig(configPath, envConfig); err != nil {
+		log.Printf("Error saving configuration: %v\n", err)
+		return
+	}
+	log.Printf("Configuration saved to %s\n", configPath)
+}
+
 // getAllConfiguredModelNames retrieves a list of all unique model names from the configuration.
 func getAllConfiguredModelNames(envConfig *config.EnvConfig) []string {
 	var modelNames []string
@@ -715,7 +775,15 @@ var configureCmd = &cobra.Command{
 Running without flags starts interactive configuration mode, which guides you
 through setting up providers (Anthropic, OpenAI, Ollama, etc.) and their models.
 
-Configuration is stored in ~/.comanda/config.yaml
+Comanda supports two types of providers:
+  API-based:  OpenAI, Anthropic, Google, X.AI, Deepseek, Moonshot (require API keys)
+  Local:      Ollama, vLLM (require running servers)
+  CLI Agents: Claude Code, Gemini CLI, OpenAI Codex (require installed binaries)
+
+CLI agents are agentic coding assistants that run locally. They don't require
+API key configuration - just install the CLI tool and Comanda will detect it.
+
+Configuration is stored in ~/.comanda/config.yaml (legacy .env also supported)
 
 Flag Groups:
   Model Management    --list, --remove, --set-default-generation-model, --default
@@ -725,14 +793,14 @@ Flag Groups:
 	Example: `  # Interactive setup (recommended for first-time users)
   comanda configure
 
-  # List all configured providers and models
+  # List all configured providers and models (includes CLI agents)
   comanda configure --list
 
   # Update an API key for a provider
   comanda configure --update-key anthropic
 
-  # Set the default model for workflow generation
-  comanda configure --set-default-generation-model claude-sonnet-4-20250514
+  # Set the default model for workflow generation (can use CLI agent models)
+  comanda configure --set-default-generation-model claude-code-sonnet
 
   # Encrypt configuration file (protects API keys)
   comanda configure --encrypt
@@ -931,31 +999,69 @@ Flag Groups:
 		} else if defaultFlag {
 			// Interactive mode to set default generation model
 			reader := bufio.NewReader(os.Stdin)
+
+			// Get configured models from config file
 			allModels := getAllConfiguredModelNames(envConfig)
-			if len(allModels) == 0 {
-				log.Printf("No models are currently configured. Please configure models first using 'comanda configure'.")
+
+			// Add CLI agent models if available
+			var cliModels []string
+			if models.IsClaudeCodeAvailable() {
+				cliModels = append(cliModels, getClaudeCodeModels()...)
+			}
+			if models.IsGeminiCLIAvailable() {
+				cliModels = append(cliModels, getGeminiCLIModels()...)
+			}
+			if models.IsOpenAICodexAvailable() {
+				cliModels = append(cliModels, getOpenAICodexModels()...)
+			}
+
+			if len(allModels) == 0 && len(cliModels) == 0 {
+				log.Printf("No models are currently available.")
+				log.Printf("Either configure API-based providers with 'comanda configure'")
+				log.Printf("or install a CLI agent (claude-code, gemini-cli, openai-codex).")
 				return
 			}
 
-			log.Printf("Available configured models:")
-			for i, modelName := range allModels {
-				log.Printf("%d. %s", i+1, modelName)
-				if envConfig.DefaultGenerationModel == modelName {
-					log.Printf(" (current default)")
+			// Display configured models
+			currentIdx := 0
+			if len(allModels) > 0 {
+				log.Printf("\nConfigured API/Local models:")
+				for i, modelName := range allModels {
+					currentIdx = i + 1
+					marker := ""
+					if envConfig.DefaultGenerationModel == modelName {
+						marker = " (current default)"
+					}
+					log.Printf("  %d. %s%s\n", currentIdx, modelName, marker)
 				}
-				log.Printf("\n")
 			}
+
+			// Display CLI agent models
+			if len(cliModels) > 0 {
+				log.Printf("\nCLI Agent models (auto-detected):")
+				for i, modelName := range cliModels {
+					idx := len(allModels) + i + 1
+					marker := ""
+					if envConfig.DefaultGenerationModel == modelName {
+						marker = " (current default)"
+					}
+					log.Printf("  %d. %s%s\n", idx, modelName, marker)
+				}
+			}
+
+			// Combine all models for selection
+			combinedModels := append(allModels, cliModels...)
 
 			var selectedDefaultModel string
 			for {
 				log.Printf("\nEnter the number of the model to set as default for generation: ")
 				selectionInput, _ := reader.ReadString('\n')
 				selectionNum, err := strconv.Atoi(strings.TrimSpace(selectionInput))
-				if err != nil || selectionNum < 1 || selectionNum > len(allModels) {
+				if err != nil || selectionNum < 1 || selectionNum > len(combinedModels) {
 					log.Printf("Invalid selection. Please enter a number from the list.")
 					continue
 				}
-				selectedDefaultModel = allModels[selectionNum-1]
+				selectedDefaultModel = combinedModels[selectionNum-1]
 				break
 			}
 
@@ -963,16 +1069,29 @@ Flag Groups:
 			log.Printf("%s Default generation model set to '%s'\n", greenCheckmark, selectedDefaultModel)
 		} else {
 			reader := bufio.NewReader(os.Stdin)
-			// Prompt for provider
+			// Prompt for provider with CLI agents as options
 			var provider string
 			for {
-				log.Printf("Enter provider (openai/anthropic/ollama/vllm/google/xai/deepseek/moonshot): ")
+				log.Printf("\n")
+				log.Printf("Available provider types:\n")
+				log.Printf("  API-based:   openai, anthropic, google, xai, deepseek, moonshot\n")
+				log.Printf("  Local:       ollama, vllm\n")
+				log.Printf("  CLI Agents:  claude-code, gemini-cli, openai-codex\n")
+				log.Printf("\nEnter provider: ")
 				provider, _ = reader.ReadString('\n')
 				provider = strings.TrimSpace(provider)
-				if provider == "openai" || provider == "anthropic" || provider == "ollama" || provider == "vllm" || provider == "google" || provider == "xai" || provider == "deepseek" || provider == "moonshot" {
+				validProviders := []string{"openai", "anthropic", "ollama", "vllm", "google", "xai", "deepseek", "moonshot", "claude-code", "gemini-cli", "openai-codex"}
+				isValid := false
+				for _, vp := range validProviders {
+					if provider == vp {
+						isValid = true
+						break
+					}
+				}
+				if isValid {
 					break
 				}
-				log.Printf("Invalid provider. Please enter 'openai', 'anthropic', 'ollama', 'vllm', 'google', 'xai', 'deepseek', or 'moonshot'")
+				log.Printf("Invalid provider. Please choose from the options above.")
 			}
 
 			// Special handling for local providers
@@ -987,6 +1106,37 @@ Flag Groups:
 					log.Printf("Error: vLLM server is not running. Please start vLLM server and try again.")
 					return
 				}
+			}
+
+			// Special handling for CLI agents
+			if provider == "claude-code" {
+				if !models.IsClaudeCodeAvailable() {
+					log.Printf("Error: Claude Code CLI is not installed.\n")
+					log.Printf("Install it from: https://docs.anthropic.com/en/docs/claude-code\n")
+					log.Printf("Or run: npm install -g @anthropic-ai/claude-code\n")
+					return
+				}
+				// CLI agents are auto-configured, just show status and available models
+				configureCLIAgent(reader, envConfig, provider, "claude-code", getClaudeCodeModels())
+				return
+			}
+			if provider == "gemini-cli" {
+				if !models.IsGeminiCLIAvailable() {
+					log.Printf("Error: Gemini CLI is not installed.\n")
+					log.Printf("Install it via: npm install -g @google/gemini-cli\n")
+					return
+				}
+				configureCLIAgent(reader, envConfig, provider, "gemini-cli", getGeminiCLIModels())
+				return
+			}
+			if provider == "openai-codex" {
+				if !models.IsOpenAICodexAvailable() {
+					log.Printf("Error: OpenAI Codex CLI is not installed.\n")
+					log.Printf("Install it via: npm install -g @openai/codex\n")
+					return
+				}
+				configureCLIAgent(reader, envConfig, provider, "openai-codex", getOpenAICodexModels())
+				return
 			}
 
 			// Check if provider exists
@@ -1178,24 +1328,53 @@ Flag Groups:
 				log.Printf("\nDo you want to set or update the default model for workflow generation? (y/n): ")
 				setDefaultGenModelInput, _ := reader.ReadString('\n')
 				if strings.TrimSpace(strings.ToLower(setDefaultGenModelInput)) == "y" {
+					// Get configured models from config file
 					allModels := getAllConfiguredModelNames(envConfig)
-					if len(allModels) == 0 {
-						log.Printf("No models are currently configured. Cannot set a default generation model.")
+
+					// Add CLI agent models if available
+					var cliModels []string
+					if models.IsClaudeCodeAvailable() {
+						cliModels = append(cliModels, getClaudeCodeModels()...)
+					}
+					if models.IsGeminiCLIAvailable() {
+						cliModels = append(cliModels, getGeminiCLIModels()...)
+					}
+					if models.IsOpenAICodexAvailable() {
+						cliModels = append(cliModels, getOpenAICodexModels()...)
+					}
+
+					if len(allModels) == 0 && len(cliModels) == 0 {
+						log.Printf("No models are currently available. Cannot set a default generation model.")
 					} else {
-						log.Printf("\nAvailable configured models for default generation:")
-						for i, modelName := range allModels {
-							log.Printf("%d. %s\n", i+1, modelName)
+						// Display configured models
+						if len(allModels) > 0 {
+							log.Printf("\nConfigured API/Local models:")
+							for i, modelName := range allModels {
+								log.Printf("  %d. %s\n", i+1, modelName)
+							}
 						}
+
+						// Display CLI agent models
+						if len(cliModels) > 0 {
+							log.Printf("\nCLI Agent models (auto-detected):")
+							for i, modelName := range cliModels {
+								log.Printf("  %d. %s\n", len(allModels)+i+1, modelName)
+							}
+						}
+
+						// Combine all models for selection
+						combinedModels := append(allModels, cliModels...)
+
 						var selectedDefaultModel string
 						for {
-							log.Printf("Enter the number of the model to set as default: ")
+							log.Printf("\nEnter the number of the model to set as default: ")
 							selectionInput, _ := reader.ReadString('\n')
 							selectionNum, err := strconv.Atoi(strings.TrimSpace(selectionInput))
-							if err != nil || selectionNum < 1 || selectionNum > len(allModels) {
+							if err != nil || selectionNum < 1 || selectionNum > len(combinedModels) {
 								log.Printf("Invalid selection. Please enter a number from the list.")
 								continue
 							}
-							selectedDefaultModel = allModels[selectionNum-1]
+							selectedDefaultModel = combinedModels[selectionNum-1]
 							break
 						}
 						envConfig.DefaultGenerationModel = selectedDefaultModel
@@ -1294,9 +1473,55 @@ func listConfiguration() {
 		log.Printf("\n")
 	}
 
+	// List CLI Agents (these don't require config, just binary availability)
+	log.Printf("CLI Agents (auto-detected):\n")
+	cliAgentFound := false
+
+	if models.IsClaudeCodeAvailable() {
+		cliAgentFound = true
+		log.Printf("\n%s claude-code: INSTALLED\n", greenCheckmark)
+		log.Printf("  Available models:\n")
+		for _, model := range getClaudeCodeModels() {
+			log.Printf("    - %s\n", model)
+		}
+	} else {
+		log.Printf("\n✗ claude-code: NOT INSTALLED\n")
+		log.Printf("  Install: https://docs.anthropic.com/en/docs/claude-code\n")
+	}
+
+	if models.IsGeminiCLIAvailable() {
+		cliAgentFound = true
+		log.Printf("\n%s gemini-cli: INSTALLED\n", greenCheckmark)
+		log.Printf("  Available models:\n")
+		for _, model := range getGeminiCLIModels() {
+			log.Printf("    - %s\n", model)
+		}
+	} else {
+		log.Printf("\n✗ gemini-cli: NOT INSTALLED\n")
+		log.Printf("  Install: npm install -g @google/gemini-cli\n")
+	}
+
+	if models.IsOpenAICodexAvailable() {
+		cliAgentFound = true
+		log.Printf("\n%s openai-codex: INSTALLED\n", greenCheckmark)
+		log.Printf("  Available models:\n")
+		for _, model := range getOpenAICodexModels() {
+			log.Printf("    - %s\n", model)
+		}
+	} else {
+		log.Printf("\n✗ openai-codex: NOT INSTALLED\n")
+		log.Printf("  Install: npm install -g @openai/codex\n")
+	}
+
+	if !cliAgentFound {
+		log.Printf("\n  No CLI agents installed. Install one to use agentic coding capabilities.\n")
+	}
+
 	// List providers
+	log.Printf("\n")
 	if len(cfg.Providers) == 0 {
-		log.Printf("No providers configured.")
+		log.Printf("Configured Providers: none\n")
+		log.Printf("\nRun 'comanda configure' to set up API-based providers.\n")
 		return
 	}
 

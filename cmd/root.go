@@ -39,7 +39,7 @@ Getting Started:
   2. comanda generate         Create a workflow from natural language
   3. comanda process          Execute a workflow
 
-Configuration is stored in ~/.comanda/config.yaml
+Configuration is stored in ~/.comanda/config.yaml (legacy .env also supported)
 For documentation, visit: https://github.com/kris-hansen/comanda`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// Configure log output format - remove timestamps for cleaner CLI output
@@ -132,7 +132,27 @@ overridden with --model.`,
 			modelForGeneration = envConfig.DefaultGenerationModel
 		}
 		if modelForGeneration == "" {
-			return fmt.Errorf("no model specified for generation and no default_generation_model configured. Use --model or configure a default")
+			// Build a helpful error message suggesting available options
+			var suggestions []string
+			if models.IsClaudeCodeAvailable() {
+				suggestions = append(suggestions, "claude-code")
+			}
+			if models.IsGeminiCLIAvailable() {
+				suggestions = append(suggestions, "gemini-cli")
+			}
+			if models.IsOpenAICodexAvailable() {
+				suggestions = append(suggestions, "openai-codex")
+			}
+
+			errMsg := "no model specified for generation and no default_generation_model configured"
+			if len(suggestions) > 0 {
+				errMsg += fmt.Sprintf("\n\nAvailable CLI agents detected: %s", strings.Join(suggestions, ", "))
+				errMsg += fmt.Sprintf("\n\nUse --model to specify one, e.g.:\n  comanda generate output.yaml \"your prompt\" --model %s", suggestions[0])
+				errMsg += "\n\nOr set a default with:\n  comanda configure --set-default-generation-model " + suggestions[0]
+			} else {
+				errMsg += "\n\nUse --model to specify a model or configure a default with:\n  comanda configure --default"
+			}
+			return fmt.Errorf("%s", errMsg)
 		}
 
 		log.Printf("Generating workflow using model: %s\n", modelForGeneration)
@@ -169,12 +189,19 @@ overridden with --model.`,
 		}
 
 		// Attempt to configure the provider with API key from envConfig
-		providerConfig, err := envConfig.GetProviderConfig(provider.Name())
+		// CLI agents don't need configuration from envConfig
+		providerName := provider.Name()
+		isCLIAgent := providerName == "claude-code" || providerName == "gemini-cli" || providerName == "openai-codex"
+
+		providerConfig, err := envConfig.GetProviderConfig(providerName)
 		if err != nil {
-			log.Printf("Warning: Provider %s not found in env configuration. Assuming it does not require an API key or is pre-configured.\n", provider.Name())
+			// Only warn for non-CLI agents that aren't in the config
+			if !isCLIAgent {
+				log.Printf("Warning: Provider %s not found in env configuration. Assuming it does not require an API key or is pre-configured.\n", providerName)
+			}
 		} else {
 			if err := provider.Configure(providerConfig.APIKey); err != nil {
-				return fmt.Errorf("failed to configure provider %s: %w", provider.Name(), err)
+				return fmt.Errorf("failed to configure provider %s: %w", providerName, err)
 			}
 		}
 		provider.SetVerbose(verbose)
