@@ -357,6 +357,9 @@ func renderChart(chart *WorkflowChart, filename string) {
 	}
 
 	// Render steps in order
+	if len(chart.SequentialOrder) == 0 {
+		fmt.Println("  (no steps defined)")
+	}
 	stepNum := 0
 	totalItems := len(chart.SequentialOrder)
 	for idx, item := range chart.SequentialOrder {
