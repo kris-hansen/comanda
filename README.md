@@ -181,6 +181,62 @@ curl -X POST "http://localhost:8080/process?filename=review.yaml" \
 | **Chunking** | Auto-split large files for processing |
 | **Memory** | Persistent context via COMANDA.md |
 | **Branching** | Conditional workflows with `defer:` |
+| **Visualization** | ASCII workflow charts with `comanda chart` |
+
+## Visualize Workflows
+
+See the structure of any workflow at a glance:
+
+```bash
+comanda chart workflow.yaml
+```
+
+```
++================================================+
+| WORKFLOW: examples/parallel-data-processing... |
++================================================+
+
++------------------------------------------------+
+|            INPUT: examples/test.csv            |
++------------------------------------------------+
+                        |
+                        v
++================================================+
+| PARALLEL: parallel-process (3 steps)           |
++------------------------------------------------+
+  +----------------------------------------------+
+  | [OK] analyze_csv                             |
+  | Model:  gpt-4o-mini                          |
+  | Action: Analyze this CSV data and            |
+  +----------------------------------------------+
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  +----------------------------------------------+
+  | [OK] extract_entities                        |
+  | Model:  gpt-4o-mini                          |
+  | Action: Extract all named entities           |
+  +----------------------------------------------+
++================================================+
+                        |
+                        v
++------------------------------------------------+
+| [OK] consolidate_results                       |
+| Model:  gpt-4o                                 |
+| Action: Create a comprehensive data analysis   |
++------------------------------------------------+
+
+                        |
+                        v
++------------------------------------------------+
+|     OUTPUT: comprehensive-report.txt           |
++------------------------------------------------+
+
++================================================+
+| STATISTICS                                     |
+|------------------------------------------------|
+| Steps: 4 total, 3 parallel                     |
+| Valid: 4/4                                     |
++================================================+
+```
 
 ## Documentation
 
