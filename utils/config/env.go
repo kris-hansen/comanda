@@ -368,6 +368,15 @@ func SaveEnvConfig(path string, config *EnvConfig) error {
 		return fmt.Errorf("error marshaling env config: %w", err)
 	}
 
+	// Ensure parent directory exists
+	dir := filepath.Dir(path)
+	if dir != "." && dir != "" {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			DebugLog("Error creating directory %s: %v", dir, err)
+			return fmt.Errorf("error creating directory: %w", err)
+		}
+	}
+
 	if err := os.WriteFile(path, data, 0644); err != nil {
 		DebugLog("Error writing environment file: %v", err)
 		return fmt.Errorf("error writing env file: %w", err)
