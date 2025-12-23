@@ -87,12 +87,60 @@ func VerboseLog(format string, args ...interface{}) {
 	}
 }
 
-// GetEnvPath returns the environment file path from COMANDA_ENV or the default
+// GetComandaDir returns the path to the .comanda directory in the user's home
+func GetComandaDir() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+	return filepath.Join(homeDir, ".comanda"), nil
+}
+
+// EnsureComandaDir creates the ~/.comanda directory if it doesn't exist
+func EnsureComandaDir() (string, error) {
+	comandaDir, err := GetComandaDir()
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(comandaDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create .comanda directory: %w", err)
+	}
+	return comandaDir, nil
+}
+
+// GetEnvPath returns the environment file path, checking in order:
+// 1. COMANDA_ENV environment variable (explicit override)
+// 2. ~/.comanda/config.yaml (preferred default)
+// 3. .env in current directory (legacy fallback)
 func GetEnvPath() string {
+	// 1. Check for explicit override via environment variable
 	if envPath := os.Getenv("COMANDA_ENV"); envPath != "" {
 		DebugLog("Using environment file from COMANDA_ENV: %s", envPath)
 		return envPath
 	}
+
+	// 2. Check for ~/.comanda/config.yaml (preferred default)
+	comandaDir, err := GetComandaDir()
+	if err == nil {
+		configPath := filepath.Join(comandaDir, "config.yaml")
+		if _, err := os.Stat(configPath); err == nil {
+			DebugLog("Using config file: %s", configPath)
+			return configPath
+		}
+	}
+
+	// 3. Check for legacy .env file in current directory
+	if _, err := os.Stat(".env"); err == nil {
+		DebugLog("Using legacy environment file: .env")
+		return ".env"
+	}
+
+	// 4. Default to new location (will be created on first configure)
+	if comandaDir != "" {
+		return filepath.Join(comandaDir, "config.yaml")
+	}
+
+	// Fallback if home dir not available
 	DebugLog("Using default environment file: .env")
 	return ".env"
 }
@@ -318,6 +366,15 @@ func SaveEnvConfig(path string, config *EnvConfig) error {
 	if err != nil {
 		DebugLog("Error marshaling environment config: %v", err)
 		return fmt.Errorf("error marshaling env config: %w", err)
+	}
+
+	// Ensure parent directory exists
+	dir := filepath.Dir(path)
+	if dir != "." && dir != "" {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			DebugLog("Error creating directory %s: %v", dir, err)
+			return fmt.Errorf("error creating directory: %w", err)
+		}
 	}
 
 	if err := os.WriteFile(path, data, 0644); err != nil {
