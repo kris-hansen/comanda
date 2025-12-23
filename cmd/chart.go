@@ -101,12 +101,45 @@ func buildWorkflowChart(config *processor.DSLConfig) *WorkflowChart {
 	allOutputs := make(map[string]bool)
 	hasStdout := false
 
-	// Process parallel steps first
-	for groupName, steps := range config.ParallelSteps {
-		var groupNodes []ChartNode
-		for _, step := range steps {
-			node := stepToChartNode(step, true, groupName)
-			groupNodes = append(groupNodes, node)
+	// Process parallel steps first (with nil check)
+	if config.ParallelSteps != nil {
+		for groupName, steps := range config.ParallelSteps {
+			var groupNodes []ChartNode
+			for _, step := range steps {
+				node := stepToChartNode(step, true, groupName)
+				groupNodes = append(groupNodes, node)
+
+				// Track outputs
+				for _, out := range node.Output {
+					if out == "STDOUT" {
+						hasStdout = true
+					} else if out != "MEMORY" {
+						outputProducers[out] = node.Name
+						allOutputs[out] = true
+					}
+				}
+				// Track inputs
+				for _, in := range node.Input {
+					if in == "STDIN" {
+						chart.HasStdinEntry = true
+					} else if strings.HasPrefix(in, "tool:") {
+						chart.HasToolInputs = true
+					} else if in != "NA" {
+						allInputs[in] = true
+					}
+				}
+			}
+			chart.ParallelGroups[groupName] = groupNodes
+			chart.SequentialOrder = append(chart.SequentialOrder, "parallel:"+groupName)
+		}
+	}
+
+	// Process sequential steps (with nil check)
+	if config.Steps != nil {
+		for _, step := range config.Steps {
+			node := stepToChartNode(step, false, "")
+			chart.Nodes = append(chart.Nodes, node)
+			chart.SequentialOrder = append(chart.SequentialOrder, node.Name)
 
 			// Track outputs
 			for _, out := range node.Output {
@@ -128,43 +161,16 @@ func buildWorkflowChart(config *processor.DSLConfig) *WorkflowChart {
 				}
 			}
 		}
-		chart.ParallelGroups[groupName] = groupNodes
-		chart.SequentialOrder = append(chart.SequentialOrder, "parallel:"+groupName)
 	}
 
-	// Process sequential steps
-	for _, step := range config.Steps {
-		node := stepToChartNode(step, false, "")
-		chart.Nodes = append(chart.Nodes, node)
-		chart.SequentialOrder = append(chart.SequentialOrder, node.Name)
-
-		// Track outputs
-		for _, out := range node.Output {
-			if out == "STDOUT" {
-				hasStdout = true
-			} else if out != "MEMORY" {
-				outputProducers[out] = node.Name
-				allOutputs[out] = true
-			}
+	// Process deferred steps (with nil check)
+	if config.Defer != nil {
+		for stepName, stepConfig := range config.Defer {
+			step := processor.Step{Name: stepName, Config: stepConfig}
+			node := stepToChartNode(step, false, "")
+			node.StepType = "deferred"
+			chart.DeferredSteps = append(chart.DeferredSteps, node)
 		}
-		// Track inputs
-		for _, in := range node.Input {
-			if in == "STDIN" {
-				chart.HasStdinEntry = true
-			} else if strings.HasPrefix(in, "tool:") {
-				chart.HasToolInputs = true
-			} else if in != "NA" {
-				allInputs[in] = true
-			}
-		}
-	}
-
-	// Process deferred steps
-	for stepName, stepConfig := range config.Defer {
-		step := processor.Step{Name: stepName, Config: stepConfig}
-		node := stepToChartNode(step, false, "")
-		node.StepType = "deferred"
-		chart.DeferredSteps = append(chart.DeferredSteps, node)
 	}
 
 	// Build dependencies
