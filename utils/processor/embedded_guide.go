@@ -730,6 +730,40 @@ step_name:
 - Reference: ` + "`action: \"Compare this analysis with $initial_data\"`" + `
 - Scope: Variables are typically scoped to the workflow. For ` + "`process`" + ` steps, parent variables are not directly accessible by default; use the ` + "`process.inputs`" + ` map to pass data.
 
+## CLI Variables (Runtime Substitution)
+
+CLI variables allow runtime value injection using ` + "`--vars key=value`" + ` flags when running workflows:
+
+**Usage:**
+` + "```bash" + `
+# Single variable
+comanda process workflow.yaml --vars filename=/path/to/file.txt
+
+# Multiple variables
+comanda process workflow.yaml --vars key1=value1 --vars key2=value2
+
+# Map STDIN to a variable
+cat data.txt | comanda process workflow.yaml --vars data=STDIN
+` + "```" + `
+
+**In workflows, reference CLI variables with ` + "`{{varname}}`" + ` syntax:**
+` + "```yaml" + `
+step_name:
+  input: "tool: grep -E 'error' {{filename}}"
+  model: gpt-4o-mini
+  action: "Analyze {{project_name}} logs"
+  output: "{{output_dir}}/results.txt"
+` + "```" + `
+
+**Key differences from workflow variables (` + "`$varname`" + `):**
+- ` + "`{{varname}}`" + `: CLI-provided at runtime via ` + "`--vars`" + ` flag, substituted before processing
+- ` + "`$varname`" + `: Defined in workflow with ` + "`as $varname`" + ` syntax, scoped to workflow execution
+
+**When to use CLI variables:**
+- When the same workflow should work with different input files or parameters
+- When values need to be provided dynamically at runtime
+- When building reusable workflow templates
+
 ## Validation Rules Summary (for LLM)
 
 1.  When specifying a model name, you **must** use one of the supported models listed in the "Supported Models" section. Do not use model names that are not explicitly listed as supported.

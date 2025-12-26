@@ -107,6 +107,88 @@ func TestNewProcessor(t *testing.T) {
 	}
 }
 
+func TestSubstituteCLIVariables(t *testing.T) {
+	cliVars := map[string]string{
+		"filename":     "/path/to/file.txt",
+		"project_name": "myproject",
+		"output_dir":   "results",
+	}
+	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), createTestServerConfig(), false, "", cliVars)
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "no variables",
+			input:    "plain text",
+			expected: "plain text",
+		},
+		{
+			name:     "single variable without spaces",
+			input:    "tool: grep -E 'error' {{filename}}",
+			expected: "tool: grep -E 'error' /path/to/file.txt",
+		},
+		{
+			name:     "single variable with spaces",
+			input:    "tool: grep -E 'error' {{ filename }}",
+			expected: "tool: grep -E 'error' /path/to/file.txt",
+		},
+		{
+			name:     "multiple variables",
+			input:    "Analyze {{project_name}} and save to {{output_dir}}/results.txt",
+			expected: "Analyze myproject and save to results/results.txt",
+		},
+		{
+			name:     "undefined variable stays unchanged",
+			input:    "{{undefined_var}} should remain",
+			expected: "{{undefined_var}} should remain",
+		},
+		{
+			name:     "mixed variables",
+			input:    "{{filename}} and {{ project_name }} and {{undefined}}",
+			expected: "/path/to/file.txt and myproject and {{undefined}}",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := processor.SubstituteCLIVariables(tt.input)
+			if result != tt.expected {
+				t.Errorf("SubstituteCLIVariables(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestNewProcessorWithCLIVariables(t *testing.T) {
+	cliVars := map[string]string{
+		"test_var": "test_value",
+	}
+	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), createTestServerConfig(), false, "", cliVars)
+
+	if processor.cliVariables == nil {
+		t.Error("NewProcessor() did not initialize cliVariables")
+	}
+
+	if processor.cliVariables["test_var"] != "test_value" {
+		t.Errorf("NewProcessor() did not set cliVariables correctly, got %v", processor.cliVariables)
+	}
+}
+
+func TestNewProcessorWithoutCLIVariables(t *testing.T) {
+	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), createTestServerConfig(), false, "")
+
+	if processor.cliVariables == nil {
+		t.Error("NewProcessor() did not initialize cliVariables to empty map")
+	}
+
+	if len(processor.cliVariables) != 0 {
+		t.Errorf("NewProcessor() should have empty cliVariables, got %v", processor.cliVariables)
+	}
+}
+
 func TestValidateStepConfig(t *testing.T) {
 	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), createTestServerConfig(), false, "")
 
