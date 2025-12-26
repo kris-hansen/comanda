@@ -17,6 +17,9 @@ import (
 // Runtime directory flag
 var runtimeDir string
 
+// Variable substitution flags
+var varsFlags []string
+
 var processCmd = &cobra.Command{
 	Use:   "process <workflow.yaml> [additional workflows...]",
 	Short: "Execute one or more workflow files",
@@ -37,7 +40,13 @@ Input can be provided via:
   echo "Analyze this text" | comanda process analyze.yaml
 
   # Use a runtime directory for file operations
-  comanda process workflow.yaml --runtime-dir ./data`,
+  comanda process workflow.yaml --runtime-dir ./data
+
+  # Use variable substitution
+  comanda process workflow.yaml --vars filename=/path/to/file.txt
+
+  # Map STDIN to a variable
+  cat data.txt | comanda process workflow.yaml --vars data=STDIN`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		// The environment configuration is already loaded in rootCmd's PersistentPreRunE
@@ -96,7 +105,11 @@ Input can be provided via:
 			serverConfig := &config.ServerConfig{
 				Enabled: false, // Disable server mode for CLI processing
 			}
-			proc := processor.NewProcessor(&dslConfig, envConfig, serverConfig, verbose, runtimeDir)
+
+			// Parse CLI variables
+			cliVars := parseVarsFlags(varsFlags, stdinData)
+
+			proc := processor.NewProcessor(&dslConfig, envConfig, serverConfig, verbose, runtimeDir, cliVars)
 
 			// If we have STDIN data, set it as initial output
 			if stdinData != "" {
@@ -192,4 +205,24 @@ func init() {
 
 	// Add runtime directory flag
 	processCmd.Flags().StringVar(&runtimeDir, "runtime-dir", "", "Runtime directory for file operations (relative to data directory)")
+
+	// Add variable substitution flag
+	processCmd.Flags().StringArrayVar(&varsFlags, "vars", []string{}, "Variable substitution in format key=value (can be repeated, use STDIN as value to map stdin)")
+}
+
+// parseVarsFlags parses the --vars flags into a map, handling STDIN as a special value
+func parseVarsFlags(flags []string, stdinData string) map[string]string {
+	vars := make(map[string]string)
+	for _, f := range flags {
+		if idx := strings.Index(f, "="); idx > 0 {
+			key := f[:idx]
+			value := f[idx+1:]
+			if value == "STDIN" {
+				vars[key] = stdinData
+			} else {
+				vars[key] = value
+			}
+		}
+	}
+	return vars
 }

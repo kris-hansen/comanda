@@ -24,6 +24,12 @@ func (p *Processor) handleOutput(modelName string, response string, outputs []st
 // handleOutputWithToolConfig processes the model's response with optional tool configuration
 func (p *Processor) handleOutputWithToolConfig(modelName string, response string, outputs []string, metrics *PerformanceMetrics, toolConfig *ToolListConfig) error {
 	p.debugf("[%s] Handling %d output(s)", modelName, len(outputs))
+
+	// Apply CLI variable substitution to outputs
+	for i, output := range outputs {
+		outputs[i] = p.SubstituteCLIVariables(output)
+	}
+
 	for _, output := range outputs {
 		p.debugf("[%s] Processing output: %s", modelName, output)
 
