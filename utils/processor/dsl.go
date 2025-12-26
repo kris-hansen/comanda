@@ -44,6 +44,7 @@ type Processor struct {
 	lastOutput     string
 	spinner        *Spinner
 	variables      map[string]string // Store variables from STDIN
+	cliVariables   map[string]string // CLI-provided variables for {{var}} substitution
 	progress       ProgressWriter    // Progress writer for streaming updates
 	runtimeDir     string            // Runtime directory for file operations
 	memory         *MemoryManager    // Memory manager for COMANDA.md file
@@ -161,11 +162,11 @@ func isTestMode() bool {
 }
 
 // NewProcessor creates a new DSL processor
-func NewProcessor(dslConfig *DSLConfig, envConfig *config.EnvConfig, serverConfig *config.ServerConfig, verbose bool, runtimeDir ...string) *Processor {
-	// Default runtime directory to empty string if not provided
-	rd := ""
-	if len(runtimeDir) > 0 {
-		rd = runtimeDir[0]
+func NewProcessor(dslConfig *DSLConfig, envConfig *config.EnvConfig, serverConfig *config.ServerConfig, verbose bool, runtimeDir string, cliVariables ...map[string]string) *Processor {
+	// Get CLI variables if provided
+	cliVars := make(map[string]string)
+	if len(cliVariables) > 0 && cliVariables[0] != nil {
+		cliVars = cliVariables[0]
 	}
 
 	p := &Processor{
@@ -178,12 +179,13 @@ func NewProcessor(dslConfig *DSLConfig, envConfig *config.EnvConfig, serverConfi
 		verbose:      verbose,
 		spinner:      NewSpinner(),
 		variables:    make(map[string]string),
-		runtimeDir:   rd, // Store runtime directory
+		cliVariables: cliVars,
+		runtimeDir:   runtimeDir, // Store runtime directory
 	}
 
 	// Store runtime directory as-is (relative or empty)
-	if rd != "" {
-		p.debugf("Processor initialized with runtime directory: %s", rd)
+	if runtimeDir != "" {
+		p.debugf("Processor initialized with runtime directory: %s", runtimeDir)
 	} else {
 		p.debugf("Processor initialized without a specific runtime directory.")
 	}
@@ -354,6 +356,23 @@ func (p *Processor) substituteVariables(text string) string {
 		text = strings.ReplaceAll(text, "$"+name, value)
 	}
 	return text
+}
+
+// SubstituteCLIVariables replaces {{varname}} with CLI-provided values
+func (p *Processor) SubstituteCLIVariables(text string) string {
+	for name, value := range p.cliVariables {
+		// Support both {{varname}} and {{ varname }} syntax
+		text = strings.ReplaceAll(text, "{{"+name+"}}", value)
+		text = strings.ReplaceAll(text, "{{ "+name+" }}", value)
+	}
+	return text
+}
+
+// substituteCLIVariablesInSlice applies CLI variable substitution to all elements in a slice
+func (p *Processor) substituteCLIVariablesInSlice(items []string) {
+	for i, item := range items {
+		items[i] = p.SubstituteCLIVariables(item)
+	}
 }
 
 // validateStepConfig checks if all required fields are present in a step
@@ -865,6 +884,10 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 
 	modelNames := p.NormalizeStringSlice(step.Config.Model)
 	actions := p.NormalizeStringSlice(step.Config.Action)
+
+	// Apply CLI variable substitution to inputs and actions
+	p.substituteCLIVariablesInSlice(inputs)
+	p.substituteCLIVariablesInSlice(actions)
 
 	p.debugf("Step configuration:")
 	p.debugf("- Inputs: %v", inputs)
