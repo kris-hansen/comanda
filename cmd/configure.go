@@ -1023,7 +1023,7 @@ func configureCLIAgents(reader *bufio.Reader, envConfig *config.EnvConfig) {
 
 	log.Printf("\nCLI agents are auto-configured. Install them and they're ready to use.\n")
 	log.Printf("Press Enter to continue...")
-	reader.ReadString('\n')
+	_, _ = reader.ReadString('\n')
 }
 
 // configureDefaultModel handles setting the default generation model
@@ -1122,7 +1122,7 @@ func removeModelInteractive(reader *bufio.Reader, envConfig *config.EnvConfig) {
 
 // updateAPIKeyInteractive handles updating an API key
 func updateAPIKeyInteractive(reader *bufio.Reader, envConfig *config.EnvConfig) {
-	if envConfig.Providers == nil || len(envConfig.Providers) == 0 {
+	if len(envConfig.Providers) == 0 {
 		log.Printf("No providers configured.\n")
 		return
 	}
