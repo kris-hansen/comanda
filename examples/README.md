@@ -167,6 +167,39 @@ Examples of image-related operations:
 - `image-example.yaml` - Basic image processing capabilities
 - Supporting files: `image.jpeg`
 
+### Tool Use (`tool-use/`)
+Examples demonstrating shell command execution within workflows:
+- `tool-input-example.yaml` - Use shell commands as step input (`ls`, `find`, `date`)
+- `tool-output-example.yaml` - Pipe step output through commands (`jq`, `grep`, `awk`)
+- `beads-workflow-example.yaml` - Integration with the `bd` (beads) issue tracker
+- `beads-walkthrough.yaml` - Walkthrough: spec analysis → issue preview
+- `conveyor-belt-spec-to-beads.yaml` - Full automation: spec → bd create execution
+- `sample-spec.md` - Sample technical spec for testing
+
+```yaml
+# Example: Using tools in workflows
+list_issues:
+  input: "tool: bd list --json"
+  model: NA
+  action:
+    - Pass through the JSON data
+  output: STDOUT
+  tool:
+    allowlist: [bd]
+
+# Example: Pipe output through jq
+filter_json:
+  input: data.json
+  model: NA
+  action:
+    - Return the JSON
+  output: "tool: jq '.items[] | select(.active)'"
+  tool:
+    allowlist: [jq]
+```
+
+**Security:** Tool execution is controlled by allowlist/denylist. Safe commands like `ls`, `grep`, `jq`, `bd` are allowed by default. Dangerous commands like `rm`, `sudo`, `curl` are blocked.
+
 ## Running Examples
 
 You can run any example using:
@@ -215,13 +248,19 @@ Each example includes comments explaining its functionality and any specific req
    ```bash
    # Check if YAML supports POST
    curl "http://localhost:8080/list"
-   
+
    # Process with POST if supported
    curl -X POST \
      -H "Content-Type: application/json" \
      -d '{"input":"analyze this text"}' \
      "http://localhost:8080/process?filename=server-examples/stdin-example.yaml"
    ```
+
+7. **Tool Use Examples**: Execute shell commands in workflows
+   - `tool-use/tool-input-example.yaml` (use commands as input)
+   - `tool-use/tool-output-example.yaml` (pipe output through commands)
+   - `tool-use/beads-workflow-example.yaml` (integrate with external CLIs)
+   - `tool-use/beads-walkthrough.yaml` (spec → issues workflow)
 
 ### Test Environment
 
