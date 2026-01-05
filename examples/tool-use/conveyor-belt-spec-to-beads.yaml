@@ -1,0 +1,150 @@
+# Conveyor Belt: Technical Spec → Beads Issues
+#
+# This workflow demonstrates an automated "conveyor belt" pattern:
+# 1. Read a technical specification (markdown)
+# 2. Analyze and break it down into ~1000 LOC implementable tasks
+# 3. Generate and execute bd create commands for each task
+#
+# Prerequisites:
+# - beads must be installed and in your PATH (bd command)
+# - You must be in a git repository with beads initialized
+# - A spec file to analyze (markdown or text)
+#
+# Tip: Configure global tool settings to avoid per-step allowlists:
+#   comanda configure  → "4. Tool Settings" → add "bd" to allowlist
+#
+# Usage:
+#   cat your-spec.md | comanda process conveyor-belt-spec-to-beads.yaml
+#
+# Or with a file:
+#   comanda process conveyor-belt-spec-to-beads.yaml < your-spec.md
+#
+# The workflow creates beads issues automatically based on the spec analysis.
+
+# Step 1: Analyze the specification and identify tasks
+# Input: Raw specification from STDIN
+# Output: Structured analysis of implementable tasks
+analyze_spec:
+  input: STDIN
+  model: claude-code
+  action:
+    - You are a senior software architect analyzing a technical specification.
+    - Break down this specification into discrete, implementable tasks.
+    - Each task should be approximately 1000 lines of code or less.
+    - Consider implementation dependencies (what must be built first).
+    - |
+      For each task, provide:
+      - type: feature (new capability), task (internal work), or bug (fix)
+      - title: Concise title under 60 characters
+      - size: estimated lines of code (aim for ~1000 LOC each)
+      - depends_on: titles of tasks this depends on (or "none")
+    - |
+      Output as a numbered list in this exact format:
+      1. [type] Title here (~size LOC)
+         Depends on: dependency or none
+
+      2. [type] Next title (~size LOC)
+         Depends on: dependency or none
+    - Order tasks by implementation sequence (foundational first).
+    - Be specific and actionable in titles.
+  output: analysis.txt
+
+# Step 2: Create first beads issue
+# Takes the analysis and creates the FIRST issue
+create_first_issue:
+  input: analysis.txt
+  model: claude-code
+  action:
+    - Read the task analysis above.
+    - Extract the FIRST task only.
+    - Generate a single bd create command for this task.
+    - |
+      Format: bd create --title="EXACT TITLE FROM ANALYSIS" --type=TYPE
+      Where TYPE is: feature, task, or bug
+    - Output ONLY the command, nothing else. No explanation, no quotes around output.
+    - Escape any special characters in the title.
+  output: "tool: STDIN"
+  tool:
+    allowlist: [bd]
+    timeout: 30
+
+# Step 3: Create second beads issue
+create_second_issue:
+  input: analysis.txt
+  model: claude-code
+  action:
+    - Read the task analysis above.
+    - Extract the SECOND task only.
+    - Generate a single bd create command for this task.
+    - |
+      Format: bd create --title="EXACT TITLE FROM ANALYSIS" --type=TYPE
+    - Output ONLY the command, nothing else.
+  output: "tool: STDIN"
+  tool:
+    allowlist: [bd]
+    timeout: 30
+
+# Step 4: Create third beads issue
+create_third_issue:
+  input: analysis.txt
+  model: claude-code
+  action:
+    - Read the task analysis above.
+    - Extract the THIRD task only (if it exists).
+    - If there is no third task, output: echo "No third task"
+    - Otherwise generate a single bd create command.
+    - |
+      Format: bd create --title="EXACT TITLE FROM ANALYSIS" --type=TYPE
+    - Output ONLY the command, nothing else.
+  output: "tool: STDIN"
+  tool:
+    allowlist: [bd, echo]
+    timeout: 30
+
+# Step 5: Create fourth beads issue
+create_fourth_issue:
+  input: analysis.txt
+  model: claude-code
+  action:
+    - Read the task analysis above.
+    - Extract the FOURTH task only (if it exists).
+    - If there is no fourth task, output: echo "No fourth task"
+    - Otherwise generate a single bd create command.
+    - |
+      Format: bd create --title="EXACT TITLE FROM ANALYSIS" --type=TYPE
+    - Output ONLY the command, nothing else.
+  output: "tool: STDIN"
+  tool:
+    allowlist: [bd, echo]
+    timeout: 30
+
+# Step 6: Create fifth beads issue
+create_fifth_issue:
+  input: analysis.txt
+  model: claude-code
+  action:
+    - Read the task analysis above.
+    - Extract the FIFTH task only (if it exists).
+    - If there is no fifth task, output: echo "No fifth task"
+    - Otherwise generate a single bd create command.
+    - |
+      Format: bd create --title="EXACT TITLE FROM ANALYSIS" --type=TYPE
+    - Output ONLY the command, nothing else.
+  output: "tool: STDIN"
+  tool:
+    allowlist: [bd, echo]
+    timeout: 30
+
+# Step 7: Show created issues
+# List all beads issues to confirm what was created
+show_created:
+  input: "tool: bd list"
+  model: claude-code
+  action:
+    - Summarize the beads issues shown above.
+    - Format as a clean list showing title, type, and status.
+    - Note any issues that were just created in this session.
+  output: STDOUT
+  tool:
+    allowlist: [bd]
+    timeout: 30

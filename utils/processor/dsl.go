@@ -272,6 +272,23 @@ func (p *Processor) GetMemoryFilePath() string {
 	return p.memory.GetFilePath()
 }
 
+// getGlobalToolConfig returns the global tool configuration from envConfig, converted to processor.ToolConfig
+func (p *Processor) getGlobalToolConfig() *ToolConfig {
+	if p.envConfig == nil {
+		return nil
+	}
+	globalConfig := p.envConfig.GetToolConfig()
+	if globalConfig == nil {
+		return nil
+	}
+	// Convert from config.ToolConfig to processor.ToolConfig
+	return &ToolConfig{
+		Allowlist: globalConfig.Allowlist,
+		Denylist:  globalConfig.Denylist,
+		Timeout:   globalConfig.Timeout,
+	}
+}
+
 // debugf prints debug information if verbose mode is enabled (thread-safe)
 func (p *Processor) debugf(format string, args ...interface{}) {
 	if p.verbose {
@@ -944,13 +961,14 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 			return "", fmt.Errorf("failed to parse tool input for step '%s': %w", step.Name, err)
 		}
 
-		// Create tool executor with step-level configuration
-		toolConfig := &ToolConfig{}
+		// Create tool executor with merged global + step-level configuration
+		stepToolConfig := &ToolConfig{}
 		if step.Config.ToolConfig != nil {
-			toolConfig.Allowlist = step.Config.ToolConfig.Allowlist
-			toolConfig.Denylist = step.Config.ToolConfig.Denylist
-			toolConfig.Timeout = step.Config.ToolConfig.Timeout
+			stepToolConfig.Allowlist = step.Config.ToolConfig.Allowlist
+			stepToolConfig.Denylist = step.Config.ToolConfig.Denylist
+			stepToolConfig.Timeout = step.Config.ToolConfig.Timeout
 		}
+		toolConfig := MergeToolConfigs(p.getGlobalToolConfig(), stepToolConfig)
 		executor := NewToolExecutor(toolConfig, p.verbose, p.debugf)
 
 		// Prepare stdin content if needed
