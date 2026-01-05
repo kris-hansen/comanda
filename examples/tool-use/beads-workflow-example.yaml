@@ -1,31 +1,60 @@
 # Beads Workflow Example
-# This example demonstrates how to use the 'bd' (beads) tool to list issues
-# and generate a summary workflow.
+# This example demonstrates integrating the 'bd' (beads) issue tracker with Comanda.
 #
-# SECURITY NOTE: Tool use allows shell command execution. Only run workflows
-# from trusted sources. Commands are subject to allowlist/denylist controls.
+# Prerequisites:
+# - beads must be installed and in your PATH
+# - You must be in a git repository with beads initialized
+#
+# SECURITY NOTE: The 'bd' command is in the default allowlist.
 
-# Step 1: List all beads issues using the bd tool
-list_beads:
+# Step 1: List all beads issues as JSON
+list_issues:
   input: "tool: bd list --json"
   model: NA
   action:
     - Pass through the JSON data without modification
   output: STDOUT
   tool:
-    allowlist:
-      - bd
+    allowlist: [bd]
     timeout: 30
 
-# Alternative example: Use tool with filtering
-# This pipes STDIN through a grep command to filter results
-# list_filtered_beads:
+---
+# Alternative: Summarize issues with an LLM
+# Run with: comanda process beads-workflow-example.yaml (use second document)
+
+# Get issues and have LLM create a summary
+# summarize_issues:
 #   input: "tool: bd list"
-#   model: NA
+#   model: claude-code
 #   action:
-#     - Pass through the data
-#   output: "STDOUT|grep -i 'open'"
+#     - Create a brief summary of these issues
+#     - Group by status and type
+#     - Highlight any blocked issues
+#   output: STDOUT
 #   tool:
-#     allowlist:
-#       - bd
-#       - grep
+#     allowlist: [bd]
+
+---
+# Alternative: Show ready-to-work issues
+# show_ready:
+#   input: "tool: bd ready"
+#   model: claude-code
+#   action:
+#     - Format these ready issues as a prioritized work list
+#     - Suggest which to tackle first based on dependencies
+#   output: STDOUT
+#   tool:
+#     allowlist: [bd]
+
+---
+# Alternative: Get project statistics
+# project_stats:
+#   input: "tool: bd stats"
+#   model: claude-code
+#   action:
+#     - Analyze these project statistics
+#     - Provide insights on project health
+#     - Suggest areas needing attention
+#   output: STDOUT
+#   tool:
+#     allowlist: [bd]
