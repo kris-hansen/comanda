@@ -1,0 +1,82 @@
+# Beads Walkthrough: Spec Analysis to Issue Creation
+#
+# This workflow demonstrates a "conveyor belt" pattern:
+# 1. Read a technical specification
+# 2. Analyze and break it down into implementable tasks
+# 3. Create beads issues for each task
+#
+# Prerequisites:
+# - beads must be installed and in your PATH (bd command)
+# - You must be in a git repository with beads initialized
+# - A spec file to analyze (markdown or text)
+#
+# Usage:
+#   comanda process beads-walkthrough.yaml
+#
+# Or pipe a spec directly:
+#   cat my-spec.md | comanda process beads-walkthrough.yaml
+
+# Step 1: Read the specification
+# Replace 'spec.md' with your actual spec file, or use STDIN
+read_spec:
+  input: STDIN
+  model: NA
+  action:
+    - Pass through the specification content
+  output: spec-content.txt
+
+# Step 2: Analyze the spec and identify tasks
+# The LLM breaks down the spec into discrete, implementable work items
+analyze_spec:
+  input: spec-content.txt
+  model: claude-code
+  action:
+    - Analyze this technical specification
+    - Break it down into discrete implementable tasks
+    - Each task should be approximately 1000 lines of code or less
+    - For each task identify type (feature, task, or bug), title, and description
+    - Output as JSON array with format [{"type": "feature|task|bug", "title": "...", "description": "..."}]
+    - Keep titles concise (under 80 characters)
+    - Keep descriptions to 2-3 sentences
+    - Order tasks by implementation dependency (foundational first)
+  output: tasks.json
+
+# Step 3: Create beads issues from the analysis
+# This step generates bd create commands and executes them
+create_issues:
+  input: tasks.json
+  model: claude-code
+  action:
+    - Read the JSON array of tasks
+    - For EACH task, output a bd create command on its own line
+    - Format each command as: bd create --title="TITLE" --type=TYPE
+    - Use the exact type from the JSON (feature, task, or bug)
+    - Use the title from the JSON, escaping any quotes
+    - Do NOT include the description in the command (we'll update separately)
+    - Output ONLY the commands, one per line, no explanations
+  output: create-commands.txt
+
+# Step 4: Show what was created
+# Display the issues that would be created for review
+preview_issues:
+  input: create-commands.txt
+  model: NA
+  action:
+    - Pass through the commands for review
+  output: STDOUT
+
+# Note: To actually execute the commands, you would:
+# 1. Review the output from this workflow
+# 2. Run each command manually, or
+# 3. Modify this workflow to use tool output execution
+#
+# Example of tool execution (use with caution):
+#
+# execute_creates:
+#   input: create-commands.txt
+#   model: NA
+#   action:
+#     - Pass through the first command
+#   output: "tool: STDIN"
+#   tool:
+#     allowlist: [bd]

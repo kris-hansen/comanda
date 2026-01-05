@@ -174,6 +174,7 @@ curl -X POST "http://localhost:8080/process?filename=review.yaml" \
 |---------|-------------|
 | **Multi-provider** | OpenAI, Anthropic, Google, X.AI, Ollama, vLLM, Claude Code, Codex, Gemini CLI |
 | **Parallel processing** | Run independent steps concurrently |
+| **Tool execution** | Run shell commands (`ls`, `jq`, `grep`, custom CLIs) within workflows |
 | **File operations** | Read/write files, wildcards, batch processing |
 | **Vision support** | Analyze images and screenshots |
 | **Web scraping** | Fetch and process URLs |
@@ -243,6 +244,7 @@ comanda chart workflow.yaml
 - **[Examples](examples/README.md)** — Sample workflows for common tasks
 - **[Multi-Agent Workflows](examples/multi-agent/README.md)** — Claude Code + Codex + Gemini CLI patterns
 - **[Claude Code Examples](examples/claude-code/README.md)** — Agentic coding workflows
+- **[Tool Use Guide](examples/tool-use/README.md)** — Execute shell commands in workflows
 - **[Server API](docs/server-api.md)** — HTTP endpoints reference
 - **[Configuration Guide](docs/adding-new-model-guide.md)** — Adding models and providers
 

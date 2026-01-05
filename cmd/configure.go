@@ -767,6 +767,647 @@ func getAllConfiguredModelNames(envConfig *config.EnvConfig) []string {
 	return modelNames
 }
 
+// showMainMenu displays the main configuration menu and returns the user's choice
+func showMainMenu(reader *bufio.Reader) string {
+	log.Printf("\n")
+	log.Printf("┌────────────────────────────────────────┐\n")
+	log.Printf("│       Comanda Configuration            │\n")
+	log.Printf("├────────────────────────────────────────┤\n")
+	log.Printf("│  1. Models & Providers                 │\n")
+	log.Printf("│  2. Server Settings                    │\n")
+	log.Printf("│  3. Database Connections               │\n")
+	log.Printf("│  4. Tool Settings (allowlist/denylist) │\n")
+	log.Printf("│  5. Memory Settings                    │\n")
+	log.Printf("│  6. Security (encrypt/decrypt)         │\n")
+	log.Printf("│  7. View Current Configuration         │\n")
+	log.Printf("│  0. Save & Exit                        │\n")
+	log.Printf("└────────────────────────────────────────┘\n")
+	log.Printf("\nEnter choice: ")
+	choice, _ := reader.ReadString('\n')
+	return strings.TrimSpace(choice)
+}
+
+// configureModelsAndProviders handles the models and providers submenu
+func configureModelsAndProviders(reader *bufio.Reader, envConfig *config.EnvConfig) {
+	for {
+		log.Printf("\n")
+		log.Printf("┌─────────────────────────────────────┐\n")
+		log.Printf("│     Models & Providers              │\n")
+		log.Printf("├─────────────────────────────────────┤\n")
+		log.Printf("│  1. Add API Provider (OpenAI, etc.) │\n")
+		log.Printf("│  2. Add Local Provider (Ollama)     │\n")
+		log.Printf("│  3. Configure CLI Agents            │\n")
+		log.Printf("│  4. Set Default Generation Model    │\n")
+		log.Printf("│  5. Remove a Model                  │\n")
+		log.Printf("│  6. Update API Key                  │\n")
+		log.Printf("│  0. Back to Main Menu               │\n")
+		log.Printf("└─────────────────────────────────────┘\n")
+		log.Printf("\nEnter choice: ")
+		choice, _ := reader.ReadString('\n')
+		choice = strings.TrimSpace(choice)
+
+		switch choice {
+		case "1":
+			configureAPIProvider(reader, envConfig)
+		case "2":
+			configureLocalProvider(reader, envConfig)
+		case "3":
+			configureCLIAgents(reader, envConfig)
+		case "4":
+			configureDefaultModel(reader, envConfig)
+		case "5":
+			removeModelInteractive(reader, envConfig)
+		case "6":
+			updateAPIKeyInteractive(reader, envConfig)
+		case "0":
+			return
+		default:
+			log.Printf("Invalid selection.\n")
+		}
+	}
+}
+
+// configureAPIProvider handles adding API-based providers
+func configureAPIProvider(reader *bufio.Reader, envConfig *config.EnvConfig) {
+	log.Printf("\nAvailable API providers: openai, anthropic, google, xai, deepseek, moonshot\n")
+	log.Printf("Enter provider name: ")
+	provider, _ := reader.ReadString('\n')
+	provider = strings.TrimSpace(provider)
+
+	validProviders := []string{"openai", "anthropic", "google", "xai", "deepseek", "moonshot"}
+	isValid := false
+	for _, vp := range validProviders {
+		if provider == vp {
+			isValid = true
+			break
+		}
+	}
+	if !isValid {
+		log.Printf("Invalid provider. Please choose from: %v\n", validProviders)
+		return
+	}
+
+	// Check if provider exists
+	existingProvider, err := envConfig.GetProviderConfig(provider)
+	var apiKey string
+	if err != nil {
+		log.Printf("Enter API key: ")
+		apiKey, _ = reader.ReadString('\n')
+		apiKey = strings.TrimSpace(apiKey)
+		existingProvider = &config.Provider{
+			APIKey: apiKey,
+			Models: []config.Model{},
+		}
+		envConfig.AddProvider(provider, *existingProvider)
+	} else {
+		apiKey = existingProvider.APIKey
+		log.Printf("Provider %s already configured. Adding more models...\n", provider)
+	}
+
+	// Get and select models based on provider
+	var selectedModels []string
+	var selectErr error
+	switch provider {
+	case "openai":
+		primaryModels, otherModels, err := getOpenAIModelsAndCategorize(apiKey)
+		if err != nil {
+			log.Printf("Error fetching OpenAI models: %v\n", err)
+			return
+		}
+		selectedModels, selectErr = promptForOpenAIModelSelection(primaryModels, otherModels)
+	case "anthropic":
+		primaryModels, otherModels, err := getAnthropicModelsAndCategorize(apiKey)
+		if err != nil {
+			log.Printf("Error fetching Anthropic models: %v\n", err)
+			return
+		}
+		if len(otherModels) > 0 {
+			selectedModels, selectErr = promptForAnthropicModelSelection(primaryModels, otherModels)
+		} else {
+			selectedModels, selectErr = promptForModelSelection(primaryModels)
+		}
+	case "google":
+		selectedModels, selectErr = promptForModelSelection(getGoogleModels())
+	case "xai":
+		selectedModels, selectErr = promptForModelSelection(getXAIModels())
+	case "deepseek":
+		selectedModels, selectErr = promptForModelSelection(getDeepseekModels())
+	case "moonshot":
+		selectedModels, selectErr = promptForModelSelection(getMoonshotModels())
+	}
+
+	if selectErr != nil {
+		log.Printf("Error selecting models: %v\n", selectErr)
+		return
+	}
+
+	// Add selected models
+	for _, modelName := range selectedModels {
+		modes, err := promptForModes(reader, modelName)
+		if err != nil {
+			log.Printf("Error configuring modes for model %s: %v\n", modelName, err)
+			continue
+		}
+		newModel := config.Model{
+			Name:  modelName,
+			Type:  "external",
+			Modes: modes,
+		}
+		if err := envConfig.AddModelToProvider(provider, newModel); err != nil {
+			log.Printf("Error adding model %s: %v\n", modelName, err)
+		} else {
+			log.Printf("%s Added model: %s\n", greenCheckmark, modelName)
+		}
+	}
+}
+
+// configureLocalProvider handles adding local providers (Ollama, vLLM)
+func configureLocalProvider(reader *bufio.Reader, envConfig *config.EnvConfig) {
+	log.Printf("\nAvailable local providers: ollama, vllm\n")
+	log.Printf("Enter provider name: ")
+	provider, _ := reader.ReadString('\n')
+	provider = strings.TrimSpace(provider)
+
+	if provider != "ollama" && provider != "vllm" {
+		log.Printf("Invalid provider. Choose 'ollama' or 'vllm'\n")
+		return
+	}
+
+	if provider == "ollama" && !checkOllamaInstalled() {
+		log.Printf("Error: Ollama is not installed or not running.\n")
+		return
+	}
+	if provider == "vllm" && !checkVLLMInstalled() {
+		log.Printf("Error: vLLM server is not running.\n")
+		return
+	}
+
+	// Ensure provider exists
+	if _, err := envConfig.GetProviderConfig(provider); err != nil {
+		envConfig.AddProvider(provider, config.Provider{APIKey: "LOCAL", Models: []config.Model{}})
+	}
+
+	var modelNames []string
+	if provider == "ollama" {
+		ollamaModels, err := getOllamaModels()
+		if err != nil {
+			log.Printf("Error fetching Ollama models: %v\n", err)
+			return
+		}
+		for _, m := range ollamaModels {
+			modelNames = append(modelNames, m.Name)
+		}
+	} else {
+		vllmModels, err := getVLLMModels()
+		if err != nil {
+			log.Printf("Error fetching vLLM models: %v\n", err)
+			return
+		}
+		for _, m := range vllmModels {
+			modelNames = append(modelNames, m.ID)
+		}
+	}
+
+	if len(modelNames) == 0 {
+		log.Printf("No models found. Please pull/load a model first.\n")
+		return
+	}
+
+	selectedModels, err := promptForModelSelection(modelNames)
+	if err != nil {
+		log.Printf("Error selecting models: %v\n", err)
+		return
+	}
+
+	for _, modelName := range selectedModels {
+		modes, err := promptForModes(reader, modelName)
+		if err != nil {
+			continue
+		}
+		newModel := config.Model{Name: modelName, Type: "local", Modes: modes}
+		if err := envConfig.AddModelToProvider(provider, newModel); err != nil {
+			log.Printf("Error adding model %s: %v\n", modelName, err)
+		} else {
+			log.Printf("%s Added model: %s\n", greenCheckmark, modelName)
+		}
+	}
+}
+
+// configureCLIAgents handles CLI agent configuration
+func configureCLIAgents(reader *bufio.Reader, envConfig *config.EnvConfig) {
+	log.Printf("\nCLI Agents (auto-detected from PATH):\n")
+
+	if models.IsClaudeCodeAvailable() {
+		log.Printf("  %s Claude Code - available\n", greenCheckmark)
+		log.Printf("     Models: %v\n", getClaudeCodeModels())
+	} else {
+		log.Printf("  ✗ Claude Code - not installed\n")
+		log.Printf("     Install: npm install -g @anthropic-ai/claude-code\n")
+	}
+
+	if models.IsGeminiCLIAvailable() {
+		log.Printf("  %s Gemini CLI - available\n", greenCheckmark)
+		log.Printf("     Models: %v\n", getGeminiCLIModels())
+	} else {
+		log.Printf("  ✗ Gemini CLI - not installed\n")
+		log.Printf("     Install: npm install -g @google/gemini-cli\n")
+	}
+
+	if models.IsOpenAICodexAvailable() {
+		log.Printf("  %s OpenAI Codex - available\n", greenCheckmark)
+		log.Printf("     Models: %v\n", getOpenAICodexModels())
+	} else {
+		log.Printf("  ✗ OpenAI Codex - not installed\n")
+		log.Printf("     Install: npm install -g @openai/codex\n")
+	}
+
+	log.Printf("\nCLI agents are auto-configured. Install them and they're ready to use.\n")
+	log.Printf("Press Enter to continue...")
+	reader.ReadString('\n')
+}
+
+// configureDefaultModel handles setting the default generation model
+func configureDefaultModel(reader *bufio.Reader, envConfig *config.EnvConfig) {
+	allModels := getAllConfiguredModelNames(envConfig)
+
+	// Add CLI agent models if available
+	var cliModels []string
+	if models.IsClaudeCodeAvailable() {
+		cliModels = append(cliModels, getClaudeCodeModels()...)
+	}
+	if models.IsGeminiCLIAvailable() {
+		cliModels = append(cliModels, getGeminiCLIModels()...)
+	}
+	if models.IsOpenAICodexAvailable() {
+		cliModels = append(cliModels, getOpenAICodexModels()...)
+	}
+
+	if len(allModels) == 0 && len(cliModels) == 0 {
+		log.Printf("No models available. Configure providers first.\n")
+		return
+	}
+
+	log.Printf("\nAvailable models:\n")
+	currentIdx := 0
+	if len(allModels) > 0 {
+		log.Printf("API/Local models:\n")
+		for i, modelName := range allModels {
+			currentIdx = i + 1
+			marker := ""
+			if envConfig.DefaultGenerationModel == modelName {
+				marker = " (current default)"
+			}
+			log.Printf("  %d. %s%s\n", currentIdx, modelName, marker)
+		}
+	}
+	if len(cliModels) > 0 {
+		log.Printf("CLI Agent models:\n")
+		for i, modelName := range cliModels {
+			idx := len(allModels) + i + 1
+			marker := ""
+			if envConfig.DefaultGenerationModel == modelName {
+				marker = " (current default)"
+			}
+			log.Printf("  %d. %s%s\n", idx, modelName, marker)
+		}
+	}
+
+	combinedModels := append(allModels, cliModels...)
+	for {
+		log.Printf("\nEnter number to set as default (0 to cancel): ")
+		input, _ := reader.ReadString('\n')
+		num, err := strconv.Atoi(strings.TrimSpace(input))
+		if err != nil || num < 0 || num > len(combinedModels) {
+			log.Printf("Invalid selection.\n")
+			continue
+		}
+		if num == 0 {
+			return
+		}
+		envConfig.DefaultGenerationModel = combinedModels[num-1]
+		log.Printf("%s Default model set to: %s\n", greenCheckmark, combinedModels[num-1])
+		return
+	}
+}
+
+// removeModelInteractive handles removing a model
+func removeModelInteractive(reader *bufio.Reader, envConfig *config.EnvConfig) {
+	allModels := getAllConfiguredModelNames(envConfig)
+	if len(allModels) == 0 {
+		log.Printf("No models configured.\n")
+		return
+	}
+
+	log.Printf("\nConfigured models:\n")
+	for i, name := range allModels {
+		log.Printf("  %d. %s\n", i+1, name)
+	}
+	log.Printf("\nEnter number to remove (0 to cancel): ")
+	input, _ := reader.ReadString('\n')
+	num, err := strconv.Atoi(strings.TrimSpace(input))
+	if err != nil || num < 0 || num > len(allModels) {
+		log.Printf("Invalid selection.\n")
+		return
+	}
+	if num == 0 {
+		return
+	}
+	modelName := allModels[num-1]
+	if err := removeModel(envConfig, modelName); err != nil {
+		log.Printf("Error removing model: %v\n", err)
+	} else {
+		log.Printf("%s Removed model: %s\n", greenCheckmark, modelName)
+	}
+}
+
+// updateAPIKeyInteractive handles updating an API key
+func updateAPIKeyInteractive(reader *bufio.Reader, envConfig *config.EnvConfig) {
+	if envConfig.Providers == nil || len(envConfig.Providers) == 0 {
+		log.Printf("No providers configured.\n")
+		return
+	}
+
+	log.Printf("\nConfigured providers:\n")
+	var providers []string
+	i := 1
+	for name := range envConfig.Providers {
+		providers = append(providers, name)
+		log.Printf("  %d. %s\n", i, name)
+		i++
+	}
+
+	log.Printf("\nEnter number to update API key (0 to cancel): ")
+	input, _ := reader.ReadString('\n')
+	num, err := strconv.Atoi(strings.TrimSpace(input))
+	if err != nil || num < 0 || num > len(providers) {
+		log.Printf("Invalid selection.\n")
+		return
+	}
+	if num == 0 {
+		return
+	}
+
+	providerName := providers[num-1]
+	log.Printf("Enter new API key for %s: ", providerName)
+	newKey, _ := reader.ReadString('\n')
+	newKey = strings.TrimSpace(newKey)
+
+	if err := envConfig.UpdateAPIKey(providerName, newKey); err != nil {
+		log.Printf("Error updating API key: %v\n", err)
+	} else {
+		log.Printf("%s API key updated for %s\n", greenCheckmark, providerName)
+	}
+}
+
+// configureServerSettings handles server configuration
+func configureServerSettings(reader *bufio.Reader, envConfig *config.EnvConfig) error {
+	serverCfg := envConfig.GetServerConfig()
+
+	log.Printf("\nCurrent server settings:\n")
+	log.Printf("  Enabled: %v\n", serverCfg.Enabled)
+	log.Printf("  Port: %d\n", serverCfg.Port)
+	log.Printf("  Data Directory: %s\n", serverCfg.DataDir)
+	if serverCfg.BearerToken != "" {
+		log.Printf("  Bearer Token: (configured)\n")
+	} else {
+		log.Printf("  Bearer Token: (not set)\n")
+	}
+
+	log.Printf("\nEnable server? (y/n, current: %v): ", serverCfg.Enabled)
+	input, _ := reader.ReadString('\n')
+	input = strings.TrimSpace(strings.ToLower(input))
+	if input == "y" {
+		serverCfg.Enabled = true
+	} else if input == "n" {
+		serverCfg.Enabled = false
+	}
+
+	log.Printf("Server port (current: %d, press Enter to keep): ", serverCfg.Port)
+	portInput, _ := reader.ReadString('\n')
+	portInput = strings.TrimSpace(portInput)
+	if portInput != "" {
+		if port, err := strconv.Atoi(portInput); err == nil && port > 0 && port < 65536 {
+			serverCfg.Port = port
+		}
+	}
+
+	log.Printf("Generate new bearer token? (y/n): ")
+	tokenInput, _ := reader.ReadString('\n')
+	if strings.TrimSpace(strings.ToLower(tokenInput)) == "y" {
+		token, err := config.GenerateBearerToken()
+		if err != nil {
+			return fmt.Errorf("failed to generate token: %w", err)
+		}
+		serverCfg.BearerToken = token
+		log.Printf("%s Bearer token generated\n", greenCheckmark)
+	}
+
+	envConfig.UpdateServerConfig(*serverCfg)
+	log.Printf("%s Server settings updated\n", greenCheckmark)
+	return nil
+}
+
+// configureToolSettings handles global tool configuration
+func configureToolSettings(reader *bufio.Reader, envConfig *config.EnvConfig) {
+	toolCfg := envConfig.GetToolConfig()
+	if toolCfg == nil {
+		toolCfg = &config.ToolConfig{}
+	}
+
+	log.Printf("\nGlobal Tool Settings\n")
+	log.Printf("These settings apply to all workflows unless overridden at the step level.\n\n")
+	log.Printf("Current settings:\n")
+	log.Printf("  Additional allowlist: %v\n", toolCfg.Allowlist)
+	log.Printf("  Additional denylist: %v\n", toolCfg.Denylist)
+	log.Printf("  Default timeout: %d seconds (0 = use system default of 30s)\n", toolCfg.Timeout)
+
+	log.Printf("\nCommands to add to global allowlist (comma-separated, or Enter to skip):\n")
+	log.Printf("Example: bd,mytool,customcli\n")
+	log.Printf("> ")
+	allowInput, _ := reader.ReadString('\n')
+	allowInput = strings.TrimSpace(allowInput)
+	if allowInput != "" {
+		parts := strings.Split(allowInput, ",")
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				// Check if already in list
+				found := false
+				for _, existing := range toolCfg.Allowlist {
+					if existing == p {
+						found = true
+						break
+					}
+				}
+				if !found {
+					toolCfg.Allowlist = append(toolCfg.Allowlist, p)
+				}
+			}
+		}
+	}
+
+	log.Printf("\nCommands to add to global denylist (comma-separated, or Enter to skip):\n")
+	log.Printf("> ")
+	denyInput, _ := reader.ReadString('\n')
+	denyInput = strings.TrimSpace(denyInput)
+	if denyInput != "" {
+		parts := strings.Split(denyInput, ",")
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				found := false
+				for _, existing := range toolCfg.Denylist {
+					if existing == p {
+						found = true
+						break
+					}
+				}
+				if !found {
+					toolCfg.Denylist = append(toolCfg.Denylist, p)
+				}
+			}
+		}
+	}
+
+	log.Printf("\nDefault timeout in seconds (current: %d, Enter to keep, 0 for system default): ", toolCfg.Timeout)
+	timeoutInput, _ := reader.ReadString('\n')
+	timeoutInput = strings.TrimSpace(timeoutInput)
+	if timeoutInput != "" {
+		if timeout, err := strconv.Atoi(timeoutInput); err == nil && timeout >= 0 {
+			toolCfg.Timeout = timeout
+		}
+	}
+
+	envConfig.SetToolConfig(toolCfg)
+	log.Printf("\n%s Tool settings updated\n", greenCheckmark)
+	log.Printf("  Allowlist: %v\n", toolCfg.Allowlist)
+	log.Printf("  Denylist: %v\n", toolCfg.Denylist)
+	log.Printf("  Timeout: %d\n", toolCfg.Timeout)
+}
+
+// configureMemorySettings handles memory file configuration
+func configureMemorySettings(reader *bufio.Reader, envConfig *config.EnvConfig) {
+	currentPath := envConfig.MemoryFile
+	if currentPath == "" {
+		currentPath = "(not configured)"
+	}
+	log.Printf("\nMemory Settings\n")
+	log.Printf("Current memory file: %s\n", currentPath)
+
+	log.Printf("\nOptions:\n")
+	log.Printf("  1. Set memory file path\n")
+	log.Printf("  2. Initialize default memory file (~/.comanda/COMANDA.md)\n")
+	log.Printf("  0. Back\n")
+	log.Printf("\nChoice: ")
+
+	choice, _ := reader.ReadString('\n')
+	choice = strings.TrimSpace(choice)
+
+	switch choice {
+	case "1":
+		log.Printf("Enter path to memory file: ")
+		path, _ := reader.ReadString('\n')
+		path = strings.TrimSpace(path)
+		if path != "" {
+			absPath, err := filepath.Abs(path)
+			if err != nil {
+				log.Printf("Error resolving path: %v\n", err)
+				return
+			}
+			envConfig.MemoryFile = absPath
+			log.Printf("%s Memory file set to: %s\n", greenCheckmark, absPath)
+		}
+	case "2":
+		memPath, err := config.InitializeUserMemoryFile()
+		if err != nil {
+			log.Printf("Error initializing memory file: %v\n", err)
+			return
+		}
+		envConfig.MemoryFile = memPath
+		log.Printf("%s Memory file initialized at: %s\n", greenCheckmark, memPath)
+	}
+}
+
+// configureSecuritySettings handles encryption/decryption
+func configureSecuritySettings(reader *bufio.Reader, envConfig *config.EnvConfig, configPath string) {
+	log.Printf("\nSecurity Settings\n")
+
+	// Check current encryption status
+	data, err := os.ReadFile(configPath)
+	isEncrypted := err == nil && config.IsEncrypted(data)
+
+	if isEncrypted {
+		log.Printf("Configuration is currently: ENCRYPTED\n")
+	} else {
+		log.Printf("Configuration is currently: NOT ENCRYPTED\n")
+	}
+
+	log.Printf("\nOptions:\n")
+	if isEncrypted {
+		log.Printf("  1. Decrypt configuration\n")
+	} else {
+		log.Printf("  1. Encrypt configuration\n")
+	}
+	log.Printf("  0. Back\n")
+	log.Printf("\nChoice: ")
+
+	choice, _ := reader.ReadString('\n')
+	choice = strings.TrimSpace(choice)
+
+	if choice != "1" {
+		return
+	}
+
+	if isEncrypted {
+		// Decrypt
+		password, err := config.PromptPassword("Enter decryption password: ")
+		if err != nil {
+			log.Printf("Error reading password: %v\n", err)
+			return
+		}
+		decrypted, err := config.DecryptConfig(data, password)
+		if err != nil {
+			log.Printf("Error decrypting: %v\n", err)
+			return
+		}
+		if err := os.WriteFile(configPath, decrypted, 0644); err != nil {
+			log.Printf("Error writing decrypted config: %v\n", err)
+			return
+		}
+		log.Printf("%s Configuration decrypted\n", greenCheckmark)
+	} else {
+		// Encrypt
+		password, err := config.PromptPassword("Enter encryption password (min 6 chars): ")
+		if err != nil {
+			log.Printf("Error reading password: %v\n", err)
+			return
+		}
+		if err := validatePassword(password); err != nil {
+			log.Printf("Error: %v\n", err)
+			return
+		}
+		confirm, err := config.PromptPassword("Confirm password: ")
+		if err != nil {
+			log.Printf("Error reading password: %v\n", err)
+			return
+		}
+		if password != confirm {
+			log.Printf("Passwords do not match\n")
+			return
+		}
+		// Need to save first, then encrypt
+		if err := config.SaveEnvConfig(configPath, envConfig); err != nil {
+			log.Printf("Error saving before encryption: %v\n", err)
+			return
+		}
+		if err := config.EncryptConfig(configPath, password); err != nil {
+			log.Printf("Error encrypting: %v\n", err)
+			return
+		}
+		log.Printf("%s Configuration encrypted\n", greenCheckmark)
+	}
+}
+
 var configureCmd = &cobra.Command{
 	Use:   "configure",
 	Short: "Manage API keys, models, and settings",
@@ -1068,6 +1709,43 @@ Flag Groups:
 			envConfig.DefaultGenerationModel = selectedDefaultModel
 			log.Printf("%s Default generation model set to '%s'\n", greenCheckmark, selectedDefaultModel)
 		} else {
+			reader := bufio.NewReader(os.Stdin)
+
+			// Show main menu
+			for {
+				choice := showMainMenu(reader)
+				switch choice {
+				case "1": // Models & Providers
+					configureModelsAndProviders(reader, envConfig)
+				case "2": // Server
+					if err := configureServerSettings(reader, envConfig); err != nil {
+						log.Printf("Error configuring server: %v\n", err)
+					}
+				case "3": // Database
+					if err := configureDatabase(reader, envConfig); err != nil {
+						log.Printf("Error configuring database: %v\n", err)
+					}
+				case "4": // Tools
+					configureToolSettings(reader, envConfig)
+				case "5": // Memory
+					configureMemorySettings(reader, envConfig)
+				case "6": // Security
+					configureSecuritySettings(reader, envConfig, configPath)
+				case "7": // View Config
+					listConfiguration()
+				case "q", "Q", "0": // Exit
+					goto saveAndExit
+				default:
+					log.Printf("Invalid selection. Please choose from the menu.\n")
+				}
+			}
+		saveAndExit:
+			// Skip the old provider selection flow
+			goto skipProviderConfig
+		}
+
+		// Old provider selection flow (kept for backwards compatibility with flags)
+		if false {
 			reader := bufio.NewReader(os.Stdin)
 			// Prompt for provider with CLI agents as options
 			var provider string
@@ -1384,6 +2062,7 @@ Flag Groups:
 			}
 		}
 
+	skipProviderConfig:
 		// Create parent directory if it doesn't exist
 		if dir := filepath.Dir(configPath); dir != "." && dir != "/" {
 			if err := os.MkdirAll(dir, 0755); err != nil {

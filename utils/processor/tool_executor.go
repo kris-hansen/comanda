@@ -238,6 +238,38 @@ type ToolExecutor struct {
 	debugFunc func(format string, args ...interface{})
 }
 
+// MergeToolConfigs merges a global tool config with a step-level config.
+// Step-level config takes precedence: if step specifies an allowlist, it's used.
+// Global allowlist is additive to the defaults.
+// Denylists are always merged (additive).
+// Step timeout overrides global timeout if specified.
+func MergeToolConfigs(globalConfig *ToolConfig, stepConfig *ToolConfig) *ToolConfig {
+	result := &ToolConfig{}
+
+	// Start with global config values if present
+	if globalConfig != nil {
+		result.Allowlist = append(result.Allowlist, globalConfig.Allowlist...)
+		result.Denylist = append(result.Denylist, globalConfig.Denylist...)
+		result.Timeout = globalConfig.Timeout
+	}
+
+	// Step config overrides/extends
+	if stepConfig != nil {
+		// If step specifies an allowlist, it takes precedence (replaces global)
+		if len(stepConfig.Allowlist) > 0 {
+			result.Allowlist = stepConfig.Allowlist
+		}
+		// Denylist is always additive
+		result.Denylist = append(result.Denylist, stepConfig.Denylist...)
+		// Step timeout takes precedence if specified
+		if stepConfig.Timeout > 0 {
+			result.Timeout = stepConfig.Timeout
+		}
+	}
+
+	return result
+}
+
 // NewToolExecutor creates a new tool executor with the given configuration
 func NewToolExecutor(config *ToolConfig, verbose bool, debugFunc func(format string, args ...interface{})) *ToolExecutor {
 	if config == nil {

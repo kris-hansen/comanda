@@ -43,13 +43,14 @@ func (p *Processor) handleOutputWithToolConfig(modelName string, response string
 				return fmt.Errorf("failed to parse tool output: %w", err)
 			}
 
-			// Create tool executor
-			executorConfig := &ToolConfig{}
+			// Create tool executor with merged global + step-level configuration
+			stepToolConfig := &ToolConfig{}
 			if toolConfig != nil {
-				executorConfig.Allowlist = toolConfig.Allowlist
-				executorConfig.Denylist = toolConfig.Denylist
-				executorConfig.Timeout = toolConfig.Timeout
+				stepToolConfig.Allowlist = toolConfig.Allowlist
+				stepToolConfig.Denylist = toolConfig.Denylist
+				stepToolConfig.Timeout = toolConfig.Timeout
 			}
+			executorConfig := MergeToolConfigs(p.getGlobalToolConfig(), stepToolConfig)
 			executor := NewToolExecutor(executorConfig, p.verbose, p.debugf)
 
 			// Execute the tool with the response as stdin

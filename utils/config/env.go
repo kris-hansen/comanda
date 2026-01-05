@@ -58,11 +58,19 @@ type Provider struct {
 	Models []Model `yaml:"models"`
 }
 
+// ToolConfig represents global tool execution settings
+type ToolConfig struct {
+	Allowlist []string `yaml:"allowlist,omitempty"` // Additional commands to allow globally
+	Denylist  []string `yaml:"denylist,omitempty"`  // Additional commands to deny globally
+	Timeout   int      `yaml:"timeout,omitempty"`   // Default timeout in seconds (0 = use system default of 30)
+}
+
 // EnvConfig represents the complete environment configuration
 type EnvConfig struct {
 	Providers              map[string]*Provider      `yaml:"providers"` // Changed to store pointers to Provider
 	Server                 *ServerConfig             `yaml:"server,omitempty"`
 	Databases              map[string]DatabaseConfig `yaml:"databases,omitempty"` // Added database configurations
+	Tool                   *ToolConfig               `yaml:"tool,omitempty"`      // Global tool execution settings
 	DefaultGenerationModel string                    `yaml:"default_generation_model,omitempty"`
 	MemoryFile             string                    `yaml:"memory_file,omitempty"` // Path to COMANDA.md memory file
 }
@@ -627,6 +635,16 @@ func (c *DatabaseConfig) GetConnectionString() string {
 	default:
 		return ""
 	}
+}
+
+// GetToolConfig returns the global tool configuration, or nil if not set
+func (c *EnvConfig) GetToolConfig() *ToolConfig {
+	return c.Tool
+}
+
+// SetToolConfig sets the global tool configuration
+func (c *EnvConfig) SetToolConfig(tool *ToolConfig) {
+	c.Tool = tool
 }
 
 // GetAllConfiguredModels returns a list of all configured models across all providers
