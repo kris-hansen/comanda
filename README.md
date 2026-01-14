@@ -46,6 +46,12 @@ go install github.com/kris-hansen/comanda@latest
 # Or download from GitHub Releases
 ```
 
+Ensure the Go install location is on your `PATH` (often `$(go env GOPATH)/bin` or `$(go env GOBIN)`), then verify:
+
+```bash
+comanda --version
+```
+
 ### Configure
 
 ```bash
@@ -259,6 +265,16 @@ brew install kris-hansen/comanda/comanda
 ```bash
 go install github.com/kris-hansen/comanda@latest
 ```
+
+### Remote Install (Go)
+Install directly on a remote host over SSH:
+
+```bash
+ssh user@host 'GOBIN=$HOME/bin go install github.com/kris-hansen/comanda@latest'
+ssh user@host 'export PATH="$HOME/bin:$PATH"; comanda --version'
+```
+
+If you already manage Go on the remote host, you can omit `GOBIN` and rely on the default `$(go env GOPATH)/bin` in your `PATH`.
 
 ### Pre-built Binaries
 Download from [GitHub Releases](https://github.com/kris-hansen/comanda/releases) for Windows, macOS, and Linux.
