@@ -1,9 +1,9 @@
-# Software Engineering Agentic Loop Example - Iterative Code Improvement
-# Usage: cat myfile.go | comanda process examples/agentic-loop/code-improvement.yaml
+# Software Engineering Agentic Loop Example - Plan and Build
+# Usage: echo "Build a REST API endpoint for user registration" | comanda process examples/agentic-loop/code-improvement.yaml
 #
-# This example shows the block-style agentic loop syntax with multiple sub-steps.
-# The loop analyzes code for issues, then applies fixes iteratively.
-# When no more issues are found, the loop exits with DONE.
+# This example shows the block-style agentic loop syntax with plan and build phases.
+# First loop: Iteratively refine the implementation plan until complete.
+# Second loop: Iteratively build and fix the code until it compiles/works.
 
 agentic-loop:
   config:
@@ -13,35 +13,39 @@ agentic-loop:
     context_window: 3
 
   steps:
-    analyze:
+    plan:
       input: STDIN
-      model: gpt-4o
+      model: claude-code
       action: |
-        You are a code review agent. This is iteration {{ loop.iteration }}.
+        You are a software architect planning an implementation. This is iteration {{ loop.iteration }}.
 
-        Previous analysis and changes:
+        Previous planning work:
         {{ loop.previous_output }}
 
-        Analyze this code for:
-        1. Bugs and edge cases
-        2. Performance issues
-        3. Code style and readability
-        4. Security vulnerabilities
+        Create or refine the implementation plan:
+        1. Break down the task into specific steps
+        2. Identify files to create or modify
+        3. List dependencies and imports needed
+        4. Consider error handling and edge cases
 
-        If you find issues, describe them clearly and indicate what needs to be fixed.
-        If the code looks good and all previous issues have been addressed, respond with exactly: DONE
+        If the plan is complete and ready for implementation, respond with exactly: DONE
 
-        Provide your analysis:
-      output: $ANALYSIS
+        Otherwise, continue refining the plan:
+      output: $PLAN
 
-    apply_fixes:
-      input: $ANALYSIS
-      model: gpt-4o
+    build:
+      input: $PLAN
+      model: claude-code
       action: |
-        Based on the analysis above, generate the improved code.
+        Based on the implementation plan, generate the code.
 
-        If the analysis says DONE, output the final clean code with no changes.
-        Otherwise, apply the recommended fixes and output the improved code.
+        If the plan says DONE, output the complete implementation.
+        Otherwise, output a work-in-progress implementation based on the current plan.
 
-        Output only the code, no explanations:
+        Focus on:
+        - Clean, readable code
+        - Proper error handling
+        - Following the plan structure
+
+        Output the code:
       output: STDOUT
