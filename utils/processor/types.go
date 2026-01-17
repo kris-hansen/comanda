@@ -81,8 +81,8 @@ type Step struct {
 // DSLConfig represents the structure of the DSL configuration
 type DSLConfig struct {
 	Steps         []Step
-	ParallelSteps map[string][]Step            // Steps that can be executed in parallel
-	Defer         map[string]StepConfig        `yaml:"defer,omitempty"`
+	ParallelSteps map[string][]Step             // Steps that can be executed in parallel
+	Defer         map[string]StepConfig         `yaml:"defer,omitempty"`
 	AgenticLoops  map[string]*AgenticLoopConfig // Block-style agentic loops
 }
 
