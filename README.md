@@ -164,6 +164,29 @@ compare:
   output: STDOUT
 ```
 
+### Agentic Loops
+
+Iterate until the LLM decides work is complete:
+
+```yaml
+implement:
+  agentic_loop:
+    max_iterations: 5
+    exit_condition: llm_decides
+  input: STDIN
+  model: claude-code
+  action: |
+    Iteration {{ loop.iteration }}.
+    Previous: {{ loop.previous_output }}
+
+    Implement and refine. Say DONE when complete.
+  output: STDOUT
+```
+
+```bash
+echo "Write a binary search function with tests" | comanda process implement.yaml
+```
+
 ### Server Mode
 
 Turn any workflow into an HTTP API:
@@ -186,6 +209,7 @@ curl -X POST "http://localhost:8080/process?filename=review.yaml" \
 | **Web scraping** | Fetch and process URLs |
 | **Database I/O** | Read from and write to PostgreSQL |
 | **Chunking** | Auto-split large files for processing |
+| **Agentic loops** | Iterative refinement until exit condition met |
 | **Memory** | Persistent context via COMANDA.md |
 | **Branching** | Conditional workflows with `defer:` |
 | **Visualization** | ASCII workflow charts with `comanda chart` |
@@ -250,6 +274,7 @@ comanda chart workflow.yaml
 - **[Examples](examples/README.md)** — Sample workflows for common tasks
 - **[Multi-Agent Workflows](examples/multi-agent/README.md)** — Claude Code + Codex + Gemini CLI patterns
 - **[Claude Code Examples](examples/claude-code/README.md)** — Agentic coding workflows
+- **[Agentic Loops](examples/agentic-loop/)** — Iterative refinement workflows
 - **[Tool Use Guide](examples/tool-use/README.md)** — Execute shell commands in workflows
 - **[Server API](docs/server-api.md)** — HTTP endpoints reference
 - **[Configuration Guide](docs/adding-new-model-guide.md)** — Adding models and providers

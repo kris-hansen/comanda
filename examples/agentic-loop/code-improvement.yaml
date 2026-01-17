@@ -1,0 +1,48 @@
+# Software Engineering Agentic Loop Example - Plan and Build
+# Usage: comanda process examples/agentic-loop/code-improvement.yaml
+#
+# This example shows the block-style agentic loop syntax with plan and build phases.
+# The loop iteratively plans and builds a simple CLI tool until complete.
+
+agentic-loop:
+  config:
+    max_iterations: 3
+    timeout_seconds: 300
+    exit_condition: llm_decides
+    context_window: 2
+
+  steps:
+    plan:
+      input: NA
+      model: claude-code
+      action: |
+        You are planning and building a simple CLI calculator. This is iteration {{ loop.iteration }}.
+
+        Task: Create a Python CLI that:
+        - Takes two numbers and an operator (+, -, *, /) as arguments
+        - Prints the result
+        - Handles division by zero gracefully
+
+        Previous work:
+        {{ loop.previous_output }}
+
+        Iteration 1: Design the basic structure and argument parsing.
+        Iteration 2: Implement the calculation logic with error handling.
+        Iteration 3: Add help text and finalize.
+
+        If this is iteration 3 or the implementation is complete, respond with exactly: DONE
+
+        Otherwise, describe what to build next:
+      output: $PLAN
+
+    build:
+      input: $PLAN
+      model: claude-code
+      action: |
+        Based on the plan, generate or refine the Python code.
+
+        If the plan says DONE, output the final complete implementation.
+        Otherwise, output the current progress.
+
+        Output only the Python code:
+      output: STDOUT
