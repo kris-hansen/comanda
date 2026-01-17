@@ -1,5 +1,32 @@
 package processor
 
+import "time"
+
+// AgenticLoopConfig represents the configuration for an agentic loop
+type AgenticLoopConfig struct {
+	MaxIterations  int    `yaml:"max_iterations"`  // Maximum iterations before stopping (default: 10)
+	TimeoutSeconds int    `yaml:"timeout_seconds"` // Total timeout in seconds (default: 300)
+	ExitCondition  string `yaml:"exit_condition"`  // Exit condition: llm_decides, pattern_match
+	ExitPattern    string `yaml:"exit_pattern"`    // Regex pattern for pattern_match exit condition
+	ContextWindow  int    `yaml:"context_window"`  // Number of past iterations to include in context (default: 5)
+	Steps          []Step `yaml:"steps,omitempty"` // Sub-steps to execute within each iteration
+}
+
+// LoopContext holds runtime state for an agentic loop
+type LoopContext struct {
+	Iteration      int             // Current iteration number (1-based)
+	PreviousOutput string          // Output from previous iteration
+	History        []LoopIteration // History of all iterations
+	StartTime      time.Time       // When the loop started
+}
+
+// LoopIteration represents a single iteration's state
+type LoopIteration struct {
+	Index     int       // Iteration index
+	Output    string    // Output from this iteration
+	Timestamp time.Time // When this iteration completed
+}
+
 // ChunkConfig represents the configuration for chunking a large file
 type ChunkConfig struct {
 	By        string `yaml:"by"`         // How to split the file: "lines", "bytes", or "tokens"
@@ -40,8 +67,9 @@ type StepConfig struct {
 	ResponseFormat     map[string]interface{}   `yaml:"response_format"`      // Format specification (e.g., JSON)
 
 	// Meta-processing fields
-	Generate *GenerateStepConfig `yaml:"generate,omitempty"` // Configuration for generating a workflow
-	Process  *ProcessStepConfig  `yaml:"process,omitempty"`  // Configuration for processing a sub-workflow
+	Generate    *GenerateStepConfig `yaml:"generate,omitempty"`     // Configuration for generating a workflow
+	Process     *ProcessStepConfig  `yaml:"process,omitempty"`      // Configuration for processing a sub-workflow
+	AgenticLoop *AgenticLoopConfig  `yaml:"agentic_loop,omitempty"` // Inline agentic loop configuration
 }
 
 // Step represents a named step in the DSL
@@ -53,8 +81,9 @@ type Step struct {
 // DSLConfig represents the structure of the DSL configuration
 type DSLConfig struct {
 	Steps         []Step
-	ParallelSteps map[string][]Step     // Steps that can be executed in parallel
-	Defer         map[string]StepConfig `yaml:"defer,omitempty"`
+	ParallelSteps map[string][]Step            // Steps that can be executed in parallel
+	Defer         map[string]StepConfig        `yaml:"defer,omitempty"`
+	AgenticLoops  map[string]*AgenticLoopConfig // Block-style agentic loops
 }
 
 // StepDependency represents a dependency between steps
