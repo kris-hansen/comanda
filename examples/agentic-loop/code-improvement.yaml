@@ -1,51 +1,48 @@
 # Software Engineering Agentic Loop Example - Plan and Build
-# Usage: echo "Build a REST API endpoint for user registration" | comanda process examples/agentic-loop/code-improvement.yaml
+# Usage: comanda process examples/agentic-loop/code-improvement.yaml
 #
 # This example shows the block-style agentic loop syntax with plan and build phases.
-# First loop: Iteratively refine the implementation plan until complete.
-# Second loop: Iteratively build and fix the code until it compiles/works.
+# The loop iteratively plans and builds a simple CLI tool until complete.
 
 agentic-loop:
   config:
-    max_iterations: 5
-    timeout_seconds: 600
+    max_iterations: 3
+    timeout_seconds: 300
     exit_condition: llm_decides
-    context_window: 3
+    context_window: 2
 
   steps:
     plan:
-      input: STDIN
+      input: NA
       model: claude-code
       action: |
-        You are a software architect planning an implementation. This is iteration {{ loop.iteration }}.
+        You are planning and building a simple CLI calculator. This is iteration {{ loop.iteration }}.
 
-        Previous planning work:
+        Task: Create a Python CLI that:
+        - Takes two numbers and an operator (+, -, *, /) as arguments
+        - Prints the result
+        - Handles division by zero gracefully
+
+        Previous work:
         {{ loop.previous_output }}
 
-        Create or refine the implementation plan:
-        1. Break down the task into specific steps
-        2. Identify files to create or modify
-        3. List dependencies and imports needed
-        4. Consider error handling and edge cases
+        Iteration 1: Design the basic structure and argument parsing.
+        Iteration 2: Implement the calculation logic with error handling.
+        Iteration 3: Add help text and finalize.
 
-        If the plan is complete and ready for implementation, respond with exactly: DONE
+        If this is iteration 3 or the implementation is complete, respond with exactly: DONE
 
-        Otherwise, continue refining the plan:
+        Otherwise, describe what to build next:
       output: $PLAN
 
     build:
       input: $PLAN
       model: claude-code
       action: |
-        Based on the implementation plan, generate the code.
+        Based on the plan, generate or refine the Python code.
 
-        If the plan says DONE, output the complete implementation.
-        Otherwise, output a work-in-progress implementation based on the current plan.
+        If the plan says DONE, output the final complete implementation.
+        Otherwise, output the current progress.
 
-        Focus on:
-        - Clean, readable code
-        - Proper error handling
-        - Following the plan structure
-
-        Output the code:
+        Output only the Python code:
       output: STDOUT
