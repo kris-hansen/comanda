@@ -1,5 +1,5 @@
 # Simple Agentic Loop Example - Iterative Code Implementation
-# Usage: echo "Write a function to validate email addresses" | comanda process examples/agentic-loop/simple-refinement.yaml
+# Usage: comanda process examples/agentic-loop/simple-refinement.yaml
 #
 # This example shows the inline agentic loop syntax for a programming task.
 # The loop will iterate up to 3 times, refining the implementation each iteration.
@@ -10,21 +10,26 @@ implement:
     max_iterations: 3
     exit_condition: pattern_match
     exit_pattern: "SATISFIED"
-  input: STDIN
+  input: NA
   model: claude-code
   action: |
-    You are iteratively implementing code. This is iteration {{ loop.iteration }}.
+    You are iteratively implementing a FizzBuzz function. This is iteration {{ loop.iteration }}.
+
+    Task: Write a function that takes a number n and returns:
+    - "Fizz" if divisible by 3
+    - "Buzz" if divisible by 5
+    - "FizzBuzz" if divisible by both
+    - The number as a string otherwise
 
     Your previous implementation:
     {{ loop.previous_output }}
 
-    Review and improve the code:
-    - Add error handling if missing
-    - Add edge case handling
-    - Improve code clarity and documentation
+    Iteration 1: Write the basic implementation.
+    Iteration 2: Add input validation and edge cases.
+    Iteration 3: Add docstring and type hints.
 
-    If the implementation is complete and production-ready,
+    If this is iteration 3 or the code is production-ready,
     start your response with exactly: SATISFIED
 
-    Then output the final code.
+    Then output the code.
   output: STDOUT
