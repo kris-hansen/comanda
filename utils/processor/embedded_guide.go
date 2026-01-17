@@ -81,6 +81,29 @@ func ValidateWorkflowModels(yamlContent string, availableModels []string) []stri
 		if generate, ok := stepMap["generate"].(map[string]interface{}); ok {
 			invalidModels = append(invalidModels, extractInvalidModels(generate["model"], validModels, seen)...)
 		}
+
+		// Check agentic_loop block (inline syntax)
+		if agenticLoop, ok := stepMap["agentic_loop"].(map[string]interface{}); ok {
+			// Check steps within the agentic loop
+			if steps, ok := agenticLoop["steps"].([]interface{}); ok {
+				for _, step := range steps {
+					if stepMap, ok := step.(map[string]interface{}); ok {
+						invalidModels = append(invalidModels, extractInvalidModels(stepMap["model"], validModels, seen)...)
+					}
+				}
+			}
+		}
+	}
+
+	// Check agentic-loop block (top-level syntax)
+	if agenticLoop, ok := workflow["agentic-loop"].(map[string]interface{}); ok {
+		if steps, ok := agenticLoop["steps"].(map[string]interface{}); ok {
+			for _, stepValue := range steps {
+				if stepMap, ok := stepValue.(map[string]interface{}); ok {
+					invalidModels = append(invalidModels, extractInvalidModels(stepMap["model"], validModels, seen)...)
+				}
+			}
+		}
 	}
 
 	return invalidModels
@@ -142,10 +165,11 @@ This guide specifies the YAML-based Domain Specific Language (DSL) for Comanda w
 
 ## Overview
 
-Comanda workflows consist of one or more named steps. Each step performs an operation. There are three main types of steps:
+Comanda workflows consist of one or more named steps. Each step performs an operation. There are four main types of steps:
 1.  **Standard Processing Step:** Involves LLMs, file processing, data operations.
 2.  **Generate Step:** Uses an LLM to dynamically create a new Comanda workflow YAML file.
 3.  **Process Step:** Executes another Comanda workflow file (static or dynamically generated).
+4.  **Agentic Loop Step:** Iteratively processes until an exit condition is met (for refinement, planning, autonomous tasks).
 
 ## Core Workflow Structure
 
@@ -234,6 +258,124 @@ step_name_for_processing:
 - ` + "`workflow_file`" + `: (string, required) The path to the Comanda workflow YAML file to be executed. This can be a statically defined path or the output of a ` + "`generate`" + ` step.
 - ` + "`inputs`" + `: (map, optional) A map of key-value pairs to pass as initial variables to the sub-workflow. These can be accessed within the sub-workflow (e.g., as ` + "`$parent.key1`" + `).
 - **Note:** The ` + "`input`" + ` field for a ` + "`process`" + ` step is optional. If ` + "`input: STDIN`" + ` is used, the output of the previous step in the parent workflow will be available as the initial ` + "`STDIN`" + ` for the *first* step of the sub-workflow if that first step expects ` + "`STDIN`" + `.
+
+## 4. Agentic Loop Step Definition (` + "`agentic_loop`" + ` / ` + "`agentic-loop`" + `)
+
+Agentic loops enable iterative LLM processing until an exit condition is met. This is powerful for tasks that require refinement, multi-step reasoning, or autonomous decision-making.
+
+**When to use agentic loops:**
+- Iterative code improvement (analyze → fix → verify cycles)
+- Multi-step planning and execution
+- Tasks where the LLM decides when work is complete
+- Refinement workflows (draft → improve → finalize)
+
+### Inline Syntax (Single-Step Loop)
+
+For simple iterative tasks with a single step:
+
+` + "```yaml" + `
+step_name:
+  agentic_loop:
+    max_iterations: 5           # Safety limit (default: 10)
+    exit_condition: pattern_match  # or "llm_decides"
+    exit_pattern: "COMPLETE"    # Regex pattern for pattern_match
+  input: STDIN
+  model: claude-code
+  action: |
+    Iteration {{ loop.iteration }}.
+    Previous work: {{ loop.previous_output }}
+
+    Continue improving. Say COMPLETE when done.
+  output: STDOUT
+` + "```" + `
+
+### Block Syntax (Multi-Step Loop)
+
+For complex loops with multiple sub-steps per iteration:
+
+` + "```yaml" + `
+agentic-loop:
+  config:
+    max_iterations: 5           # Safety limit (default: 10)
+    timeout_seconds: 300        # Total timeout (default: 300)
+    exit_condition: llm_decides # or "pattern_match"
+    exit_pattern: "DONE"        # For pattern_match
+    context_window: 3           # Past iterations to include (default: 5)
+
+  steps:
+    plan:
+      input: STDIN
+      model: claude-code
+      action: |
+        Iteration {{ loop.iteration }}.
+        Previous: {{ loop.previous_output }}
+
+        Plan next steps. Say DONE if complete.
+      output: $PLAN
+
+    execute:
+      input: $PLAN
+      model: claude-code
+      action: "Execute the plan"
+      output: STDOUT
+` + "```" + `
+
+**` + "`agentic_loop`" + ` Configuration:**
+- ` + "`max_iterations`" + `: (int, default: 10) Maximum iterations before stopping.
+- ` + "`timeout_seconds`" + `: (int, default: 300) Total time limit in seconds.
+- ` + "`exit_condition`" + `: (string) How to detect completion:
+  - ` + "`llm_decides`" + `: Exits when output contains "DONE", "COMPLETE", or "FINISHED"
+  - ` + "`pattern_match`" + `: Exits when output matches ` + "`exit_pattern`" + ` regex
+- ` + "`exit_pattern`" + `: (string) Regex pattern for ` + "`pattern_match`" + ` condition.
+- ` + "`context_window`" + `: (int, default: 5) Number of past iterations to include in context.
+
+**Template Variables in Actions:**
+- ` + "`{{ loop.iteration }}`" + `: Current iteration number (1-based)
+- ` + "`{{ loop.previous_output }}`" + `: Output from previous iteration
+- ` + "`{{ loop.total_iterations }}`" + `: Maximum allowed iterations
+- ` + "`{{ loop.elapsed_seconds }}`" + `: Seconds since loop started
+
+**Example: Iterative Code Implementation**
+` + "```yaml" + `
+implement:
+  agentic_loop:
+    max_iterations: 3
+    exit_condition: pattern_match
+    exit_pattern: "SATISFIED"
+  input: STDIN
+  model: claude-code
+  action: |
+    Iteration {{ loop.iteration }}. Implement and improve the code.
+    Previous: {{ loop.previous_output }}
+
+    Add error handling, edge cases, tests.
+    Say SATISFIED when production-ready.
+  output: STDOUT
+` + "```" + `
+
+**Example: Plan and Build Loop**
+` + "```yaml" + `
+agentic-loop:
+  config:
+    max_iterations: 5
+    exit_condition: llm_decides
+
+  steps:
+    plan:
+      input: STDIN
+      model: claude-code
+      action: |
+        Iteration {{ loop.iteration }}.
+        Create/refine the implementation plan.
+        Say DONE when ready to implement.
+      output: $PLAN
+
+    build:
+      input: $PLAN
+      model: claude-code
+      action: "Generate code based on the plan"
+      output: STDOUT
+` + "```" + `
 
 ## Common Elements (for Standard Steps)
 
@@ -337,6 +479,16 @@ consolidate_results:
     *   ` + "`process`" + ` block must contain ` + "`workflow_file`" + ` (string path).
     *   ` + "`process.inputs`" + ` is optional.
     *   Top-level ` + "`input`" + ` for the step is optional (can be ` + "`NA`" + ` or ` + "`STDIN`" + ` to pipe to sub-workflow).
+5.  **Agentic Loop Step (Inline):**
+    *   Must contain an ` + "`agentic_loop`" + ` block with loop configuration.
+    *   Must also contain ` + "`input`" + `, ` + "`model`" + `, ` + "`action`" + `, ` + "`output`" + ` at the step level.
+    *   ` + "`agentic_loop.max_iterations`" + ` defaults to 10 if not specified.
+    *   ` + "`agentic_loop.exit_condition`" + ` can be ` + "`llm_decides`" + ` or ` + "`pattern_match`" + `.
+6.  **Agentic Loop Block (Top-level):**
+    *   Uses ` + "`agentic-loop:`" + ` as a top-level key (like ` + "`parallel-process:`" + `).
+    *   Must contain ` + "`config`" + ` block with loop settings.
+    *   Must contain ` + "`steps`" + ` block with one or more sub-steps.
+    *   Each sub-step follows standard step structure (` + "`input`" + `, ` + "`model`" + `, ` + "`action`" + `, ` + "`output`" + `).
 
 ## Chaining and Examples
 
@@ -452,6 +604,13 @@ analyze_document:
 - Using tool commands to pre-process data before LLM analysis
 - Generating a workflow dynamically, then executing it
 - Tasks that genuinely require different models for different capabilities
+- **Agentic loops** for iterative refinement, planning, or autonomous decision-making
+
+**When to use Agentic Loops:**
+- Code improvement cycles (analyze → fix → verify)
+- Planning and execution workflows
+- Tasks where quality depends on iteration
+- When the LLM should decide when work is complete
 
 This guide covers the core concepts and syntax of Comanda's YAML DSL, including meta-processing capabilities. LLMs should use this structure to generate valid workflow files.`
 
@@ -463,10 +622,11 @@ This guide specifies the YAML-based Domain Specific Language (DSL) for Comanda w
 
 ## Overview
 
-Comanda workflows consist of one or more named steps. Each step performs an operation. There are three main types of steps:
+Comanda workflows consist of one or more named steps. Each step performs an operation. There are four main types of steps:
 1.  **Standard Processing Step:** Involves LLMs, file processing, data operations.
 2.  **Generate Step:** Uses an LLM to dynamically create a new Comanda workflow YAML file.
 3.  **Process Step:** Executes another Comanda workflow file (static or dynamically generated).
+4.  **Agentic Loop Step:** Iteratively processes until an exit condition is met (for refinement, planning, autonomous tasks).
 
 ## Core Workflow Structure
 
@@ -555,6 +715,124 @@ step_name_for_processing:
 - ` + "`workflow_file`" + `: (string, required) The path to the Comanda workflow YAML file to be executed. This can be a statically defined path or the output of a ` + "`generate`" + ` step.
 - ` + "`inputs`" + `: (map, optional) A map of key-value pairs to pass as initial variables to the sub-workflow. These can be accessed within the sub-workflow (e.g., as ` + "`$parent.key1`" + `).
 - **Note:** The ` + "`input`" + ` field for a ` + "`process`" + ` step is optional. If ` + "`input: STDIN`" + ` is used, the output of the previous step in the parent workflow will be available as the initial ` + "`STDIN`" + ` for the *first* step of the sub-workflow if that first step expects ` + "`STDIN`" + `.
+
+## 4. Agentic Loop Step Definition (` + "`agentic_loop`" + ` / ` + "`agentic-loop`" + `)
+
+Agentic loops enable iterative LLM processing until an exit condition is met. This is powerful for tasks that require refinement, multi-step reasoning, or autonomous decision-making.
+
+**When to use agentic loops:**
+- Iterative code improvement (analyze → fix → verify cycles)
+- Multi-step planning and execution
+- Tasks where the LLM decides when work is complete
+- Refinement workflows (draft → improve → finalize)
+
+### Inline Syntax (Single-Step Loop)
+
+For simple iterative tasks with a single step:
+
+` + "```yaml" + `
+step_name:
+  agentic_loop:
+    max_iterations: 5           # Safety limit (default: 10)
+    exit_condition: pattern_match  # or "llm_decides"
+    exit_pattern: "COMPLETE"    # Regex pattern for pattern_match
+  input: STDIN
+  model: claude-code
+  action: |
+    Iteration {{ loop.iteration }}.
+    Previous work: {{ loop.previous_output }}
+
+    Continue improving. Say COMPLETE when done.
+  output: STDOUT
+` + "```" + `
+
+### Block Syntax (Multi-Step Loop)
+
+For complex loops with multiple sub-steps per iteration:
+
+` + "```yaml" + `
+agentic-loop:
+  config:
+    max_iterations: 5           # Safety limit (default: 10)
+    timeout_seconds: 300        # Total timeout (default: 300)
+    exit_condition: llm_decides # or "pattern_match"
+    exit_pattern: "DONE"        # For pattern_match
+    context_window: 3           # Past iterations to include (default: 5)
+
+  steps:
+    plan:
+      input: STDIN
+      model: claude-code
+      action: |
+        Iteration {{ loop.iteration }}.
+        Previous: {{ loop.previous_output }}
+
+        Plan next steps. Say DONE if complete.
+      output: $PLAN
+
+    execute:
+      input: $PLAN
+      model: claude-code
+      action: "Execute the plan"
+      output: STDOUT
+` + "```" + `
+
+**` + "`agentic_loop`" + ` Configuration:**
+- ` + "`max_iterations`" + `: (int, default: 10) Maximum iterations before stopping.
+- ` + "`timeout_seconds`" + `: (int, default: 300) Total time limit in seconds.
+- ` + "`exit_condition`" + `: (string) How to detect completion:
+  - ` + "`llm_decides`" + `: Exits when output contains "DONE", "COMPLETE", or "FINISHED"
+  - ` + "`pattern_match`" + `: Exits when output matches ` + "`exit_pattern`" + ` regex
+- ` + "`exit_pattern`" + `: (string) Regex pattern for ` + "`pattern_match`" + ` condition.
+- ` + "`context_window`" + `: (int, default: 5) Number of past iterations to include in context.
+
+**Template Variables in Actions:**
+- ` + "`{{ loop.iteration }}`" + `: Current iteration number (1-based)
+- ` + "`{{ loop.previous_output }}`" + `: Output from previous iteration
+- ` + "`{{ loop.total_iterations }}`" + `: Maximum allowed iterations
+- ` + "`{{ loop.elapsed_seconds }}`" + `: Seconds since loop started
+
+**Example: Iterative Code Implementation**
+` + "```yaml" + `
+implement:
+  agentic_loop:
+    max_iterations: 3
+    exit_condition: pattern_match
+    exit_pattern: "SATISFIED"
+  input: STDIN
+  model: claude-code
+  action: |
+    Iteration {{ loop.iteration }}. Implement and improve the code.
+    Previous: {{ loop.previous_output }}
+
+    Add error handling, edge cases, tests.
+    Say SATISFIED when production-ready.
+  output: STDOUT
+` + "```" + `
+
+**Example: Plan and Build Loop**
+` + "```yaml" + `
+agentic-loop:
+  config:
+    max_iterations: 5
+    exit_condition: llm_decides
+
+  steps:
+    plan:
+      input: STDIN
+      model: claude-code
+      action: |
+        Iteration {{ loop.iteration }}.
+        Create/refine the implementation plan.
+        Say DONE when ready to implement.
+      output: $PLAN
+
+    build:
+      input: $PLAN
+      model: claude-code
+      action: "Generate code based on the plan"
+      output: STDOUT
+` + "```" + `
 
 ## Common Elements (for Standard Steps)
 
@@ -782,6 +1060,16 @@ step_name:
     *   ` + "`process`" + ` block must contain ` + "`workflow_file`" + ` (string path).
     *   ` + "`process.inputs`" + ` is optional.
     *   Top-level ` + "`input`" + ` for the step is optional (can be ` + "`NA`" + ` or ` + "`STDIN`" + ` to pipe to sub-workflow).
+5.  **Agentic Loop Step (Inline):**
+    *   Must contain an ` + "`agentic_loop`" + ` block with loop configuration.
+    *   Must also contain ` + "`input`" + `, ` + "`model`" + `, ` + "`action`" + `, ` + "`output`" + ` at the step level.
+    *   ` + "`agentic_loop.max_iterations`" + ` defaults to 10 if not specified.
+    *   ` + "`agentic_loop.exit_condition`" + ` can be ` + "`llm_decides`" + ` or ` + "`pattern_match`" + `.
+6.  **Agentic Loop Block (Top-level):**
+    *   Uses ` + "`agentic-loop:`" + ` as a top-level key (like ` + "`parallel-process:`" + `).
+    *   Must contain ` + "`config`" + ` block with loop settings.
+    *   Must contain ` + "`steps`" + ` block with one or more sub-steps.
+    *   Each sub-step follows standard step structure (` + "`input`" + `, ` + "`model`" + `, ` + "`action`" + `, ` + "`output`" + `).
 
 ## Chaining and Examples
 
@@ -897,5 +1185,12 @@ analyze_document:
 - Using tool commands to pre-process data before LLM analysis
 - Generating a workflow dynamically, then executing it
 - Tasks that genuinely require different models for different capabilities
+- **Agentic loops** for iterative refinement, planning, or autonomous decision-making
+
+**When to use Agentic Loops:**
+- Code improvement cycles (analyze → fix → verify)
+- Planning and execution workflows
+- Tasks where quality depends on iteration
+- When the LLM should decide when work is complete
 
 This guide covers the core concepts and syntax of Comanda's YAML DSL, including meta-processing capabilities. LLMs should use this structure to generate valid workflow files.`
