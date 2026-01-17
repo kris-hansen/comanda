@@ -61,6 +61,7 @@ func (c *DSLConfig) UnmarshalYAML(node *yaml.Node) error {
 	c.Steps = []Step{}
 	c.ParallelSteps = make(map[string][]Step)
 	c.Defer = make(map[string]StepConfig)
+	c.AgenticLoops = make(map[string]*AgenticLoopConfig)
 
 	for i := 0; i < len(node.Content); i += 2 {
 		keyNode := node.Content[i]
@@ -89,6 +90,11 @@ func (c *DSLConfig) UnmarshalYAML(node *yaml.Node) error {
 
 			// Assign deferred steps to the config
 			c.Defer = deferredSteps
+		case "agentic-loop":
+			// Parse agentic loop block with config and steps
+			if err := c.parseAgenticLoopBlock(valueNode); err != nil {
+				return fmt.Errorf("failed to decode agentic loop: %w", err)
+			}
 		default:
 			// Try to decode as a standard step config first
 			var stepConfig StepConfig
@@ -143,7 +149,7 @@ func (c *DSLConfig) isParallelStepGroup(node *yaml.Node) bool {
 			keyNode := valueNode.Content[j]
 			key := keyNode.Value
 			if key == "input" || key == "model" || key == "action" || key == "output" ||
-				key == "generate" || key == "process" || key == "type" {
+				key == "generate" || key == "process" || key == "type" || key == "agentic_loop" {
 				hasStepKeys = true
 				break
 			}
@@ -154,6 +160,60 @@ func (c *DSLConfig) isParallelStepGroup(node *yaml.Node) bool {
 	}
 
 	return true
+}
+
+// parseAgenticLoopBlock parses an agentic-loop block from YAML
+// The block can have a "config" section with loop settings and a "steps" section with sub-steps
+func (c *DSLConfig) parseAgenticLoopBlock(node *yaml.Node) error {
+	if node.Kind != yaml.MappingNode {
+		return fmt.Errorf("agentic-loop must be a mapping")
+	}
+
+	// Parse the agentic loop structure
+	loopConfig := &AgenticLoopConfig{}
+	var stepsNode *yaml.Node
+
+	for i := 0; i < len(node.Content); i += 2 {
+		keyNode := node.Content[i]
+		valueNode := node.Content[i+1]
+		key := keyNode.Value
+
+		switch key {
+		case "config":
+			// Decode the config section
+			if err := valueNode.Decode(loopConfig); err != nil {
+				return fmt.Errorf("failed to decode agentic loop config: %w", err)
+			}
+		case "steps":
+			stepsNode = valueNode
+		default:
+			return fmt.Errorf("unknown key '%s' in agentic-loop block, expected 'config' or 'steps'", key)
+		}
+	}
+
+	// Parse steps if present
+	if stepsNode != nil {
+		if stepsNode.Kind != yaml.MappingNode {
+			return fmt.Errorf("agentic-loop steps must be a mapping")
+		}
+
+		for i := 0; i < len(stepsNode.Content); i += 2 {
+			keyNode := stepsNode.Content[i]
+			valueNode := stepsNode.Content[i+1]
+			stepName := keyNode.Value
+
+			var stepConfig StepConfig
+			if err := valueNode.Decode(&stepConfig); err != nil {
+				return fmt.Errorf("failed to decode agentic loop step '%s': %w", stepName, err)
+			}
+
+			loopConfig.Steps = append(loopConfig.Steps, Step{Name: stepName, Config: stepConfig})
+		}
+	}
+
+	// Store the loop config with a default name
+	c.AgenticLoops["agentic-loop"] = loopConfig
+	return nil
 }
 
 // isTestMode checks if the code is running in test mode
@@ -762,6 +822,23 @@ func (p *Processor) Process() error {
 		p.debugf("Completed all parallel steps in group: %s", groupName)
 	}
 
+	// Process agentic loops
+	for loopName, loopConfig := range p.config.AgenticLoops {
+		p.debugf("Starting agentic loop: %s", loopName)
+		p.spinner.Start(fmt.Sprintf("Processing agentic loop: %s", loopName))
+
+		output, err := p.processAgenticLoop(loopName, loopConfig, p.lastOutput)
+		if err != nil {
+			p.spinner.Stop()
+			p.emitError(err)
+			return fmt.Errorf("agentic loop error: %w", err)
+		}
+
+		p.lastOutput = output
+		p.spinner.Stop()
+		p.debugf("Completed agentic loop: %s", loopName)
+	}
+
 	// Process sequential steps
 	for stepIndex, step := range p.config.Steps {
 		stepInfo := &StepInfo{
@@ -829,6 +906,11 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 	// Handle process step
 	if step.Config.Process != nil {
 		return p.processProcessStep(step, isParallel, parallelID, metrics, startTime)
+	}
+
+	// Handle inline agentic loop step
+	if step.Config.AgenticLoop != nil {
+		return p.processInlineAgenticLoop(step)
 	}
 
 	// Create a new handler for this step to avoid conflicts in parallel processing
