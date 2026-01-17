@@ -1,0 +1,27 @@
+# Simple Agentic Loop Example - Iterative Text Refinement
+# Usage: echo "Write a poem about coding" | comanda process examples/agentic-loop/simple-refinement.yaml
+#
+# This example shows the inline agentic loop syntax.
+# The loop will iterate up to 3 times, refining the output each iteration.
+# When the model is satisfied, it outputs SATISFIED to exit the loop.
+
+refine:
+  agentic_loop:
+    max_iterations: 3
+    exit_condition: pattern_match
+    exit_pattern: "SATISFIED"
+  input: STDIN
+  model: gpt-4o-mini
+  action: |
+    You are iteratively refining text. This is iteration {{ loop.iteration }}.
+
+    Your previous version:
+    {{ loop.previous_output }}
+
+    Improve this text - make it more concise and impactful.
+
+    If you are satisfied with the quality and no further improvements are needed,
+    start your response with exactly: SATISFIED
+
+    Then provide the final polished version.
+  output: STDOUT

@@ -1,0 +1,47 @@
+# Software Engineering Agentic Loop Example - Iterative Code Improvement
+# Usage: cat myfile.go | comanda process examples/agentic-loop/code-improvement.yaml
+#
+# This example shows the block-style agentic loop syntax with multiple sub-steps.
+# The loop analyzes code for issues, then applies fixes iteratively.
+# When no more issues are found, the loop exits with DONE.
+
+agentic-loop:
+  config:
+    max_iterations: 5
+    timeout_seconds: 600
+    exit_condition: llm_decides
+    context_window: 3
+
+  steps:
+    analyze:
+      input: STDIN
+      model: gpt-4o
+      action: |
+        You are a code review agent. This is iteration {{ loop.iteration }}.
+
+        Previous analysis and changes:
+        {{ loop.previous_output }}
+
+        Analyze this code for:
+        1. Bugs and edge cases
+        2. Performance issues
+        3. Code style and readability
+        4. Security vulnerabilities
+
+        If you find issues, describe them clearly and indicate what needs to be fixed.
+        If the code looks good and all previous issues have been addressed, respond with exactly: DONE
+
+        Provide your analysis:
+      output: $ANALYSIS
+
+    apply_fixes:
+      input: $ANALYSIS
+      model: gpt-4o
+      action: |
+        Based on the analysis above, generate the improved code.
+
+        If the analysis says DONE, output the final clean code with no changes.
+        Otherwise, apply the recommended fixes and output the improved code.
+
+        Output only the code, no explanations:
+      output: STDOUT
