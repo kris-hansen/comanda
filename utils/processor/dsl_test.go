@@ -271,6 +271,27 @@ func TestValidateStepConfig(t *testing.T) {
 			},
 			expectedError: "",
 		},
+		{
+			name:     "codebase-index step type does not require standard fields",
+			stepName: "index_step",
+			config: StepConfig{
+				Type: "codebase-index",
+				CodebaseIndex: &CodebaseIndexConfig{
+					Root: ".",
+				},
+			},
+			expectedError: "",
+		},
+		{
+			name:     "codebase_index block does not require standard fields",
+			stepName: "index_step",
+			config: StepConfig{
+				CodebaseIndex: &CodebaseIndexConfig{
+					Root: "./my-project",
+				},
+			},
+			expectedError: "",
+		},
 	}
 
 	for _, tt := range tests {
