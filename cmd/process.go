@@ -159,20 +159,45 @@ Input can be provided via:
 			// Print sequential steps
 			for _, step := range dslConfig.Steps {
 				log.Printf("\nStep: %s\n", step.Name)
-				inputs := proc.NormalizeStringSlice(step.Config.Input)
-				if len(inputs) > 0 && inputs[0] != "NA" {
-					log.Printf("- Input: %v\n", inputs)
-				}
-				log.Printf("- Model: %v\n", proc.NormalizeStringSlice(step.Config.Model))
 
-				// Display instructions for openai-responses type steps, otherwise display action
-				if step.Config.Type == "openai-responses" && step.Config.Instructions != "" {
-					log.Printf("- Instructions: %v\n", step.Config.Instructions)
+				// Handle codebase-index steps specially
+				isCodebaseIndex := step.Config.Type == "codebase-index" || step.Config.CodebaseIndex != nil
+				if isCodebaseIndex && step.Config.CodebaseIndex != nil {
+					ci := step.Config.CodebaseIndex
+					log.Printf("- Type: codebase-index\n")
+					log.Printf("- Root: %s\n", ci.Root)
+					if ci.Output != nil {
+						if ci.Output.Path != "" {
+							log.Printf("- Output Path: %s\n", ci.Output.Path)
+						}
+						log.Printf("- Store: %s\n", ci.Output.Store)
+						if ci.Output.Encrypt {
+							log.Printf("- Encrypt: true\n")
+						}
+					}
+					if ci.Expose != nil && ci.Expose.WorkflowVariable {
+						log.Printf("- Expose: workflow variable\n")
+					}
+					if ci.MaxOutputKB > 0 {
+						log.Printf("- Max Output: %d KB\n", ci.MaxOutputKB)
+					}
 				} else {
-					log.Printf("- Action: %v\n", proc.NormalizeStringSlice(step.Config.Action))
-				}
+					// Standard step display
+					inputs := proc.NormalizeStringSlice(step.Config.Input)
+					if len(inputs) > 0 && inputs[0] != "NA" {
+						log.Printf("- Input: %v\n", inputs)
+					}
+					log.Printf("- Model: %v\n", proc.NormalizeStringSlice(step.Config.Model))
 
-				log.Printf("- Output: %v\n", proc.NormalizeStringSlice(step.Config.Output))
+					// Display instructions for openai-responses type steps, otherwise display action
+					if step.Config.Type == "openai-responses" && step.Config.Instructions != "" {
+						log.Printf("- Instructions: %v\n", step.Config.Instructions)
+					} else {
+						log.Printf("- Action: %v\n", proc.NormalizeStringSlice(step.Config.Action))
+					}
+
+					log.Printf("- Output: %v\n", proc.NormalizeStringSlice(step.Config.Output))
+				}
 
 				// Display memory information if enabled
 				if step.Config.Memory {
