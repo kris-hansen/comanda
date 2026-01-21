@@ -94,20 +94,20 @@ func TestGoAdapterDetection(t *testing.T) {
 func TestMonorepoDetection(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create monorepo structure: core/ with go.mod, frontend/ with package.json
-	coreDir := filepath.Join(tmpDir, "core")
-	frontendDir := filepath.Join(tmpDir, "frontend")
-	if err := os.Mkdir(coreDir, 0755); err != nil {
+	// Create monorepo structure: backend/ with go.mod, webapp/ with package.json
+	backendDir := filepath.Join(tmpDir, "backend")
+	webappDir := filepath.Join(tmpDir, "webapp")
+	if err := os.Mkdir(backendDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(frontendDir, 0755); err != nil {
+	if err := os.Mkdir(webappDir, 0755); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := os.WriteFile(filepath.Join(coreDir, "go.mod"), []byte("module test"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(backendDir, "go.mod"), []byte("module test"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(frontendDir, "package.json"), []byte("{}"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(webappDir, "package.json"), []byte("{}"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -121,10 +121,10 @@ func TestMonorepoDetection(t *testing.T) {
 	}
 
 	if !names["go"] {
-		t.Error("Should detect Go adapter in core/ subdirectory")
+		t.Error("Should detect Go adapter in backend/ subdirectory")
 	}
 	if !names["typescript"] {
-		t.Error("Should detect TypeScript adapter in frontend/ subdirectory")
+		t.Error("Should detect TypeScript adapter in webapp/ subdirectory")
 	}
 }
 
