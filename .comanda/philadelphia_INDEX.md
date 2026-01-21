@@ -137,25 +137,32 @@ philadelphia/
 
 Files:
 - `cmd/chart.go`
-- `cmd/server.go`
-- `cmd/process.go`
-- `cmd/root.go`
 - `cmd/configure.go`
+- `cmd/server.go`
+- `cmd/root.go`
+- `cmd/process.go`
 
 ### examples
 
 Files:
 - `examples/codebase-index/sample-project/cmd/server/main.go`
 - `examples/codebase-index/sample-project/go.mod`
-- `examples/codebase-index/sample-project/pkg/handlers/users.go`
 - `examples/codebase-index/sample-project/internal/config/config.go`
+- `examples/codebase-index/sample-project/pkg/handlers/users.go`
 - `examples/codebase-index/sample-project/pkg/models/user.go`
 
 ### utils
 
 Files:
-- `utils/processor/action_handler.go`
-- `utils/processor/progress.go`
+- `utils/models/registry.go`
+- `utils/processor/database_handler.go`
+- `utils/chunker/chunker.go`
+- `utils/codebaseindex/adapter.go`
+- `utils/codebaseindex/extract.go`
+- `utils/codebaseindex/manager.go`
+- `utils/codebaseindex/scan.go`
+- `utils/codebaseindex/store.go`
+- `utils/codebaseindex/synthesize.go`
 - `utils/codebaseindex/types.go`
 - `utils/config/env.go`
 - `utils/config/memory.go`
@@ -174,30 +181,29 @@ Files:
 - `utils/models/openai.go`
 - `utils/models/openaicodex.go`
 - `utils/models/provider.go`
-- `utils/codebaseindex/synthesize.go`
-- `utils/codebaseindex/store.go`
-- `utils/codebaseindex/scan.go`
-- `utils/chunker/chunker.go`
-- `utils/codebaseindex/adapter.go`
-- `utils/codebaseindex/extract.go`
-- `utils/codebaseindex/manager.go`
-- `utils/processor/dsl.go`
-- `utils/processor/input_handler.go`
-- `utils/processor/embedded_guide.go`
-- `utils/processor/memory.go`
-- `utils/processor/output_handler.go`
-- `utils/processor/database_handler.go`
-- `utils/processor/model_handler.go`
-- `utils/processor/responses_handler.go`
+- `utils/models/vllm.go`
+- `utils/models/xai.go`
+- `utils/processor/action_handler.go`
+- `utils/processor/agentic_loop.go`
 - `utils/processor/codebase_index_handler.go`
+- `utils/server/utils.go`
+- `utils/processor/dsl.go`
+- `utils/processor/embedded_guide.go`
+- `utils/processor/input_handler.go`
+- `utils/processor/memory.go`
+- `utils/processor/model_handler.go`
+- `utils/processor/output_handler.go`
+- `utils/processor/progress.go`
+- `utils/processor/responses_handler.go`
+- `utils/processor/spinner.go`
 - `utils/processor/tool_executor.go`
 - `utils/processor/types.go`
-- `utils/retry/retry.go`
 - `utils/processor/utils.go`
-- `utils/processor/spinner.go`
+- `utils/retry/retry.go`
 - `utils/scraper/scraper.go`
+- `utils/server/auth.go`
+- `utils/server/bulk_operations.go`
 - `utils/server/env_handlers.go`
-- `utils/processor/agentic_loop.go`
 - `utils/server/file_backup.go`
 - `utils/server/file_handlers.go`
 - `utils/server/generate_handler.go`
@@ -208,12 +214,6 @@ Files:
 - `utils/server/provider_handlers.go`
 - `utils/server/server.go`
 - `utils/server/types.go`
-- `utils/server/bulk_operations.go`
-- `utils/server/utils.go`
-- `utils/models/xai.go`
-- `utils/models/registry.go`
-- `utils/server/auth.go`
-- `utils/models/vllm.go`
 
 ## Important Files
 
@@ -233,19 +233,19 @@ Files:
 
 **Frameworks:** cobra
 
+### `cmd/configure.go`
+
+**Package:** cmd
+
+**Types:** `OllamaModel` (struct), `VLLMModel` (struct)
+
+**Functions:** `isUnsupportedModel`, `isPrimaryOpenAIModel`, `getOpenAIModelsAndCategorize`, `getOpenAIModels`, `getAnthropicModelsAndCategorize`, `getAnthropicModels`, `getXAIModels`, `getDeepseekModels`, ... +26 more
+
 ### `cmd/server.go`
 
 **Package:** cmd
 
 **Functions:** `configureServer`, `configureCORS`, `init`
-
-**Frameworks:** cobra
-
-### `cmd/process.go`
-
-**Package:** cmd
-
-**Functions:** `init`, `parseVarsFlags`
 
 **Frameworks:** cobra
 
@@ -257,35 +257,83 @@ Files:
 
 **Frameworks:** cobra
 
-### `cmd/configure.go`
+### `cmd/process.go`
 
 **Package:** cmd
 
-**Types:** `OllamaModel` (struct), `VLLMModel` (struct)
+**Functions:** `init`, `parseVarsFlags`
 
-**Functions:** `isUnsupportedModel`, `isPrimaryOpenAIModel`, `getOpenAIModelsAndCategorize`, `getOpenAIModels`, `getAnthropicModelsAndCategorize`, `getAnthropicModels`, `getXAIModels`, `getDeepseekModels`, ... +26 more
-
-### `go.mod`
+**Frameworks:** cobra
 
 ### `Makefile`
 
+### `go.mod`
+
 ### `go.sum`
 
-### `utils/processor/action_handler.go`
+### `utils/models/registry.go`
+
+**Package:** models
+
+**Types:** `ModelRegistry` (struct)
+
+**Functions:** `NewModelRegistry`, `initializeDefaultModels`, `RegisterModels`, `RegisterFamilies`, `GetModels`, `GetFamilies`, `ValidateModel`, `GetAllModels`, ... +2 more
+
+### `utils/processor/database_handler.go`
 
 **Package:** processor
 
-**Types:** `ActionResult` (struct)
+**Functions:** `handleDatabaseInput`, `handleDatabaseOutput`
 
-**Functions:** `processActions`
+### `utils/chunker/chunker.go`
 
-### `utils/processor/progress.go`
+**Package:** chunker
 
-**Package:** processor
+**Types:** `ChunkConfig` (struct), `ChunkResult` (struct)
 
-**Types:** `ProgressType` (type), `StepInfo` (struct), `ProgressUpdate` (struct), `ProgressWriter` (interface), `channelProgressWriter` (struct)
+**Functions:** `SplitFile`, `CleanupChunks`, `validateConfig`, `splitByLines`, `splitByBytes`, `splitByTokens`
 
-**Functions:** `NewChannelProgressWriter`, `WriteProgress`
+### `utils/codebaseindex/adapter.go`
+
+**Package:** codebaseindex
+
+**Types:** `Adapter` (interface), `Registry` (struct), `GoAdapter` (struct), `PythonAdapter` (struct), `TypeScriptAdapter` (struct), `FlutterAdapter` (struct)
+
+**Functions:** `NewRegistry`, `Register`, `Get`, `All`, `Detect`, `detectAdapter`, `GetByNames`, `CombinedIgnoreDirs`, ... +39 more
+
+### `utils/codebaseindex/extract.go`
+
+**Package:** codebaseindex
+
+**Functions:** `extractSymbols`, `readFilePartial`, `extractGoSymbols`, `buildGoFuncSignature`, `extractGoSymbolsRegex`, `detectGoFrameworks`, `detectGoRiskTags`, `extractPythonSymbols`, ... +10 more
+
+### `utils/codebaseindex/manager.go`
+
+**Package:** codebaseindex
+
+**Types:** `Manager` (struct)
+
+**Functions:** `NewManager`, `Generate`, `detectAdapters`, `GetConfig`, `deriveRepoSlugs`, `getGitRepoName`, `logf`
+
+### `utils/codebaseindex/scan.go`
+
+**Package:** codebaseindex
+
+**Functions:** `scanRepository`, `walkDir`, `processFile`, `selectCandidates`, `scoreFile`, `buildIgnoreDirs`, `buildIgnoreGlobs`, `buildConfigPatterns`, ... +8 more
+
+### `utils/codebaseindex/store.go`
+
+**Package:** codebaseindex
+
+**Functions:** `writeOutput`, `determineOutputPath`, `getConfigStorePath`, `encryptToFile`, `DecryptFromFile`, `Decrypt`, `IsEncrypted`
+
+### `utils/codebaseindex/synthesize.go`
+
+**Package:** codebaseindex
+
+**Types:** `moduleInfo` (struct)
+
+**Functions:** `synthesize`, `writePurpose`, `inferPurpose`, `writeRepoLayout`, `writeTreeNode`, `writeCapabilities`, `inferCapabilities`, `writeEntryPoints`, ... +10 more
 
 ### `utils/codebaseindex/types.go`
 
@@ -339,77 +387,20 @@ Files:
 
 **Functions:** `NewHandler`, `ProcessStdin`, `getMimeType`, `isSourceCode`, `isImageFile`, `ProcessPath`, `containsWildcard`, `processWildcard`, ... +11 more
 
-### `utils/input/validator.go`
-
-**Package:** input
-
-**Types:** `Validator` (struct)
-
-**Functions:** `NewValidator`, `ValidatePath`, `ValidateFileExtension`, `IsImageFile`, `IsDocumentFile`, `IsSourceCodeFile`
-
-### `utils/models/anthropic.go`
-
-**Package:** models
-
-**Types:** `AnthropicProvider` (struct), `anthropicMessage` (struct), `anthropicContent` (struct), `anthropicSource` (struct), `anthropicRequest` (struct), `anthropicResponse` (struct), `AnthropicModel` (struct), `AnthropicModelsResponse` (struct)
-
-**Functions:** `NewAnthropicProvider`, `debugf`, `Name`, `SupportsModel`, `Configure`, `SendPrompt`, `SendPromptWithFile`, `ValidateModel`, ... +5 more
-
-**Frameworks:** stdlib-http
-
-### `utils/models/claudecode.go`
-
-**Package:** models
-
-**Types:** `ClaudeCodeProvider` (struct)
-
-**Functions:** `NewClaudeCodeProvider`, `Name`, `debugf`, `SupportsModel`, `Configure`, `findClaudeBinary`, `SendPrompt`, `SendPromptWithFile`, ... +5 more
-
-### `utils/models/deepseek.go`
-
-**Package:** models
-
-**Types:** `DeepseekProvider` (struct)
-
-**Functions:** `NewDeepseekProvider`, `Name`, `debugf`, `SupportsModel`, `Configure`, `createChatCompletionRequest`, `SendPrompt`, `SendPromptWithFile`, ... +6 more
-
-### `utils/models/geminicli.go`
-
-**Package:** models
-
-**Types:** `GeminiCLIProvider` (struct)
-
-**Functions:** `NewGeminiCLIProvider`, `Name`, `debugf`, `SupportsModel`, `Configure`, `findGeminiBinary`, `SendPrompt`, `SendPromptWithFile`, ... +5 more
-
-### `utils/models/google.go`
-
-**Package:** models
-
-**Types:** `GoogleProvider` (struct)
-
-**Functions:** `NewGoogleProvider`, `Name`, `debugf`, `ValidateModel`, `SupportsModel`, `Configure`, `SendPrompt`, `SendPromptWithFile`, ... +1 more
-
-### `utils/models/moonshot.go`
-
-**Package:** models
-
-**Types:** `MoonshotProvider` (struct)
-
-**Functions:** `NewMoonshotProvider`, `Name`, `debugf`, `SupportsModel`, `Configure`, `createChatCompletionRequest`, `SendPrompt`, `SendPromptWithFile`, ... +9 more
-
-**Frameworks:** stdlib-http
-
 ## Operational Notes
 
-**Package:** `go.mod`, `examples/codebase-index/sample-project/go.mod`
-
 **Build:** `Makefile`
+
+**Package:** `go.mod`, `examples/codebase-index/sample-project/go.mod`
 
 ## Risk / Caution Areas
 
 **Secrets:**
 - `cmd/server.go`
 - `cmd/root.go`
+- `utils/chunker/chunker.go`
+- `utils/codebaseindex/extract.go`
+- `utils/codebaseindex/store.go`
 - `utils/config/env.go`
 - `utils/config/server.go`
 - `utils/discovery/discovery.go`
@@ -424,13 +415,14 @@ Files:
 - `utils/models/openai.go`
 - `utils/models/openaicodex.go`
 - `utils/models/provider.go`
-- `utils/codebaseindex/store.go`
-- `utils/chunker/chunker.go`
-- `utils/codebaseindex/extract.go`
+- `utils/models/vllm.go`
+- `utils/models/xai.go`
+- `utils/server/utils.go`
 - `utils/processor/memory.go`
 - `utils/processor/model_handler.go`
 - `utils/processor/responses_handler.go`
 - `utils/processor/types.go`
+- `utils/server/auth.go`
 - `utils/server/env_handlers.go`
 - `utils/server/generate_handler.go`
 - `utils/server/logging.go`
@@ -439,17 +431,11 @@ Files:
 - `utils/server/provider_handlers.go`
 - `utils/server/server.go`
 - `utils/server/types.go`
-- `utils/server/utils.go`
-- `utils/models/xai.go`
-- `utils/server/auth.go`
-- `utils/models/vllm.go`
-
-**Crypto:**
-- `utils/config/env.go`
-- `utils/codebaseindex/store.go`
-- `utils/codebaseindex/scan.go`
 
 **Concurrency:**
+- `utils/models/registry.go`
+- `utils/codebaseindex/adapter.go`
+- `utils/codebaseindex/scan.go`
 - `utils/discovery/discovery.go`
 - `utils/models/anthropic.go`
 - `utils/models/claudecode.go`
@@ -460,25 +446,27 @@ Files:
 - `utils/models/ollama.go`
 - `utils/models/openai.go`
 - `utils/models/openaicodex.go`
-- `utils/codebaseindex/scan.go`
-- `utils/codebaseindex/adapter.go`
+- `utils/models/vllm.go`
+- `utils/models/xai.go`
+- `utils/processor/agentic_loop.go`
 - `utils/processor/input_handler.go`
 - `utils/processor/memory.go`
-- `utils/processor/tool_executor.go`
 - `utils/processor/spinner.go`
-- `utils/processor/agentic_loop.go`
+- `utils/processor/tool_executor.go`
 - `utils/server/file_handlers.go`
 - `utils/server/handlers.go`
 - `utils/server/openai_handlers.go`
-- `utils/models/xai.go`
-- `utils/models/registry.go`
-- `utils/models/vllm.go`
 
 **Database:**
 - `utils/processor/database_handler.go`
 
+**Crypto:**
+- `utils/codebaseindex/scan.go`
+- `utils/codebaseindex/store.go`
+- `utils/config/env.go`
+
 ---
 
-*Index generated at 2026-01-21T03:46:55Z*
+*Index generated at 2026-01-21T02:30:21Z*
 
-*Scan time: 15.93075ms*
+*Scan time: 9.110667ms*

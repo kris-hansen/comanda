@@ -458,7 +458,8 @@ func (p *Processor) validateStepConfig(stepName string, config StepConfig) error
 
 	isGenerateStep := config.Generate != nil
 	isProcessStep := config.Process != nil
-	isStandardStep := !isGenerateStep && !isProcessStep && config.Type != "openai-responses" // Standard steps are not generate, process, or openai-responses
+	isCodebaseIndexStep := config.Type == "codebase-index" || config.CodebaseIndex != nil
+	isStandardStep := !isGenerateStep && !isProcessStep && !isCodebaseIndexStep && config.Type != "openai-responses" // Standard steps are not generate, process, codebase-index, or openai-responses
 	isOpenAIResponsesStep := config.Type == "openai-responses"
 
 	// Ensure a step is of one type only
