@@ -67,10 +67,10 @@ type StepConfig struct {
 	ResponseFormat     map[string]interface{}   `yaml:"response_format"`      // Format specification (e.g., JSON)
 
 	// Meta-processing fields
-	Generate      *GenerateStepConfig   `yaml:"generate,omitempty"`       // Configuration for generating a workflow
-	Process       *ProcessStepConfig    `yaml:"process,omitempty"`        // Configuration for processing a sub-workflow
-	AgenticLoop   *AgenticLoopConfig    `yaml:"agentic_loop,omitempty"`   // Inline agentic loop configuration
-	CodebaseIndex *CodebaseIndexConfig  `yaml:"codebase_index,omitempty"` // Codebase indexing configuration
+	Generate      *GenerateStepConfig  `yaml:"generate,omitempty"`       // Configuration for generating a workflow
+	Process       *ProcessStepConfig   `yaml:"process,omitempty"`        // Configuration for processing a sub-workflow
+	AgenticLoop   *AgenticLoopConfig   `yaml:"agentic_loop,omitempty"`   // Inline agentic loop configuration
+	CodebaseIndex *CodebaseIndexConfig `yaml:"codebase_index,omitempty"` // Codebase indexing configuration
 }
 
 // Step represents a named step in the DSL
@@ -109,11 +109,11 @@ type PerformanceMetrics struct {
 
 // CodebaseIndexConfig represents the configuration for codebase-index step
 type CodebaseIndexConfig struct {
-	Root     string                        `yaml:"root"`               // Repository path (defaults to current directory)
-	Output   *CodebaseIndexOutputConfig    `yaml:"output,omitempty"`   // Output configuration
-	Expose   *CodebaseIndexExposeConfig    `yaml:"expose,omitempty"`   // Variable/memory exposure configuration
-	Adapters map[string]*AdapterOverride   `yaml:"adapters,omitempty"` // Per-adapter overrides
-	MaxOutputKB int                        `yaml:"max_output_kb,omitempty"` // Maximum output size in KB
+	Root        string                      `yaml:"root"`                    // Repository path (defaults to current directory)
+	Output      *CodebaseIndexOutputConfig  `yaml:"output,omitempty"`        // Output configuration
+	Expose      *CodebaseIndexExposeConfig  `yaml:"expose,omitempty"`        // Variable/memory exposure configuration
+	Adapters    map[string]*AdapterOverride `yaml:"adapters,omitempty"`      // Per-adapter overrides
+	MaxOutputKB int                         `yaml:"max_output_kb,omitempty"` // Maximum output size in KB
 }
 
 // CodebaseIndexOutputConfig configures index output

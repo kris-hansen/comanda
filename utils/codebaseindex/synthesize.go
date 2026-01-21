@@ -6,6 +6,9 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 const (
@@ -455,9 +458,10 @@ func (m *Manager) writeRiskAreas(sb *strings.Builder, scan *ScanResult) {
 	}
 
 	sb.WriteString("## Risk / Caution Areas\n\n")
+	titleCaser := cases.Title(language.English)
 	for tag, files := range risks {
 		sb.WriteString("**")
-		sb.WriteString(strings.Title(tag))
+		sb.WriteString(titleCaser.String(tag))
 		sb.WriteString(":**\n")
 		for _, f := range files {
 			sb.WriteString("- `")

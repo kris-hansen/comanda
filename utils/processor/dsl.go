@@ -887,35 +887,51 @@ func (p *Processor) Process() error {
 	return nil
 }
 
+// tryDispatchSpecialStep attempts to dispatch special step types (generate, process, agentic loop, codebase-index).
+// Returns (result, handled, error). If handled is true, the step was processed.
+func (p *Processor) tryDispatchSpecialStep(step Step, isParallel bool, parallelID string, metrics *PerformanceMetrics, startTime time.Time) (string, bool, error) {
+	// Check if this is an openai-responses step
+	if step.Config.Type == "openai-responses" {
+		result, err := p.processResponsesStep(step, isParallel, parallelID)
+		return result, true, err
+	}
+
+	// Handle generate step
+	if step.Config.Generate != nil {
+		result, err := p.processGenerateStep(step, isParallel, parallelID, metrics, startTime)
+		return result, true, err
+	}
+
+	// Handle process step
+	if step.Config.Process != nil {
+		result, err := p.processProcessStep(step, isParallel, parallelID, metrics, startTime)
+		return result, true, err
+	}
+
+	// Handle inline agentic loop step
+	if step.Config.AgenticLoop != nil {
+		result, err := p.processInlineAgenticLoop(step)
+		return result, true, err
+	}
+
+	// Handle codebase-index step
+	if step.Config.Type == "codebase-index" || step.Config.CodebaseIndex != nil {
+		result, err := p.processCodebaseIndexStep(step, isParallel, parallelID)
+		return result, true, err
+	}
+
+	return "", false, nil
+}
+
 // processStep handles the processing of a single step (used for both sequential and parallel processing)
 func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (string, error) {
 	// Create performance metrics for this step
 	metrics := &PerformanceMetrics{}
 	startTime := time.Now()
 
-	// Check if this is an openai-responses step
-	if step.Config.Type == "openai-responses" {
-		return p.processResponsesStep(step, isParallel, parallelID)
-	}
-
-	// Handle generate step
-	if step.Config.Generate != nil {
-		return p.processGenerateStep(step, isParallel, parallelID, metrics, startTime)
-	}
-
-	// Handle process step
-	if step.Config.Process != nil {
-		return p.processProcessStep(step, isParallel, parallelID, metrics, startTime)
-	}
-
-	// Handle inline agentic loop step
-	if step.Config.AgenticLoop != nil {
-		return p.processInlineAgenticLoop(step)
-	}
-
-	// Handle codebase-index step
-	if step.Config.Type == "codebase-index" || step.Config.CodebaseIndex != nil {
-		return p.processCodebaseIndexStep(step, isParallel, parallelID)
+	// Try to dispatch special step types first
+	if result, handled, err := p.tryDispatchSpecialStep(step, isParallel, parallelID, metrics, startTime); handled {
+		return result, err
 	}
 
 	// Create a new handler for this step to avoid conflicts in parallel processing
