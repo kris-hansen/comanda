@@ -1,0 +1,13 @@
+# Encrypted index example
+# Stores the index as an encrypted .enc file
+# The workflow variable still contains plaintext for LLM consumption
+
+index_codebase:
+  step_type: codebase-index
+  codebase_index:
+    root: ./sample-project
+    output:
+      store: repo
+      encrypt: true
+    expose:
+      workflow_variable: true

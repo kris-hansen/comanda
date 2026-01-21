@@ -67,9 +67,10 @@ type StepConfig struct {
 	ResponseFormat     map[string]interface{}   `yaml:"response_format"`      // Format specification (e.g., JSON)
 
 	// Meta-processing fields
-	Generate    *GenerateStepConfig `yaml:"generate,omitempty"`     // Configuration for generating a workflow
-	Process     *ProcessStepConfig  `yaml:"process,omitempty"`      // Configuration for processing a sub-workflow
-	AgenticLoop *AgenticLoopConfig  `yaml:"agentic_loop,omitempty"` // Inline agentic loop configuration
+	Generate      *GenerateStepConfig   `yaml:"generate,omitempty"`       // Configuration for generating a workflow
+	Process       *ProcessStepConfig    `yaml:"process,omitempty"`        // Configuration for processing a sub-workflow
+	AgenticLoop   *AgenticLoopConfig    `yaml:"agentic_loop,omitempty"`   // Inline agentic loop configuration
+	CodebaseIndex *CodebaseIndexConfig  `yaml:"codebase_index,omitempty"` // Codebase indexing configuration
 }
 
 // Step represents a named step in the DSL
@@ -104,4 +105,40 @@ type PerformanceMetrics struct {
 	ActionProcessingTime int64 // Time in milliseconds for action processing
 	OutputProcessingTime int64 // Time in milliseconds for output processing
 	TotalProcessingTime  int64 // Total time in milliseconds for the step
+}
+
+// CodebaseIndexConfig represents the configuration for codebase-index step
+type CodebaseIndexConfig struct {
+	Root     string                        `yaml:"root"`               // Repository path (defaults to current directory)
+	Output   *CodebaseIndexOutputConfig    `yaml:"output,omitempty"`   // Output configuration
+	Expose   *CodebaseIndexExposeConfig    `yaml:"expose,omitempty"`   // Variable/memory exposure configuration
+	Adapters map[string]*AdapterOverride   `yaml:"adapters,omitempty"` // Per-adapter overrides
+	MaxOutputKB int                        `yaml:"max_output_kb,omitempty"` // Maximum output size in KB
+}
+
+// CodebaseIndexOutputConfig configures index output
+type CodebaseIndexOutputConfig struct {
+	Path    string `yaml:"path,omitempty"`    // Custom output path
+	Store   string `yaml:"store,omitempty"`   // Where to store: repo, config, both
+	Encrypt bool   `yaml:"encrypt,omitempty"` // Whether to encrypt the output
+}
+
+// CodebaseIndexExposeConfig configures how index is exposed
+type CodebaseIndexExposeConfig struct {
+	WorkflowVariable bool                       `yaml:"workflow_variable,omitempty"` // Expose as workflow variable
+	Memory           *CodebaseIndexMemoryConfig `yaml:"memory,omitempty"`            // Memory integration
+}
+
+// CodebaseIndexMemoryConfig configures memory integration
+type CodebaseIndexMemoryConfig struct {
+	Enabled bool   `yaml:"enabled,omitempty"` // Enable memory integration
+	Key     string `yaml:"key,omitempty"`     // Memory key name
+}
+
+// AdapterOverride allows customization of adapter behavior
+type AdapterOverride struct {
+	IgnoreDirs      []string `yaml:"ignore_dirs,omitempty"`
+	IgnoreGlobs     []string `yaml:"ignore_globs,omitempty"`
+	PriorityFiles   []string `yaml:"priority_files,omitempty"`
+	ReplaceDefaults bool     `yaml:"replace_defaults,omitempty"`
 }

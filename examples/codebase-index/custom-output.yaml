@@ -1,0 +1,21 @@
+# Custom output path and adapter overrides example
+# Shows how to customize the index generation
+
+index_codebase:
+  step_type: codebase-index
+  codebase_index:
+    root: ./sample-project
+    output:
+      path: docs/CODEBASE_INDEX.md
+      store: repo
+    expose:
+      workflow_variable: true
+    adapters:
+      go:
+        ignore_dirs:
+          - testdata
+          - mocks
+        priority_files:
+          - cmd/**/*.go
+          - pkg/**/*.go
+    max_output_kb: 50

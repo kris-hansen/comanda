@@ -1,0 +1,12 @@
+# Basic codebase indexing example
+# Generates a Markdown index of the sample-project codebase
+
+index_codebase:
+  step_type: codebase-index
+  codebase_index:
+    root: ./sample-project
+    output:
+      store: repo
+      encrypt: false
+    expose:
+      workflow_variable: true
