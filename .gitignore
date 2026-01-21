@@ -51,3 +51,6 @@ project-improvement-analysis.md
 
 # Data directory
 data*/
+
+# Comanda local directory (indexes, cache, etc.)
+.comanda/

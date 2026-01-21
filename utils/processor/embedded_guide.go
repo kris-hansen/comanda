@@ -413,7 +413,7 @@ step_name:
 - ` + "`root`" + `: (string, default: ` + "`.`" + `) Repository path to scan.
 - ` + "`output.path`" + `: (string, optional) Custom output file path. Default: ` + "`.comanda/<repo>_INDEX.md`" + `
 - ` + "`output.store`" + `: (string, default: ` + "`repo`" + `) Where to save: ` + "`repo`" + ` (in repository), ` + "`config`" + ` (~/.comanda/), or ` + "`both`" + `.
-- ` + "`output.encrypt`" + `: (bool, default: false) Encrypt output with AES-256 GCM. Saves as ` + "`.enc`" + ` file.
+- ` + "`output.encrypt`" + `: (bool, default: false) Encrypt output with AES-256 GCM. Saves as ` + "`.enc`" + ` file. Requires ` + "`COMANDA_INDEX_KEY`" + ` environment variable.
 - ` + "`expose.workflow_variable`" + `: (bool, default: true) Export index as workflow variables.
 - ` + "`expose.memory.enabled`" + `: (bool, default: false) Register as a named memory source.
 - ` + "`expose.memory.key`" + `: (string) Key name for memory access.
@@ -962,7 +962,7 @@ step_name:
 - ` + "`root`" + `: (string, default: ` + "`.`" + `) Repository path to scan.
 - ` + "`output.path`" + `: (string, optional) Custom output file path. Default: ` + "`.comanda/<repo>_INDEX.md`" + `
 - ` + "`output.store`" + `: (string, default: ` + "`repo`" + `) Where to save: ` + "`repo`" + ` (in repository), ` + "`config`" + ` (~/.comanda/), or ` + "`both`" + `.
-- ` + "`output.encrypt`" + `: (bool, default: false) Encrypt output with AES-256 GCM. Saves as ` + "`.enc`" + ` file.
+- ` + "`output.encrypt`" + `: (bool, default: false) Encrypt output with AES-256 GCM. Saves as ` + "`.enc`" + ` file. Requires ` + "`COMANDA_INDEX_KEY`" + ` environment variable.
 - ` + "`expose.workflow_variable`" + `: (bool, default: true) Export index as workflow variables.
 - ` + "`expose.memory.enabled`" + `: (bool, default: false) Register as a named memory source.
 - ` + "`expose.memory.key`" + `: (string) Key name for memory access.

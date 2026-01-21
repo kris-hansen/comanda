@@ -458,7 +458,8 @@ func (p *Processor) validateStepConfig(stepName string, config StepConfig) error
 
 	isGenerateStep := config.Generate != nil
 	isProcessStep := config.Process != nil
-	isStandardStep := !isGenerateStep && !isProcessStep && config.Type != "openai-responses" // Standard steps are not generate, process, or openai-responses
+	isCodebaseIndexStep := config.Type == "codebase-index" || config.CodebaseIndex != nil
+	isStandardStep := !isGenerateStep && !isProcessStep && !isCodebaseIndexStep && config.Type != "openai-responses" // Standard steps are not generate, process, codebase-index, or openai-responses
 	isOpenAIResponsesStep := config.Type == "openai-responses"
 
 	// Ensure a step is of one type only
@@ -679,8 +680,9 @@ func (p *Processor) Process() error {
 			return fmt.Errorf("validation error: %w", err)
 		}
 
-		// Validate model names only for standard or relevant steps
-		if step.Config.Generate == nil && step.Config.Process == nil && step.Config.Type != "openai-responses" {
+		// Validate model names only for standard steps (not generate, process, openai-responses, or codebase-index)
+		isCodebaseIndex := step.Config.Type == "codebase-index" || step.Config.CodebaseIndex != nil
+		if step.Config.Generate == nil && step.Config.Process == nil && step.Config.Type != "openai-responses" && !isCodebaseIndex {
 			modelNames := p.NormalizeStringSlice(step.Config.Model)
 			p.debugf("Normalized model names for step %s: %v", step.Name, modelNames)
 			if err := p.validateModel(modelNames, []string{"STDIN"}); err != nil { // STDIN is a placeholder here
@@ -711,8 +713,9 @@ func (p *Processor) Process() error {
 				return fmt.Errorf("validation error: %w", err)
 			}
 
-			// Validate model names only for standard or relevant steps
-			if step.Config.Generate == nil && step.Config.Process == nil && step.Config.Type != "openai-responses" {
+			// Validate model names only for standard steps (not generate, process, openai-responses, or codebase-index)
+			isCodebaseIndex := step.Config.Type == "codebase-index" || step.Config.CodebaseIndex != nil
+			if step.Config.Generate == nil && step.Config.Process == nil && step.Config.Type != "openai-responses" && !isCodebaseIndex {
 				modelNames := p.NormalizeStringSlice(step.Config.Model)
 				p.debugf("Normalized model names for parallel step %s: %v", step.Name, modelNames)
 				if err := p.validateModel(modelNames, []string{"STDIN"}); err != nil { // STDIN is a placeholder
