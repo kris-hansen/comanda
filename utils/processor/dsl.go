@@ -1261,13 +1261,11 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 			}
 		}
 
-		// If output is a file path, inject context about where output will be saved.
+		// If output is a file path, inject context so agents know to output content directly.
 		// This helps agents (especially Claude Code in --print mode) understand that they
 		// should output content directly rather than attempting to write files themselves.
 		if outputPath := getFileOutputPath(step.Config.Output); outputPath != "" {
-			outputContext := fmt.Sprintf(
-				"[Output Handling]\nYour text output will be automatically saved to: %s\nDo not attempt to write files directly - simply output the content.\n\n",
-				outputPath)
+			outputContext := "[Output Handling]\nSimply output the content directly. Do not attempt to write files - your output will be captured automatically.\n\n"
 			substituted = outputContext + substituted
 			p.debugf("Injected output context into action (output path: %s)", outputPath)
 		}
