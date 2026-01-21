@@ -1078,3 +1078,81 @@ func TestFetchURL(t *testing.T) {
 		})
 	}
 }
+
+func TestGetFileOutputPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		output   interface{}
+		expected string
+	}{
+		{
+			name:     "file path returns path",
+			output:   "/path/to/output.txt",
+			expected: "/path/to/output.txt",
+		},
+		{
+			name:     "relative file path returns path",
+			output:   "output.txt",
+			expected: "output.txt",
+		},
+		{
+			name:     "STDOUT returns empty",
+			output:   "STDOUT",
+			expected: "",
+		},
+		{
+			name:     "MEMORY returns empty",
+			output:   "MEMORY",
+			expected: "",
+		},
+		{
+			name:     "MEMORY section returns empty",
+			output:   "MEMORY:section_name",
+			expected: "",
+		},
+		{
+			name:     "tool output returns empty",
+			output:   "tool: jq '.data'",
+			expected: "",
+		},
+		{
+			name:     "pipe output returns empty",
+			output:   "STDOUT|grep pattern",
+			expected: "",
+		},
+		{
+			name:     "variable returns empty",
+			output:   "$MY_VAR",
+			expected: "",
+		},
+		{
+			name:     "empty string returns empty",
+			output:   "",
+			expected: "",
+		},
+		{
+			name:     "nil returns empty",
+			output:   nil,
+			expected: "",
+		},
+		{
+			name:     "non-string returns empty",
+			output:   123,
+			expected: "",
+		},
+		{
+			name:     "path with whitespace is trimmed",
+			output:   "  /path/to/file.txt  ",
+			expected: "/path/to/file.txt",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getFileOutputPath(tt.output)
+			if result != tt.expected {
+				t.Errorf("getFileOutputPath(%v) = %q, want %q", tt.output, result, tt.expected)
+			}
+		})
+	}
+}
