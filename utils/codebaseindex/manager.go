@@ -49,10 +49,15 @@ func (m *Manager) Generate() (*Result, error) {
 
 	m.logf("Starting codebase index generation for: %s", m.config.Root)
 
+	// Check if root path exists
+	if _, err := os.Stat(m.config.Root); os.IsNotExist(err) {
+		return nil, fmt.Errorf("repository path does not exist: %s", m.config.Root)
+	}
+
 	// Step 1: Detect or use specified adapters
 	m.adapters = m.detectAdapters()
 	if len(m.adapters) == 0 {
-		return nil, fmt.Errorf("no language adapters detected for repository")
+		return nil, fmt.Errorf("no language adapters detected for repository at %s (supported: Go, Python, TypeScript, Flutter)", m.config.Root)
 	}
 
 	languages := make([]string, len(m.adapters))
