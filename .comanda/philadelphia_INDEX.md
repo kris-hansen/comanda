@@ -136,11 +136,11 @@ philadelphia/
 ### cmd
 
 Files:
+- `cmd/process.go`
 - `cmd/chart.go`
 - `cmd/configure.go`
-- `cmd/server.go`
 - `cmd/root.go`
-- `cmd/process.go`
+- `cmd/server.go`
 
 ### examples
 
@@ -154,8 +154,8 @@ Files:
 ### utils
 
 Files:
-- `utils/models/registry.go`
-- `utils/processor/database_handler.go`
+- `utils/processor/dsl.go`
+- `utils/processor/progress.go`
 - `utils/chunker/chunker.go`
 - `utils/codebaseindex/adapter.go`
 - `utils/codebaseindex/extract.go`
@@ -173,31 +173,31 @@ Files:
 - `utils/input/validator.go`
 - `utils/models/anthropic.go`
 - `utils/models/claudecode.go`
-- `utils/models/deepseek.go`
 - `utils/models/geminicli.go`
 - `utils/models/google.go`
-- `utils/models/moonshot.go`
-- `utils/models/ollama.go`
-- `utils/models/openai.go`
-- `utils/models/openaicodex.go`
-- `utils/models/provider.go`
-- `utils/models/vllm.go`
+- `utils/models/deepseek.go`
 - `utils/models/xai.go`
 - `utils/processor/action_handler.go`
 - `utils/processor/agentic_loop.go`
 - `utils/processor/codebase_index_handler.go`
-- `utils/server/utils.go`
-- `utils/processor/dsl.go`
-- `utils/processor/embedded_guide.go`
+- `utils/processor/database_handler.go`
+- `utils/models/moonshot.go`
 - `utils/processor/input_handler.go`
 - `utils/processor/memory.go`
 - `utils/processor/model_handler.go`
 - `utils/processor/output_handler.go`
-- `utils/processor/progress.go`
+- `utils/server/types.go`
 - `utils/processor/responses_handler.go`
 - `utils/processor/spinner.go`
-- `utils/processor/tool_executor.go`
+- `utils/processor/embedded_guide.go`
+- `utils/models/vllm.go`
+- `utils/models/registry.go`
+- `utils/models/ollama.go`
+- `utils/models/openaicodex.go`
+- `utils/models/openai.go`
+- `utils/models/provider.go`
 - `utils/processor/types.go`
+- `utils/processor/tool_executor.go`
 - `utils/processor/utils.go`
 - `utils/retry/retry.go`
 - `utils/scraper/scraper.go`
@@ -208,12 +208,12 @@ Files:
 - `utils/server/file_handlers.go`
 - `utils/server/generate_handler.go`
 - `utils/server/handlers.go`
-- `utils/server/logging.go`
 - `utils/server/openai_handlers.go`
 - `utils/server/openai_types.go`
+- `utils/server/logging.go`
 - `utils/server/provider_handlers.go`
 - `utils/server/server.go`
-- `utils/server/types.go`
+- `utils/server/utils.go`
 
 ## Important Files
 
@@ -222,6 +222,14 @@ Files:
 **Package:** main
 
 **Functions:** `main`
+
+### `cmd/process.go`
+
+**Package:** cmd
+
+**Functions:** `init`, `parseVarsFlags`
+
+**Frameworks:** cobra
 
 ### `cmd/chart.go`
 
@@ -241,14 +249,6 @@ Files:
 
 **Functions:** `isUnsupportedModel`, `isPrimaryOpenAIModel`, `getOpenAIModelsAndCategorize`, `getOpenAIModels`, `getAnthropicModelsAndCategorize`, `getAnthropicModels`, `getXAIModels`, `getDeepseekModels`, ... +26 more
 
-### `cmd/server.go`
-
-**Package:** cmd
-
-**Functions:** `configureServer`, `configureCORS`, `init`
-
-**Frameworks:** cobra
-
 ### `cmd/root.go`
 
 **Package:** cmd
@@ -257,11 +257,11 @@ Files:
 
 **Frameworks:** cobra
 
-### `cmd/process.go`
+### `cmd/server.go`
 
 **Package:** cmd
 
-**Functions:** `init`, `parseVarsFlags`
+**Functions:** `configureServer`, `configureCORS`, `init`
 
 **Frameworks:** cobra
 
@@ -271,19 +271,21 @@ Files:
 
 ### `go.sum`
 
-### `utils/models/registry.go`
-
-**Package:** models
-
-**Types:** `ModelRegistry` (struct)
-
-**Functions:** `NewModelRegistry`, `initializeDefaultModels`, `RegisterModels`, `RegisterFamilies`, `GetModels`, `GetFamilies`, `ValidateModel`, `GetAllModels`, ... +2 more
-
-### `utils/processor/database_handler.go`
+### `utils/processor/dsl.go`
 
 **Package:** processor
 
-**Functions:** `handleDatabaseInput`, `handleDatabaseOutput`
+**Types:** `GenerateStepConfig` (struct), `ProcessStepConfig` (struct), `Processor` (struct), `stepResult` (struct)
+
+**Functions:** `UnmarshalYAML`, `isParallelStepGroup`, `parseAgenticLoopBlock`, `isTestMode`, `NewProcessor`, `SetProgressWriter`, `SetLastOutput`, `LastOutput`, ... +19 more
+
+### `utils/processor/progress.go`
+
+**Package:** processor
+
+**Types:** `ProgressType` (type), `StepInfo` (struct), `ProgressUpdate` (struct), `ProgressWriter` (interface), `channelProgressWriter` (struct)
+
+**Functions:** `NewChannelProgressWriter`, `WriteProgress`
 
 ### `utils/chunker/chunker.go`
 
@@ -396,8 +398,8 @@ Files:
 ## Risk / Caution Areas
 
 **Secrets:**
-- `cmd/server.go`
 - `cmd/root.go`
+- `cmd/server.go`
 - `utils/chunker/chunker.go`
 - `utils/codebaseindex/extract.go`
 - `utils/codebaseindex/store.go`
@@ -407,66 +409,66 @@ Files:
 - `utils/input/handler.go`
 - `utils/models/anthropic.go`
 - `utils/models/claudecode.go`
-- `utils/models/deepseek.go`
 - `utils/models/geminicli.go`
 - `utils/models/google.go`
-- `utils/models/moonshot.go`
-- `utils/models/ollama.go`
-- `utils/models/openai.go`
-- `utils/models/openaicodex.go`
-- `utils/models/provider.go`
-- `utils/models/vllm.go`
+- `utils/models/deepseek.go`
 - `utils/models/xai.go`
-- `utils/server/utils.go`
+- `utils/models/moonshot.go`
 - `utils/processor/memory.go`
 - `utils/processor/model_handler.go`
+- `utils/server/types.go`
 - `utils/processor/responses_handler.go`
+- `utils/models/vllm.go`
+- `utils/models/ollama.go`
+- `utils/models/openaicodex.go`
+- `utils/models/openai.go`
+- `utils/models/provider.go`
 - `utils/processor/types.go`
 - `utils/server/auth.go`
 - `utils/server/env_handlers.go`
 - `utils/server/generate_handler.go`
-- `utils/server/logging.go`
 - `utils/server/openai_handlers.go`
 - `utils/server/openai_types.go`
+- `utils/server/logging.go`
 - `utils/server/provider_handlers.go`
 - `utils/server/server.go`
-- `utils/server/types.go`
+- `utils/server/utils.go`
 
 **Concurrency:**
-- `utils/models/registry.go`
 - `utils/codebaseindex/adapter.go`
 - `utils/codebaseindex/scan.go`
 - `utils/discovery/discovery.go`
 - `utils/models/anthropic.go`
 - `utils/models/claudecode.go`
-- `utils/models/deepseek.go`
 - `utils/models/geminicli.go`
 - `utils/models/google.go`
-- `utils/models/moonshot.go`
-- `utils/models/ollama.go`
-- `utils/models/openai.go`
-- `utils/models/openaicodex.go`
-- `utils/models/vllm.go`
+- `utils/models/deepseek.go`
 - `utils/models/xai.go`
 - `utils/processor/agentic_loop.go`
+- `utils/models/moonshot.go`
 - `utils/processor/input_handler.go`
 - `utils/processor/memory.go`
 - `utils/processor/spinner.go`
+- `utils/models/vllm.go`
+- `utils/models/registry.go`
+- `utils/models/ollama.go`
+- `utils/models/openaicodex.go`
+- `utils/models/openai.go`
 - `utils/processor/tool_executor.go`
 - `utils/server/file_handlers.go`
 - `utils/server/handlers.go`
 - `utils/server/openai_handlers.go`
-
-**Database:**
-- `utils/processor/database_handler.go`
 
 **Crypto:**
 - `utils/codebaseindex/scan.go`
 - `utils/codebaseindex/store.go`
 - `utils/config/env.go`
 
+**Database:**
+- `utils/processor/database_handler.go`
+
 ---
 
-*Index generated at 2026-01-21T02:30:21Z*
+*Index generated at 2026-01-21T03:41:30Z*
 
-*Scan time: 9.110667ms*
+*Scan time: 13.857542ms*

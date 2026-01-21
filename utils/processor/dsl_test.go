@@ -291,6 +291,72 @@ func TestValidateStepConfig(t *testing.T) {
 	}
 }
 
+func TestBuildCodebaseIndexConfigEncryptionKey(t *testing.T) {
+	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), createTestServerConfig(), false, "")
+
+	// Test that encryption key is picked up from environment
+	t.Run("encryption key from env var", func(t *testing.T) {
+		// Set env var
+		t.Setenv("COMANDA_INDEX_KEY", "test-secret-key")
+
+		stepConfig := StepConfig{
+			CodebaseIndex: &CodebaseIndexConfig{
+				Root: ".",
+				Output: &CodebaseIndexOutputConfig{
+					Encrypt: true,
+				},
+			},
+		}
+
+		config := processor.buildCodebaseIndexConfig(stepConfig)
+
+		if config.EncryptionKey != "test-secret-key" {
+			t.Errorf("EncryptionKey = %q, want %q", config.EncryptionKey, "test-secret-key")
+		}
+	})
+
+	// Test that encryption key is empty when encrypt is false
+	t.Run("no encryption key when encrypt false", func(t *testing.T) {
+		t.Setenv("COMANDA_INDEX_KEY", "test-secret-key")
+
+		stepConfig := StepConfig{
+			CodebaseIndex: &CodebaseIndexConfig{
+				Root: ".",
+				Output: &CodebaseIndexOutputConfig{
+					Encrypt: false,
+				},
+			},
+		}
+
+		config := processor.buildCodebaseIndexConfig(stepConfig)
+
+		if config.EncryptionKey != "" {
+			t.Errorf("EncryptionKey should be empty when encrypt=false, got %q", config.EncryptionKey)
+		}
+	})
+
+	// Test that encryption key is empty when env var not set
+	t.Run("empty encryption key when env var not set", func(t *testing.T) {
+		// Ensure env var is not set
+		t.Setenv("COMANDA_INDEX_KEY", "")
+
+		stepConfig := StepConfig{
+			CodebaseIndex: &CodebaseIndexConfig{
+				Root: ".",
+				Output: &CodebaseIndexOutputConfig{
+					Encrypt: true,
+				},
+			},
+		}
+
+		config := processor.buildCodebaseIndexConfig(stepConfig)
+
+		if config.EncryptionKey != "" {
+			t.Errorf("EncryptionKey should be empty when env var not set, got %q", config.EncryptionKey)
+		}
+	})
+}
+
 func TestProcess(t *testing.T) {
 	tests := []struct {
 		name        string
