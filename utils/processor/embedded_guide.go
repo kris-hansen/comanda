@@ -447,7 +447,7 @@ index_repo:
 # Step 2: Use the index for analysis
 analyze_architecture:
   input: STDIN
-  model: claude-sonnet-4-5
+  model: claude-code
   action: |
     Here is the codebase index:
     $MY_PROJECT_INDEX
@@ -996,7 +996,7 @@ index_repo:
 # Step 2: Use the index for analysis
 analyze_architecture:
   input: STDIN
-  model: claude-sonnet-4-5
+  model: claude-code
   action: |
     Here is the codebase index:
     $MY_PROJECT_INDEX

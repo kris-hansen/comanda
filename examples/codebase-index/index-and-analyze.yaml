@@ -11,7 +11,7 @@ index_codebase:
       workflow_variable: true
 
 analyze_architecture:
-  model: anthropic/claude-sonnet-4-20250514
+  model: claude-code
   input: STDIN
   action: |
     Here is a codebase index:
