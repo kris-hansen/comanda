@@ -913,6 +913,11 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 		return p.processInlineAgenticLoop(step)
 	}
 
+	// Handle codebase-index step
+	if step.Config.Type == "codebase-index" || step.Config.CodebaseIndex != nil {
+		return p.processCodebaseIndexStep(step, isParallel, parallelID)
+	}
+
 	// Create a new handler for this step to avoid conflicts in parallel processing
 	stepHandler := input.NewHandler()
 	p.handler = stepHandler

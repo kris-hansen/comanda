@@ -3,10 +3,12 @@ module github.com/kris-hansen/comanda
 go 1.24.0
 
 require (
+	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/gocolly/colly/v2 v2.3.0
 	github.com/google/generative-ai-go v0.20.1
 	github.com/kbinani/screenshot v0.0.0-20250624051815-089614a94018
 	github.com/lib/pq v1.10.9
+	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/sashabaranov/go-openai v1.41.2
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
@@ -29,7 +31,6 @@ require (
 	github.com/antchfx/xmlquery v1.5.0 // indirect
 	github.com/antchfx/xpath v1.3.5 // indirect
 	github.com/bits-and-blooms/bitset v1.24.4 // indirect
-	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/gen2brain/shm v0.1.1 // indirect
