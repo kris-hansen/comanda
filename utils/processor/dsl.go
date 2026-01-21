@@ -1261,6 +1261,17 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 			}
 		}
 
+		// If output is a file path, inject context about where output will be saved.
+		// This helps agents (especially Claude Code in --print mode) understand that they
+		// should output content directly rather than attempting to write files themselves.
+		if outputPath := getFileOutputPath(step.Config.Output); outputPath != "" {
+			outputContext := fmt.Sprintf(
+				"[Output Handling]\nYour text output will be automatically saved to: %s\nDo not attempt to write files directly - simply output the content.\n\n",
+				outputPath)
+			substituted = outputContext + substituted
+			p.debugf("Injected output context into action (output path: %s)", outputPath)
+		}
+
 		substitutedActions[i] = substituted
 		if original != substituted {
 			p.debugf("Variable substitution: original='%s' substituted='%s'", original, substituted)
@@ -1963,4 +1974,26 @@ func (p *Processor) getProviderForModel(modelName string) (models.Provider, erro
 	}
 
 	return nil, fmt.Errorf("no provider configured or found for model %s", modelName)
+}
+
+// getFileOutputPath returns the file path if output is a file, empty string otherwise.
+// This is used to inject output context into prompts so agents know where their output will be saved.
+func getFileOutputPath(output interface{}) string {
+	outputStr, ok := output.(string)
+	if !ok {
+		return ""
+	}
+	outputStr = strings.TrimSpace(outputStr)
+
+	// Skip non-file outputs
+	if outputStr == "" ||
+		outputStr == "STDOUT" ||
+		strings.HasPrefix(outputStr, "MEMORY") ||
+		strings.HasPrefix(outputStr, "tool:") ||
+		strings.Contains(outputStr, "|") ||
+		strings.HasPrefix(outputStr, "$") {
+		return ""
+	}
+
+	return outputStr
 }
