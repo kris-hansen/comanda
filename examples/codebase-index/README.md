@@ -57,7 +57,7 @@ index_codebase:
     root: ./my-project
 
 analyze:
-  model: anthropic/claude-sonnet-4-20250514
+  model: claude-code
   input: STDIN
   action: |
     Here is the codebase index:

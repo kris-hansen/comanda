@@ -15,6 +15,7 @@ philadelphia/
   main.go
   .comanda/
   .context/
+    attachments/
     plans/
   .github/
     workflows/
@@ -120,10 +121,10 @@ philadelphia/
 
 ## Primary Capabilities
 
+- **cmd**: CLI commands, entrypoints
 - **docs**: documentation
 - **tests**: testing
 - **utils**: utilities, helpers
-- **cmd**: CLI commands, entrypoints
 
 ## Entry Points
 
@@ -136,10 +137,10 @@ philadelphia/
 
 Files:
 - `cmd/chart.go`
-- `cmd/server.go`
 - `cmd/configure.go`
-- `cmd/process.go`
+- `cmd/server.go`
 - `cmd/root.go`
+- `cmd/process.go`
 
 ### examples
 
@@ -153,8 +154,9 @@ Files:
 ### utils
 
 Files:
-- `utils/models/xai.go`
-- `utils/processor/dsl.go`
+- `utils/models/registry.go`
+- `utils/processor/database_handler.go`
+- `utils/chunker/chunker.go`
 - `utils/codebaseindex/adapter.go`
 - `utils/codebaseindex/extract.go`
 - `utils/codebaseindex/manager.go`
@@ -179,13 +181,13 @@ Files:
 - `utils/models/openai.go`
 - `utils/models/openaicodex.go`
 - `utils/models/provider.go`
-- `utils/models/registry.go`
 - `utils/models/vllm.go`
+- `utils/models/xai.go`
 - `utils/processor/action_handler.go`
 - `utils/processor/agentic_loop.go`
 - `utils/processor/codebase_index_handler.go`
-- `utils/processor/database_handler.go`
-- `utils/chunker/chunker.go`
+- `utils/server/utils.go`
+- `utils/processor/dsl.go`
 - `utils/processor/embedded_guide.go`
 - `utils/processor/input_handler.go`
 - `utils/processor/memory.go`
@@ -208,11 +210,10 @@ Files:
 - `utils/server/handlers.go`
 - `utils/server/logging.go`
 - `utils/server/openai_handlers.go`
-- `utils/server/provider_handlers.go`
 - `utils/server/openai_types.go`
-- `utils/server/types.go`
-- `utils/server/utils.go`
+- `utils/server/provider_handlers.go`
 - `utils/server/server.go`
+- `utils/server/types.go`
 
 ## Important Files
 
@@ -232,14 +233,6 @@ Files:
 
 **Frameworks:** cobra
 
-### `cmd/server.go`
-
-**Package:** cmd
-
-**Functions:** `configureServer`, `configureCORS`, `init`
-
-**Frameworks:** cobra
-
 ### `cmd/configure.go`
 
 **Package:** cmd
@@ -248,11 +241,11 @@ Files:
 
 **Functions:** `isUnsupportedModel`, `isPrimaryOpenAIModel`, `getOpenAIModelsAndCategorize`, `getOpenAIModels`, `getAnthropicModelsAndCategorize`, `getAnthropicModels`, `getXAIModels`, `getDeepseekModels`, ... +26 more
 
-### `cmd/process.go`
+### `cmd/server.go`
 
 **Package:** cmd
 
-**Functions:** `init`, `parseVarsFlags`
+**Functions:** `configureServer`, `configureCORS`, `init`
 
 **Frameworks:** cobra
 
@@ -264,27 +257,41 @@ Files:
 
 **Frameworks:** cobra
 
+### `cmd/process.go`
+
+**Package:** cmd
+
+**Functions:** `init`, `parseVarsFlags`
+
+**Frameworks:** cobra
+
 ### `Makefile`
 
 ### `go.mod`
 
 ### `go.sum`
 
-### `utils/models/xai.go`
+### `utils/models/registry.go`
 
 **Package:** models
 
-**Types:** `XAIProvider` (struct)
+**Types:** `ModelRegistry` (struct)
 
-**Functions:** `NewXAIProvider`, `Name`, `debugf`, `SupportsModel`, `Configure`, `estimateTokenCount`, `SendPrompt`, `SendPromptWithFile`, ... +4 more
+**Functions:** `NewModelRegistry`, `initializeDefaultModels`, `RegisterModels`, `RegisterFamilies`, `GetModels`, `GetFamilies`, `ValidateModel`, `GetAllModels`, ... +2 more
 
-### `utils/processor/dsl.go`
+### `utils/processor/database_handler.go`
 
 **Package:** processor
 
-**Types:** `GenerateStepConfig` (struct), `ProcessStepConfig` (struct), `Processor` (struct), `stepResult` (struct)
+**Functions:** `handleDatabaseInput`, `handleDatabaseOutput`
 
-**Functions:** `UnmarshalYAML`, `isParallelStepGroup`, `parseAgenticLoopBlock`, `isTestMode`, `NewProcessor`, `SetProgressWriter`, `SetLastOutput`, `LastOutput`, ... +18 more
+### `utils/chunker/chunker.go`
+
+**Package:** chunker
+
+**Types:** `ChunkConfig` (struct), `ChunkResult` (struct)
+
+**Functions:** `SplitFile`, `CleanupChunks`, `validateConfig`, `splitByLines`, `splitByBytes`, `splitByTokens`
 
 ### `utils/codebaseindex/adapter.go`
 
@@ -380,14 +387,6 @@ Files:
 
 **Functions:** `NewHandler`, `ProcessStdin`, `getMimeType`, `isSourceCode`, `isImageFile`, `ProcessPath`, `containsWildcard`, `processWildcard`, ... +11 more
 
-### `utils/input/validator.go`
-
-**Package:** input
-
-**Types:** `Validator` (struct)
-
-**Functions:** `NewValidator`, `ValidatePath`, `ValidateFileExtension`, `IsImageFile`, `IsDocumentFile`, `IsSourceCodeFile`
-
 ## Operational Notes
 
 **Build:** `Makefile`
@@ -396,18 +395,10 @@ Files:
 
 ## Risk / Caution Areas
 
-**Crypto:**
-- `utils/codebaseindex/scan.go`
-- `utils/codebaseindex/store.go`
-- `utils/config/env.go`
-
-**Database:**
-- `utils/processor/database_handler.go`
-
 **Secrets:**
 - `cmd/server.go`
 - `cmd/root.go`
-- `utils/models/xai.go`
+- `utils/chunker/chunker.go`
 - `utils/codebaseindex/extract.go`
 - `utils/codebaseindex/store.go`
 - `utils/config/env.go`
@@ -425,7 +416,8 @@ Files:
 - `utils/models/openaicodex.go`
 - `utils/models/provider.go`
 - `utils/models/vllm.go`
-- `utils/chunker/chunker.go`
+- `utils/models/xai.go`
+- `utils/server/utils.go`
 - `utils/processor/memory.go`
 - `utils/processor/model_handler.go`
 - `utils/processor/responses_handler.go`
@@ -435,14 +427,13 @@ Files:
 - `utils/server/generate_handler.go`
 - `utils/server/logging.go`
 - `utils/server/openai_handlers.go`
-- `utils/server/provider_handlers.go`
 - `utils/server/openai_types.go`
-- `utils/server/types.go`
-- `utils/server/utils.go`
+- `utils/server/provider_handlers.go`
 - `utils/server/server.go`
+- `utils/server/types.go`
 
 **Concurrency:**
-- `utils/models/xai.go`
+- `utils/models/registry.go`
 - `utils/codebaseindex/adapter.go`
 - `utils/codebaseindex/scan.go`
 - `utils/discovery/discovery.go`
@@ -455,8 +446,8 @@ Files:
 - `utils/models/ollama.go`
 - `utils/models/openai.go`
 - `utils/models/openaicodex.go`
-- `utils/models/registry.go`
 - `utils/models/vllm.go`
+- `utils/models/xai.go`
 - `utils/processor/agentic_loop.go`
 - `utils/processor/input_handler.go`
 - `utils/processor/memory.go`
@@ -466,8 +457,16 @@ Files:
 - `utils/server/handlers.go`
 - `utils/server/openai_handlers.go`
 
+**Database:**
+- `utils/processor/database_handler.go`
+
+**Crypto:**
+- `utils/codebaseindex/scan.go`
+- `utils/codebaseindex/store.go`
+- `utils/config/env.go`
+
 ---
 
-*Index generated at 2026-01-21T00:43:25Z*
+*Index generated at 2026-01-21T02:30:21Z*
 
-*Scan time: 7.622958ms*
+*Scan time: 9.110667ms*
