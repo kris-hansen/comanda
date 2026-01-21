@@ -91,6 +91,43 @@ func TestGoAdapterDetection(t *testing.T) {
 	}
 }
 
+func TestMonorepoDetection(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create monorepo structure: core/ with go.mod, frontend/ with package.json
+	coreDir := filepath.Join(tmpDir, "core")
+	frontendDir := filepath.Join(tmpDir, "frontend")
+	if err := os.Mkdir(coreDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(frontendDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(coreDir, "go.mod"), []byte("module test"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(frontendDir, "package.json"), []byte("{}"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	registry := NewRegistry()
+	detected := registry.Detect(tmpDir)
+
+	// Should detect both Go and TypeScript
+	names := make(map[string]bool)
+	for _, a := range detected {
+		names[a.Name()] = true
+	}
+
+	if !names["go"] {
+		t.Error("Should detect Go adapter in core/ subdirectory")
+	}
+	if !names["typescript"] {
+		t.Error("Should detect TypeScript adapter in frontend/ subdirectory")
+	}
+}
+
 func TestExtractGoSymbols(t *testing.T) {
 	content := []byte(`package main
 
