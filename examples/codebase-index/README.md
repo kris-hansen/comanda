@@ -101,11 +101,15 @@ Repository path to scan. Defaults to current directory.
 ### `output`
 - `path`: Custom output file path (default: `.comanda/<repo>_INDEX.md`)
 - `store`: Where to save - `repo` (in repo), `config` (~/.comanda/), or `both`
-- `encrypt`: Enable AES-256 GCM encryption (saves as `.enc`). Requires `COMANDA_INDEX_KEY` environment variable.
+- `encrypt`: Enable AES-256 GCM encryption (saves as `.enc`). Requires encryption key to be configured.
 
-**Note on encryption**: When `encrypt: true`, the index file is stored encrypted on disk but the workflow variable (`<REPO>_INDEX`) contains plaintext for LLM consumption. Set the encryption key via environment variable:
+**Note on encryption**: When `encrypt: true`, the index file is stored encrypted on disk but the workflow variable (`<REPO>_INDEX`) contains plaintext for LLM consumption. Configure the encryption key using either method:
 
 ```bash
+# Option 1: Via comanda configure (Security Settings > Set index encryption key)
+comanda configure
+
+# Option 2: Via environment variable (takes precedence over config)
 export COMANDA_INDEX_KEY="your-secret-key"
 comanda run encrypted-index.yaml
 ```

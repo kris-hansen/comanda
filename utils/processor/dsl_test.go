@@ -335,8 +335,8 @@ func TestBuildCodebaseIndexConfigEncryptionKey(t *testing.T) {
 		}
 	})
 
-	// Test that encryption key is empty when env var not set
-	t.Run("empty encryption key when env var not set", func(t *testing.T) {
+	// Test that encryption key is empty when env var not set and config not set
+	t.Run("empty encryption key when neither set", func(t *testing.T) {
 		// Ensure env var is not set
 		t.Setenv("COMANDA_INDEX_KEY", "")
 
@@ -352,7 +352,58 @@ func TestBuildCodebaseIndexConfigEncryptionKey(t *testing.T) {
 		config := processor.buildCodebaseIndexConfig(stepConfig)
 
 		if config.EncryptionKey != "" {
-			t.Errorf("EncryptionKey should be empty when env var not set, got %q", config.EncryptionKey)
+			t.Errorf("EncryptionKey should be empty when neither set, got %q", config.EncryptionKey)
+		}
+	})
+
+	// Test that encryption key falls back to config when env var not set
+	t.Run("encryption key from config when env var not set", func(t *testing.T) {
+		// Ensure env var is not set
+		t.Setenv("COMANDA_INDEX_KEY", "")
+
+		// Create a processor with config that has IndexEncryptionKey
+		envCfg := createTestEnvConfig()
+		envCfg.IndexEncryptionKey = "config-secret-key"
+		procWithKey := NewProcessor(&DSLConfig{}, envCfg, createTestServerConfig(), false, "")
+
+		stepConfig := StepConfig{
+			CodebaseIndex: &CodebaseIndexConfig{
+				Root: ".",
+				Output: &CodebaseIndexOutputConfig{
+					Encrypt: true,
+				},
+			},
+		}
+
+		config := procWithKey.buildCodebaseIndexConfig(stepConfig)
+
+		if config.EncryptionKey != "config-secret-key" {
+			t.Errorf("EncryptionKey = %q, want %q", config.EncryptionKey, "config-secret-key")
+		}
+	})
+
+	// Test that env var takes precedence over config
+	t.Run("env var takes precedence over config", func(t *testing.T) {
+		t.Setenv("COMANDA_INDEX_KEY", "env-secret-key")
+
+		// Create a processor with config that has IndexEncryptionKey
+		envCfg := createTestEnvConfig()
+		envCfg.IndexEncryptionKey = "config-secret-key"
+		procWithKey := NewProcessor(&DSLConfig{}, envCfg, createTestServerConfig(), false, "")
+
+		stepConfig := StepConfig{
+			CodebaseIndex: &CodebaseIndexConfig{
+				Root: ".",
+				Output: &CodebaseIndexOutputConfig{
+					Encrypt: true,
+				},
+			},
+		}
+
+		config := procWithKey.buildCodebaseIndexConfig(stepConfig)
+
+		if config.EncryptionKey != "env-secret-key" {
+			t.Errorf("EncryptionKey = %q, want %q (env var should take precedence)", config.EncryptionKey, "env-secret-key")
 		}
 	})
 }

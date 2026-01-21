@@ -72,7 +72,8 @@ type EnvConfig struct {
 	Databases              map[string]DatabaseConfig `yaml:"databases,omitempty"` // Added database configurations
 	Tool                   *ToolConfig               `yaml:"tool,omitempty"`      // Global tool execution settings
 	DefaultGenerationModel string                    `yaml:"default_generation_model,omitempty"`
-	MemoryFile             string                    `yaml:"memory_file,omitempty"` // Path to COMANDA.md memory file
+	MemoryFile             string                    `yaml:"memory_file,omitempty"`             // Path to COMANDA.md memory file
+	IndexEncryptionKey     string                    `yaml:"index_encryption_key,omitempty"`    // Key for encrypting codebase indexes
 }
 
 // Verbose indicates whether verbose logging is enabled
