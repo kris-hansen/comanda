@@ -1,0 +1,26 @@
+# Index codebase and use LLM to analyze it
+# This demonstrates using the index as input to an LLM step
+
+index_codebase:
+  step_type: codebase-index
+  codebase_index:
+    root: ./sample-project
+    output:
+      store: repo
+    expose:
+      workflow_variable: true
+
+analyze_architecture:
+  model: claude-code
+  input: STDIN
+  action: |
+    Here is a codebase index:
+
+    {{ env "SAMPLE_PROJECT_INDEX" }}
+
+    Based on this index, please:
+    1. Describe the overall architecture
+    2. Identify the main entry points
+    3. List the key abstractions (types, interfaces)
+    4. Suggest any potential improvements
+  output: STDOUT

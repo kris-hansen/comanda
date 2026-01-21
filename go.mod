@@ -3,15 +3,18 @@ module github.com/kris-hansen/comanda
 go 1.24.0
 
 require (
+	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/gocolly/colly/v2 v2.3.0
 	github.com/google/generative-ai-go v0.20.1
 	github.com/kbinani/screenshot v0.0.0-20250624051815-089614a94018
 	github.com/lib/pq v1.10.9
+	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/sashabaranov/go-openai v1.41.2
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/image v0.34.0
 	golang.org/x/term v0.38.0
+	golang.org/x/text v0.32.0
 	google.golang.org/api v0.232.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -29,7 +32,6 @@ require (
 	github.com/antchfx/xmlquery v1.5.0 // indirect
 	github.com/antchfx/xpath v1.3.5 // indirect
 	github.com/bits-and-blooms/bitset v1.24.4 // indirect
-	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/gen2brain/shm v0.1.1 // indirect
@@ -63,7 +65,6 @@ require (
 	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.39.0 // indirect
-	golang.org/x/text v0.32.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251213004720-97cd9d5aeac2 // indirect
