@@ -1330,82 +1330,131 @@ func configureMemorySettings(reader *bufio.Reader, envConfig *config.EnvConfig) 
 
 // configureSecuritySettings handles encryption/decryption
 func configureSecuritySettings(reader *bufio.Reader, envConfig *config.EnvConfig, configPath string) {
-	log.Printf("\nSecurity Settings\n")
+	for {
+		log.Printf("\nSecurity Settings\n")
 
-	// Check current encryption status
-	data, err := os.ReadFile(configPath)
-	isEncrypted := err == nil && config.IsEncrypted(data)
+		// Check current encryption status
+		data, err := os.ReadFile(configPath)
+		isEncrypted := err == nil && config.IsEncrypted(data)
 
-	if isEncrypted {
-		log.Printf("Configuration is currently: ENCRYPTED\n")
+		if isEncrypted {
+			log.Printf("Configuration is currently: ENCRYPTED\n")
+		} else {
+			log.Printf("Configuration is currently: NOT ENCRYPTED\n")
+		}
+
+		// Show index encryption key status
+		if envConfig.IndexEncryptionKey != "" {
+			log.Printf("Index encryption key: CONFIGURED\n")
+		} else {
+			log.Printf("Index encryption key: NOT SET\n")
+		}
+
+		log.Printf("\nOptions:\n")
+		if isEncrypted {
+			log.Printf("  1. Decrypt configuration\n")
+		} else {
+			log.Printf("  1. Encrypt configuration\n")
+		}
+		log.Printf("  2. Set index encryption key\n")
+		log.Printf("  0. Back\n")
+		log.Printf("\nChoice: ")
+
+		choice, _ := reader.ReadString('\n')
+		choice = strings.TrimSpace(choice)
+
+		switch choice {
+		case "0":
+			return
+		case "1":
+			if isEncrypted {
+				// Decrypt
+				password, err := config.PromptPassword("Enter decryption password: ")
+				if err != nil {
+					log.Printf("Error reading password: %v\n", err)
+					continue
+				}
+				decrypted, err := config.DecryptConfig(data, password)
+				if err != nil {
+					log.Printf("Error decrypting: %v\n", err)
+					continue
+				}
+				if err := os.WriteFile(configPath, decrypted, 0644); err != nil {
+					log.Printf("Error writing decrypted config: %v\n", err)
+					continue
+				}
+				log.Printf("%s Configuration decrypted\n", greenCheckmark)
+			} else {
+				// Encrypt
+				password, err := config.PromptPassword("Enter encryption password (min 6 chars): ")
+				if err != nil {
+					log.Printf("Error reading password: %v\n", err)
+					continue
+				}
+				if err := validatePassword(password); err != nil {
+					log.Printf("Error: %v\n", err)
+					continue
+				}
+				confirm, err := config.PromptPassword("Confirm password: ")
+				if err != nil {
+					log.Printf("Error reading password: %v\n", err)
+					continue
+				}
+				if password != confirm {
+					log.Printf("Passwords do not match\n")
+					continue
+				}
+				// Need to save first, then encrypt
+				if err := config.SaveEnvConfig(configPath, envConfig); err != nil {
+					log.Printf("Error saving before encryption: %v\n", err)
+					continue
+				}
+				if err := config.EncryptConfig(configPath, password); err != nil {
+					log.Printf("Error encrypting: %v\n", err)
+					continue
+				}
+				log.Printf("%s Configuration encrypted\n", greenCheckmark)
+			}
+		case "2":
+			configureIndexEncryptionKey(reader, envConfig)
+		}
+	}
+}
+
+// configureIndexEncryptionKey handles setting the index encryption key
+func configureIndexEncryptionKey(reader *bufio.Reader, envConfig *config.EnvConfig) {
+	log.Printf("\nIndex Encryption Key\n")
+	log.Printf("This key is used to encrypt codebase indexes stored on disk.\n")
+	log.Printf("The key can also be set via COMANDA_INDEX_KEY environment variable.\n\n")
+
+	if envConfig.IndexEncryptionKey != "" {
+		log.Printf("Current key is set (hidden for security)\n")
+		log.Printf("Enter new key (or press Enter to keep current, 'clear' to remove): ")
 	} else {
-		log.Printf("Configuration is currently: NOT ENCRYPTED\n")
+		log.Printf("Enter encryption key (min 6 chars): ")
 	}
 
-	log.Printf("\nOptions:\n")
-	if isEncrypted {
-		log.Printf("  1. Decrypt configuration\n")
-	} else {
-		log.Printf("  1. Encrypt configuration\n")
-	}
-	log.Printf("  0. Back\n")
-	log.Printf("\nChoice: ")
+	key, _ := reader.ReadString('\n')
+	key = strings.TrimSpace(key)
 
-	choice, _ := reader.ReadString('\n')
-	choice = strings.TrimSpace(choice)
-
-	if choice != "1" {
+	if key == "" {
+		log.Printf("Key unchanged\n")
 		return
 	}
 
-	if isEncrypted {
-		// Decrypt
-		password, err := config.PromptPassword("Enter decryption password: ")
-		if err != nil {
-			log.Printf("Error reading password: %v\n", err)
-			return
-		}
-		decrypted, err := config.DecryptConfig(data, password)
-		if err != nil {
-			log.Printf("Error decrypting: %v\n", err)
-			return
-		}
-		if err := os.WriteFile(configPath, decrypted, 0644); err != nil {
-			log.Printf("Error writing decrypted config: %v\n", err)
-			return
-		}
-		log.Printf("%s Configuration decrypted\n", greenCheckmark)
-	} else {
-		// Encrypt
-		password, err := config.PromptPassword("Enter encryption password (min 6 chars): ")
-		if err != nil {
-			log.Printf("Error reading password: %v\n", err)
-			return
-		}
-		if err := validatePassword(password); err != nil {
-			log.Printf("Error: %v\n", err)
-			return
-		}
-		confirm, err := config.PromptPassword("Confirm password: ")
-		if err != nil {
-			log.Printf("Error reading password: %v\n", err)
-			return
-		}
-		if password != confirm {
-			log.Printf("Passwords do not match\n")
-			return
-		}
-		// Need to save first, then encrypt
-		if err := config.SaveEnvConfig(configPath, envConfig); err != nil {
-			log.Printf("Error saving before encryption: %v\n", err)
-			return
-		}
-		if err := config.EncryptConfig(configPath, password); err != nil {
-			log.Printf("Error encrypting: %v\n", err)
-			return
-		}
-		log.Printf("%s Configuration encrypted\n", greenCheckmark)
+	if key == "clear" {
+		envConfig.IndexEncryptionKey = ""
+		log.Printf("%s Index encryption key cleared\n", greenCheckmark)
+		return
 	}
+
+	if len(key) < 6 {
+		log.Printf("Key must be at least 6 characters\n")
+		return
+	}
+
+	envConfig.IndexEncryptionKey = key
+	log.Printf("%s Index encryption key set\n", greenCheckmark)
 }
 
 var configureCmd = &cobra.Command{

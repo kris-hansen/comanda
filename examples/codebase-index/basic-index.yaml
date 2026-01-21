@@ -4,7 +4,7 @@
 index_codebase:
   step_type: codebase-index
   codebase_index:
-    root: ./sample-project
+    root: ./examples/codebase-index/sample-project
     output:
       store: repo
       encrypt: false

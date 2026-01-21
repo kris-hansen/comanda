@@ -2,6 +2,7 @@ package processor
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/kris-hansen/comanda/utils/codebaseindex"
 )
@@ -80,6 +81,13 @@ func (p *Processor) buildCodebaseIndexConfig(stepConfig StepConfig) *codebaseind
 				}
 			}
 			config.Encrypt = ci.Output.Encrypt
+			// Get encryption key: env var takes precedence, then config
+			if ci.Output.Encrypt {
+				config.EncryptionKey = os.Getenv("COMANDA_INDEX_KEY")
+				if config.EncryptionKey == "" && p.envConfig != nil {
+					config.EncryptionKey = p.envConfig.IndexEncryptionKey
+				}
+			}
 		}
 
 		if ci.Expose != nil {

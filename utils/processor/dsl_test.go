@@ -271,6 +271,27 @@ func TestValidateStepConfig(t *testing.T) {
 			},
 			expectedError: "",
 		},
+		{
+			name:     "codebase-index step type does not require standard fields",
+			stepName: "index_step",
+			config: StepConfig{
+				Type: "codebase-index",
+				CodebaseIndex: &CodebaseIndexConfig{
+					Root: ".",
+				},
+			},
+			expectedError: "",
+		},
+		{
+			name:     "codebase_index block does not require standard fields",
+			stepName: "index_step",
+			config: StepConfig{
+				CodebaseIndex: &CodebaseIndexConfig{
+					Root: "./my-project",
+				},
+			},
+			expectedError: "",
+		},
 	}
 
 	for _, tt := range tests {
@@ -289,6 +310,123 @@ func TestValidateStepConfig(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBuildCodebaseIndexConfigEncryptionKey(t *testing.T) {
+	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), createTestServerConfig(), false, "")
+
+	// Test that encryption key is picked up from environment
+	t.Run("encryption key from env var", func(t *testing.T) {
+		// Set env var
+		t.Setenv("COMANDA_INDEX_KEY", "test-secret-key")
+
+		stepConfig := StepConfig{
+			CodebaseIndex: &CodebaseIndexConfig{
+				Root: ".",
+				Output: &CodebaseIndexOutputConfig{
+					Encrypt: true,
+				},
+			},
+		}
+
+		config := processor.buildCodebaseIndexConfig(stepConfig)
+
+		if config.EncryptionKey != "test-secret-key" {
+			t.Errorf("EncryptionKey = %q, want %q", config.EncryptionKey, "test-secret-key")
+		}
+	})
+
+	// Test that encryption key is empty when encrypt is false
+	t.Run("no encryption key when encrypt false", func(t *testing.T) {
+		t.Setenv("COMANDA_INDEX_KEY", "test-secret-key")
+
+		stepConfig := StepConfig{
+			CodebaseIndex: &CodebaseIndexConfig{
+				Root: ".",
+				Output: &CodebaseIndexOutputConfig{
+					Encrypt: false,
+				},
+			},
+		}
+
+		config := processor.buildCodebaseIndexConfig(stepConfig)
+
+		if config.EncryptionKey != "" {
+			t.Errorf("EncryptionKey should be empty when encrypt=false, got %q", config.EncryptionKey)
+		}
+	})
+
+	// Test that encryption key is empty when env var not set and config not set
+	t.Run("empty encryption key when neither set", func(t *testing.T) {
+		// Ensure env var is not set
+		t.Setenv("COMANDA_INDEX_KEY", "")
+
+		stepConfig := StepConfig{
+			CodebaseIndex: &CodebaseIndexConfig{
+				Root: ".",
+				Output: &CodebaseIndexOutputConfig{
+					Encrypt: true,
+				},
+			},
+		}
+
+		config := processor.buildCodebaseIndexConfig(stepConfig)
+
+		if config.EncryptionKey != "" {
+			t.Errorf("EncryptionKey should be empty when neither set, got %q", config.EncryptionKey)
+		}
+	})
+
+	// Test that encryption key falls back to config when env var not set
+	t.Run("encryption key from config when env var not set", func(t *testing.T) {
+		// Ensure env var is not set
+		t.Setenv("COMANDA_INDEX_KEY", "")
+
+		// Create a processor with config that has IndexEncryptionKey
+		envCfg := createTestEnvConfig()
+		envCfg.IndexEncryptionKey = "config-secret-key"
+		procWithKey := NewProcessor(&DSLConfig{}, envCfg, createTestServerConfig(), false, "")
+
+		stepConfig := StepConfig{
+			CodebaseIndex: &CodebaseIndexConfig{
+				Root: ".",
+				Output: &CodebaseIndexOutputConfig{
+					Encrypt: true,
+				},
+			},
+		}
+
+		config := procWithKey.buildCodebaseIndexConfig(stepConfig)
+
+		if config.EncryptionKey != "config-secret-key" {
+			t.Errorf("EncryptionKey = %q, want %q", config.EncryptionKey, "config-secret-key")
+		}
+	})
+
+	// Test that env var takes precedence over config
+	t.Run("env var takes precedence over config", func(t *testing.T) {
+		t.Setenv("COMANDA_INDEX_KEY", "env-secret-key")
+
+		// Create a processor with config that has IndexEncryptionKey
+		envCfg := createTestEnvConfig()
+		envCfg.IndexEncryptionKey = "config-secret-key"
+		procWithKey := NewProcessor(&DSLConfig{}, envCfg, createTestServerConfig(), false, "")
+
+		stepConfig := StepConfig{
+			CodebaseIndex: &CodebaseIndexConfig{
+				Root: ".",
+				Output: &CodebaseIndexOutputConfig{
+					Encrypt: true,
+				},
+			},
+		}
+
+		config := procWithKey.buildCodebaseIndexConfig(stepConfig)
+
+		if config.EncryptionKey != "env-secret-key" {
+			t.Errorf("EncryptionKey = %q, want %q (env var should take precedence)", config.EncryptionKey, "env-secret-key")
+		}
+	})
 }
 
 func TestProcess(t *testing.T) {
