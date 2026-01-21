@@ -3,6 +3,7 @@ package codebaseindex
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -110,10 +111,16 @@ func (r *Registry) detectAdapter(repoPath string, adapter Adapter) bool {
 		if fileExists(filepath.Join(repoPath, detectionFile)) {
 			return true
 		}
-		// Also check common subdirectories (src/, lib/, etc.)
-		for _, subdir := range []string{"src", "lib", "pkg", "app"} {
-			if fileExists(filepath.Join(repoPath, subdir, detectionFile)) {
-				return true
+
+		// Check all direct subdirectories (monorepo support)
+		entries, err := os.ReadDir(repoPath)
+		if err == nil {
+			for _, entry := range entries {
+				if entry.IsDir() && !strings.HasPrefix(entry.Name(), ".") {
+					if fileExists(filepath.Join(repoPath, entry.Name(), detectionFile)) {
+						return true
+					}
+				}
 			}
 		}
 	}
