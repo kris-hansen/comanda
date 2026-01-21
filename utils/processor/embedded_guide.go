@@ -165,11 +165,12 @@ This guide specifies the YAML-based Domain Specific Language (DSL) for Comanda w
 
 ## Overview
 
-Comanda workflows consist of one or more named steps. Each step performs an operation. There are four main types of steps:
+Comanda workflows consist of one or more named steps. Each step performs an operation. There are five main types of steps:
 1.  **Standard Processing Step:** Involves LLMs, file processing, data operations.
 2.  **Generate Step:** Uses an LLM to dynamically create a new Comanda workflow YAML file.
 3.  **Process Step:** Executes another Comanda workflow file (static or dynamically generated).
 4.  **Agentic Loop Step:** Iteratively processes until an exit condition is met (for refinement, planning, autonomous tasks).
+5.  **Codebase Index Step:** Scans a repository and generates a compact Markdown index for LLM consumption.
 
 ## Core Workflow Structure
 
@@ -377,6 +378,92 @@ agentic-loop:
       output: STDOUT
 ` + "```" + `
 
+## 5. Codebase Index Step Definition (` + "`codebase_index`" + `)
+
+This step scans a repository and generates a compact Markdown index optimized for LLM consumption. It supports multiple programming languages and exposes workflow variables for downstream steps.
+
+**When to use codebase-index:**
+- When you need to give an LLM context about a codebase structure
+- Before code analysis, refactoring, or documentation tasks
+- When building workflows that operate on unfamiliar repositories
+
+**Structure:**
+` + "```yaml" + `
+step_name:
+  step_type: codebase-index  # Alternative: use codebase_index block
+  codebase_index:
+    root: .                   # Repository path (default: current directory)
+    output:
+      path: .comanda/INDEX.md # Custom output path (optional)
+      store: repo             # Where to store: repo, config, or both
+      encrypt: false          # Enable AES-256 encryption
+    expose:
+      workflow_variable: true # Export as workflow variables
+      memory:
+        enabled: true         # Register as memory source
+        key: repo.index       # Memory key name
+    adapters:                 # Per-language configuration (optional)
+      go:
+        ignore_dirs: [vendor, testdata]
+        priority_files: ["cmd/**/*.go"]
+    max_output_kb: 100        # Maximum output size in KB
+` + "```" + `
+
+**` + "`codebase_index`" + ` Block Attributes:**
+- ` + "`root`" + `: (string, default: ` + "`.`" + `) Repository path to scan.
+- ` + "`output.path`" + `: (string, optional) Custom output file path. Default: ` + "`.comanda/<repo>_INDEX.md`" + `
+- ` + "`output.store`" + `: (string, default: ` + "`repo`" + `) Where to save: ` + "`repo`" + ` (in repository), ` + "`config`" + ` (~/.comanda/), or ` + "`both`" + `.
+- ` + "`output.encrypt`" + `: (bool, default: false) Encrypt output with AES-256 GCM. Saves as ` + "`.enc`" + ` file.
+- ` + "`expose.workflow_variable`" + `: (bool, default: true) Export index as workflow variables.
+- ` + "`expose.memory.enabled`" + `: (bool, default: false) Register as a named memory source.
+- ` + "`expose.memory.key`" + `: (string) Key name for memory access.
+- ` + "`adapters`" + `: (map, optional) Per-language configuration overrides.
+- ` + "`max_output_kb`" + `: (int, default: 100) Maximum size of generated index.
+
+**Workflow Variables Exported:**
+
+After the step runs, these variables are available (where ` + "`<REPO>`" + ` is the uppercase repository name):
+- ` + "`<REPO>_INDEX`" + `: Full Markdown content of the index
+- ` + "`<REPO>_INDEX_PATH`" + `: Path to the saved index file
+- ` + "`<REPO>_INDEX_SHA`" + `: Hash of the index content
+- ` + "`<REPO>_INDEX_UPDATED`" + `: ` + "`true`" + ` if index was regenerated
+
+**Supported Languages:**
+- **Go**: Uses AST parsing. Detection: ` + "`go.mod`" + `, ` + "`go.sum`" + `
+- **Python**: Uses regex. Detection: ` + "`pyproject.toml`" + `, ` + "`requirements.txt`" + `, ` + "`setup.py`" + `
+- **TypeScript/JavaScript**: Uses regex. Detection: ` + "`tsconfig.json`" + `, ` + "`package.json`" + `
+- **Flutter/Dart**: Uses regex. Detection: ` + "`pubspec.yaml`" + `
+
+**Example: Index and Analyze a Codebase**
+` + "```yaml" + `
+# Step 1: Generate codebase index
+index_repo:
+  step_type: codebase-index
+  codebase_index:
+    root: ./my-project
+    expose:
+      workflow_variable: true
+
+# Step 2: Use the index for analysis
+analyze_architecture:
+  input: STDIN
+  model: claude-code
+  action: |
+    Here is the codebase index:
+    $MY_PROJECT_INDEX
+
+    Analyze the architecture and suggest improvements.
+  output: STDOUT
+` + "```" + `
+
+**Example: Minimal Usage**
+` + "```yaml" + `
+index_repo:
+  step_type: codebase-index
+  codebase_index:
+    root: .
+` + "```" + `
+
 ## Common Elements (for Standard Steps)
 
 ### Input Types
@@ -489,6 +576,11 @@ consolidate_results:
     *   Must contain ` + "`config`" + ` block with loop settings.
     *   Must contain ` + "`steps`" + ` block with one or more sub-steps.
     *   Each sub-step follows standard step structure (` + "`input`" + `, ` + "`model`" + `, ` + "`action`" + `, ` + "`output`" + `).
+7.  **Codebase Index Step:**
+    *   Must have ` + "`step_type: codebase-index`" + ` OR contain a ` + "`codebase_index`" + ` block.
+    *   ` + "`codebase_index.root`" + ` defaults to ` + "`.`" + ` (current directory).
+    *   Exports workflow variables: ` + "`<REPO>_INDEX`" + `, ` + "`<REPO>_INDEX_PATH`" + `, ` + "`<REPO>_INDEX_SHA`" + `, ` + "`<REPO>_INDEX_UPDATED`" + `.
+    *   Does not require ` + "`input`" + `, ` + "`model`" + `, ` + "`action`" + `, or ` + "`output`" + ` fields.
 
 ## Chaining and Examples
 
@@ -622,11 +714,12 @@ This guide specifies the YAML-based Domain Specific Language (DSL) for Comanda w
 
 ## Overview
 
-Comanda workflows consist of one or more named steps. Each step performs an operation. There are four main types of steps:
+Comanda workflows consist of one or more named steps. Each step performs an operation. There are five main types of steps:
 1.  **Standard Processing Step:** Involves LLMs, file processing, data operations.
 2.  **Generate Step:** Uses an LLM to dynamically create a new Comanda workflow YAML file.
 3.  **Process Step:** Executes another Comanda workflow file (static or dynamically generated).
 4.  **Agentic Loop Step:** Iteratively processes until an exit condition is met (for refinement, planning, autonomous tasks).
+5.  **Codebase Index Step:** Scans a repository and generates a compact Markdown index for LLM consumption.
 
 ## Core Workflow Structure
 
@@ -832,6 +925,92 @@ agentic-loop:
       model: claude-code
       action: "Generate code based on the plan"
       output: STDOUT
+` + "```" + `
+
+## 5. Codebase Index Step Definition (` + "`codebase_index`" + `)
+
+This step scans a repository and generates a compact Markdown index optimized for LLM consumption. It supports multiple programming languages and exposes workflow variables for downstream steps.
+
+**When to use codebase-index:**
+- When you need to give an LLM context about a codebase structure
+- Before code analysis, refactoring, or documentation tasks
+- When building workflows that operate on unfamiliar repositories
+
+**Structure:**
+` + "```yaml" + `
+step_name:
+  step_type: codebase-index  # Alternative: use codebase_index block
+  codebase_index:
+    root: .                   # Repository path (default: current directory)
+    output:
+      path: .comanda/INDEX.md # Custom output path (optional)
+      store: repo             # Where to store: repo, config, or both
+      encrypt: false          # Enable AES-256 encryption
+    expose:
+      workflow_variable: true # Export as workflow variables
+      memory:
+        enabled: true         # Register as memory source
+        key: repo.index       # Memory key name
+    adapters:                 # Per-language configuration (optional)
+      go:
+        ignore_dirs: [vendor, testdata]
+        priority_files: ["cmd/**/*.go"]
+    max_output_kb: 100        # Maximum output size in KB
+` + "```" + `
+
+**` + "`codebase_index`" + ` Block Attributes:**
+- ` + "`root`" + `: (string, default: ` + "`.`" + `) Repository path to scan.
+- ` + "`output.path`" + `: (string, optional) Custom output file path. Default: ` + "`.comanda/<repo>_INDEX.md`" + `
+- ` + "`output.store`" + `: (string, default: ` + "`repo`" + `) Where to save: ` + "`repo`" + ` (in repository), ` + "`config`" + ` (~/.comanda/), or ` + "`both`" + `.
+- ` + "`output.encrypt`" + `: (bool, default: false) Encrypt output with AES-256 GCM. Saves as ` + "`.enc`" + ` file.
+- ` + "`expose.workflow_variable`" + `: (bool, default: true) Export index as workflow variables.
+- ` + "`expose.memory.enabled`" + `: (bool, default: false) Register as a named memory source.
+- ` + "`expose.memory.key`" + `: (string) Key name for memory access.
+- ` + "`adapters`" + `: (map, optional) Per-language configuration overrides.
+- ` + "`max_output_kb`" + `: (int, default: 100) Maximum size of generated index.
+
+**Workflow Variables Exported:**
+
+After the step runs, these variables are available (where ` + "`<REPO>`" + ` is the uppercase repository name):
+- ` + "`<REPO>_INDEX`" + `: Full Markdown content of the index
+- ` + "`<REPO>_INDEX_PATH`" + `: Path to the saved index file
+- ` + "`<REPO>_INDEX_SHA`" + `: Hash of the index content
+- ` + "`<REPO>_INDEX_UPDATED`" + `: ` + "`true`" + ` if index was regenerated
+
+**Supported Languages:**
+- **Go**: Uses AST parsing. Detection: ` + "`go.mod`" + `, ` + "`go.sum`" + `
+- **Python**: Uses regex. Detection: ` + "`pyproject.toml`" + `, ` + "`requirements.txt`" + `, ` + "`setup.py`" + `
+- **TypeScript/JavaScript**: Uses regex. Detection: ` + "`tsconfig.json`" + `, ` + "`package.json`" + `
+- **Flutter/Dart**: Uses regex. Detection: ` + "`pubspec.yaml`" + `
+
+**Example: Index and Analyze a Codebase**
+` + "```yaml" + `
+# Step 1: Generate codebase index
+index_repo:
+  step_type: codebase-index
+  codebase_index:
+    root: ./my-project
+    expose:
+      workflow_variable: true
+
+# Step 2: Use the index for analysis
+analyze_architecture:
+  input: STDIN
+  model: claude-code
+  action: |
+    Here is the codebase index:
+    $MY_PROJECT_INDEX
+
+    Analyze the architecture and suggest improvements.
+  output: STDOUT
+` + "```" + `
+
+**Example: Minimal Usage**
+` + "```yaml" + `
+index_repo:
+  step_type: codebase-index
+  codebase_index:
+    root: .
 ` + "```" + `
 
 ## Common Elements (for Standard Steps)
@@ -1070,6 +1249,11 @@ step_name:
     *   Must contain ` + "`config`" + ` block with loop settings.
     *   Must contain ` + "`steps`" + ` block with one or more sub-steps.
     *   Each sub-step follows standard step structure (` + "`input`" + `, ` + "`model`" + `, ` + "`action`" + `, ` + "`output`" + `).
+7.  **Codebase Index Step:**
+    *   Must have ` + "`step_type: codebase-index`" + ` OR contain a ` + "`codebase_index`" + ` block.
+    *   ` + "`codebase_index.root`" + ` defaults to ` + "`.`" + ` (current directory).
+    *   Exports workflow variables: ` + "`<REPO>_INDEX`" + `, ` + "`<REPO>_INDEX_PATH`" + `, ` + "`<REPO>_INDEX_SHA`" + `, ` + "`<REPO>_INDEX_UPDATED`" + `.
+    *   Does not require ` + "`input`" + `, ` + "`model`" + `, ` + "`action`" + `, or ` + "`output`" + ` fields.
 
 ## Chaining and Examples
 
