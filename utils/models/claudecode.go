@@ -189,10 +189,86 @@ func (c *ClaudeCodeProvider) SendPromptWithFile(modelName string, prompt string,
 	return response, nil
 }
 
+// SendPromptAgentic sends a prompt with full tool access for agentic mode
+func (c *ClaudeCodeProvider) SendPromptAgentic(modelName string, prompt string, allowedPaths []string, tools []string, workDir string) (string, error) {
+	c.debugf("Preparing to send agentic prompt via Claude Code")
+	c.debugf("Prompt length: %d characters, allowed paths: %v, tools: %v", len(prompt), allowedPaths, tools)
+
+	if c.binaryPath == "" {
+		if err := c.Configure("LOCAL"); err != nil {
+			return "", err
+		}
+	}
+
+	// Build agentic args (no --print flag)
+	args := c.buildArgsAgentic(modelName, prompt, allowedPaths, tools)
+
+	c.debugf("Executing agentic: %s %v", c.binaryPath, args)
+
+	// Use retry mechanism for execution
+	result, err := retry.WithRetry(
+		func() (interface{}, error) {
+			return c.executeCommand(args, workDir)
+		},
+		func(err error) bool {
+			return strings.Contains(err.Error(), "timeout") ||
+				strings.Contains(err.Error(), "connection")
+		},
+		retry.DefaultRetryConfig,
+	)
+
+	if err != nil {
+		return "", err
+	}
+
+	response := result.(string)
+	c.debugf("Agentic command completed, response length: %d characters", len(response))
+	return response, nil
+}
+
 // buildArgs constructs the command line arguments for claude
 func (c *ClaudeCodeProvider) buildArgs(modelName string, prompt string, workDir string) []string {
 	args := []string{
 		"--print", // Non-interactive mode, just print the response
+	}
+
+	// Extract model variant if specified (e.g., claude-code-opus -> opus)
+	if strings.HasPrefix(strings.ToLower(modelName), "claude-code-") {
+		variant := strings.TrimPrefix(strings.ToLower(modelName), "claude-code-")
+		// Map to actual Claude model names
+		switch variant {
+		case "opus":
+			args = append(args, "--model", "claude-opus-4-5-20251101")
+		case "sonnet":
+			args = append(args, "--model", "claude-sonnet-4-5-20250929")
+		case "haiku":
+			args = append(args, "--model", "claude-haiku-4-5-20251001")
+		default:
+			// Use the variant as-is if it looks like a full model name
+			if strings.Contains(variant, "-") {
+				args = append(args, "--model", variant)
+			}
+		}
+	}
+
+	// Add the prompt
+	args = append(args, "-p", prompt)
+
+	return args
+}
+
+// buildArgsAgentic constructs command line arguments for agentic mode (no --print)
+func (c *ClaudeCodeProvider) buildArgsAgentic(modelName string, prompt string, allowedPaths []string, tools []string) []string {
+	args := []string{} // NO --print flag - enables tool use
+
+	// Add allowed paths for tool access scope
+	for _, path := range allowedPaths {
+		args = append(args, "--add-dir", path)
+	}
+
+	// Restrict tools if specified
+	if len(tools) > 0 {
+		args = append(args, "--tools", strings.Join(tools, ","))
 	}
 
 	// Extract model variant if specified (e.g., claude-code-opus -> opus)

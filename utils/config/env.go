@@ -65,12 +65,18 @@ type ToolConfig struct {
 	Timeout   int      `yaml:"timeout,omitempty"`   // Default timeout in seconds (0 = use system default of 30)
 }
 
+// SecurityConfig represents global security settings
+type SecurityConfig struct {
+	AllowAgenticTools bool `yaml:"allow_agentic_tools"` // Allow agentic tool use in loops (default true)
+}
+
 // EnvConfig represents the complete environment configuration
 type EnvConfig struct {
 	Providers              map[string]*Provider      `yaml:"providers"` // Changed to store pointers to Provider
 	Server                 *ServerConfig             `yaml:"server,omitempty"`
 	Databases              map[string]DatabaseConfig `yaml:"databases,omitempty"` // Added database configurations
 	Tool                   *ToolConfig               `yaml:"tool,omitempty"`      // Global tool execution settings
+	Security               *SecurityConfig           `yaml:"security,omitempty"`  // Global security settings
 	DefaultGenerationModel string                    `yaml:"default_generation_model,omitempty"`
 	MemoryFile             string                    `yaml:"memory_file,omitempty"`          // Path to COMANDA.md memory file
 	IndexEncryptionKey     string                    `yaml:"index_encryption_key,omitempty"` // Key for encrypting codebase indexes
@@ -646,6 +652,14 @@ func (c *EnvConfig) GetToolConfig() *ToolConfig {
 // SetToolConfig sets the global tool configuration
 func (c *EnvConfig) SetToolConfig(tool *ToolConfig) {
 	c.Tool = tool
+}
+
+// IsAgenticToolsAllowed returns whether agentic tool use is allowed globally
+func (c *EnvConfig) IsAgenticToolsAllowed() bool {
+	if c.Security == nil {
+		return true // default enabled
+	}
+	return c.Security.AllowAgenticTools
 }
 
 // GetAllConfiguredModels returns a list of all configured models across all providers

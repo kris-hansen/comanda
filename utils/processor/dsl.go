@@ -34,22 +34,23 @@ type ProcessStepConfig struct {
 
 // Processor handles the DSL processing pipeline
 type Processor struct {
-	config         *DSLConfig
-	envConfig      *config.EnvConfig
-	serverConfig   *config.ServerConfig // Add server config
-	handler        *input.Handler
-	validator      *input.Validator
-	providers      map[string]models.Provider
-	verbose        bool
-	lastOutput     string
-	spinner        *Spinner
-	variables      map[string]string // Store variables from STDIN
-	cliVariables   map[string]string // CLI-provided variables for {{var}} substitution
-	progress       ProgressWriter    // Progress writer for streaming updates
-	runtimeDir     string            // Runtime directory for file operations
-	memory         *MemoryManager    // Memory manager for COMANDA.md file
-	externalMemory string            // External memory context (e.g., from OpenAI messages)
-	mu             sync.Mutex        // Mutex for thread-safe debug logging
+	config              *DSLConfig
+	envConfig           *config.EnvConfig
+	serverConfig        *config.ServerConfig   // Add server config
+	handler             *input.Handler
+	validator           *input.Validator
+	providers           map[string]models.Provider
+	verbose             bool
+	lastOutput          string
+	spinner             *Spinner
+	variables           map[string]string // Store variables from STDIN
+	cliVariables        map[string]string // CLI-provided variables for {{var}} substitution
+	progress            ProgressWriter    // Progress writer for streaming updates
+	runtimeDir          string            // Runtime directory for file operations
+	memory              *MemoryManager    // Memory manager for COMANDA.md file
+	externalMemory      string            // External memory context (e.g., from OpenAI messages)
+	mu                  sync.Mutex        // Mutex for thread-safe debug logging
+	currentAgenticConfig *AgenticLoopConfig // Current agentic loop config (set during agentic loop execution)
 }
 
 // UnmarshalYAML is a custom unmarshaler for DSLConfig to handle mixed types at the root level
@@ -1264,10 +1265,16 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 		// If output is a file path, inject context so agents know to output content directly.
 		// This helps agents (especially Claude Code in --print mode) understand that they
 		// should output content directly rather than attempting to write files themselves.
-		if outputPath := getFileOutputPath(step.Config.Output); outputPath != "" {
-			outputContext := "[Output Handling]\nSimply output the content directly. Do not attempt to write files - your output will be captured automatically.\n\n"
-			substituted = outputContext + substituted
-			p.debugf("Injected output context into action (output path: %s)", outputPath)
+		// Skip this when in agentic mode - the agent can write files directly.
+		isAgenticMode := p.currentAgenticConfig != nil && len(p.currentAgenticConfig.AllowedPaths) > 0
+		if !isAgenticMode {
+			if outputPath := getFileOutputPath(step.Config.Output); outputPath != "" {
+				outputContext := "[Output Handling]\nSimply output the content directly. Do not attempt to write files - your output will be captured automatically.\n\n"
+				substituted = outputContext + substituted
+				p.debugf("Injected output context into action (output path: %s)", outputPath)
+			}
+		} else {
+			p.debugf("Skipping output context injection - agentic mode enabled")
 		}
 
 		substitutedActions[i] = substituted
