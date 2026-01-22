@@ -34,22 +34,22 @@ type ProcessStepConfig struct {
 
 // Processor handles the DSL processing pipeline
 type Processor struct {
-	config              *DSLConfig
-	envConfig           *config.EnvConfig
-	serverConfig        *config.ServerConfig   // Add server config
-	handler             *input.Handler
-	validator           *input.Validator
-	providers           map[string]models.Provider
-	verbose             bool
-	lastOutput          string
-	spinner             *Spinner
-	variables           map[string]string // Store variables from STDIN
-	cliVariables        map[string]string // CLI-provided variables for {{var}} substitution
-	progress            ProgressWriter    // Progress writer for streaming updates
-	runtimeDir          string            // Runtime directory for file operations
-	memory              *MemoryManager    // Memory manager for COMANDA.md file
-	externalMemory      string            // External memory context (e.g., from OpenAI messages)
-	mu                  sync.Mutex        // Mutex for thread-safe debug logging
+	config               *DSLConfig
+	envConfig            *config.EnvConfig
+	serverConfig         *config.ServerConfig // Add server config
+	handler              *input.Handler
+	validator            *input.Validator
+	providers            map[string]models.Provider
+	verbose              bool
+	lastOutput           string
+	spinner              *Spinner
+	variables            map[string]string  // Store variables from STDIN
+	cliVariables         map[string]string  // CLI-provided variables for {{var}} substitution
+	progress             ProgressWriter     // Progress writer for streaming updates
+	runtimeDir           string             // Runtime directory for file operations
+	memory               *MemoryManager     // Memory manager for COMANDA.md file
+	externalMemory       string             // External memory context (e.g., from OpenAI messages)
+	mu                   sync.Mutex         // Mutex for thread-safe debug logging
 	currentAgenticConfig *AgenticLoopConfig // Current agentic loop config (set during agentic loop execution)
 }
 

@@ -4,12 +4,12 @@ import "time"
 
 // AgenticLoopConfig represents the configuration for an agentic loop
 type AgenticLoopConfig struct {
-	MaxIterations  int      `yaml:"max_iterations"`        // Maximum iterations before stopping (default: 10)
-	TimeoutSeconds int      `yaml:"timeout_seconds"`       // Total timeout in seconds (default: 300)
-	ExitCondition  string   `yaml:"exit_condition"`        // Exit condition: llm_decides, pattern_match
-	ExitPattern    string   `yaml:"exit_pattern"`          // Regex pattern for pattern_match exit condition
-	ContextWindow  int      `yaml:"context_window"`        // Number of past iterations to include in context (default: 5)
-	Steps          []Step   `yaml:"steps,omitempty"`       // Sub-steps to execute within each iteration
+	MaxIterations  int      `yaml:"max_iterations"`          // Maximum iterations before stopping (default: 10)
+	TimeoutSeconds int      `yaml:"timeout_seconds"`         // Total timeout in seconds (default: 300)
+	ExitCondition  string   `yaml:"exit_condition"`          // Exit condition: llm_decides, pattern_match
+	ExitPattern    string   `yaml:"exit_pattern"`            // Regex pattern for pattern_match exit condition
+	ContextWindow  int      `yaml:"context_window"`          // Number of past iterations to include in context (default: 5)
+	Steps          []Step   `yaml:"steps,omitempty"`         // Sub-steps to execute within each iteration
 	AllowedPaths   []string `yaml:"allowed_paths,omitempty"` // Directories for agentic tool access
 	Tools          []string `yaml:"tools,omitempty"`         // Optional tool whitelist (Read, Write, Edit, Bash, etc.)
 }

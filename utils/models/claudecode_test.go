@@ -247,9 +247,9 @@ func TestClaudeCodeSendPromptAgenticPathValidation(t *testing.T) {
 	provider := NewClaudeCodeProvider()
 
 	tests := []struct {
-		name         string
-		allowedPaths []string
-		expectError  bool
+		name          string
+		allowedPaths  []string
+		expectError   bool
 		errorContains string
 	}{
 		{
