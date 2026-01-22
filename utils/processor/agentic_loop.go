@@ -19,6 +19,20 @@ const (
 func (p *Processor) processAgenticLoop(loopName string, config *AgenticLoopConfig, initialInput string) (string, error) {
 	p.debugf("Starting agentic loop: %s", loopName)
 
+	// Check if agentic tools are enabled and we have allowed paths
+	if len(config.AllowedPaths) > 0 {
+		if p.envConfig != nil && !p.envConfig.IsAgenticToolsAllowed() {
+			return "", fmt.Errorf("agentic tool use is disabled in global config (security.allow_agentic_tools: false)")
+		}
+		p.debugf("Agentic tools enabled with allowed paths: %v, tools: %v", config.AllowedPaths, config.Tools)
+	}
+
+	// Set the current agentic config (used by action handler)
+	p.setAgenticConfig(config)
+	defer func() {
+		p.setAgenticConfig(nil)
+	}()
+
 	// Apply defaults
 	maxIterations := config.MaxIterations
 	if maxIterations <= 0 {

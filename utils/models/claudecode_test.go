@@ -1,6 +1,7 @@
 package models
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -144,4 +145,143 @@ func TestIsClaudeCodeAvailable(t *testing.T) {
 	// The actual result depends on whether claude is installed
 	available := IsClaudeCodeAvailable()
 	t.Logf("Claude Code binary available: %v", available)
+}
+
+func TestClaudeCodeGetModelFlag(t *testing.T) {
+	provider := NewClaudeCodeProvider()
+
+	tests := []struct {
+		name     string
+		model    string
+		expected string
+	}{
+		{"base claude-code", "claude-code", ""},
+		{"opus", "claude-code-opus", "claude-opus-4-5-20251101"},
+		{"sonnet", "claude-code-sonnet", "claude-sonnet-4-5-20250929"},
+		{"haiku", "claude-code-haiku", "claude-haiku-4-5-20251001"},
+		{"custom full model name", "claude-code-custom-model-123", "custom-model-123"},
+		{"single word variant", "claude-code-test", ""},
+		{"not claude-code model", "gpt-4", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := provider.getModelFlag(tt.model)
+			if result != tt.expected {
+				t.Errorf("getModelFlag(%q) = %q, want %q", tt.model, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestClaudeCodeBuildArgsAgentic(t *testing.T) {
+	provider := NewClaudeCodeProvider()
+
+	tests := []struct {
+		name         string
+		model        string
+		prompt       string
+		allowedPaths []string
+		tools        []string
+		contains     []string
+		notContains  []string
+	}{
+		{
+			name:         "basic agentic call",
+			model:        "claude-code-sonnet",
+			prompt:       "explore",
+			allowedPaths: []string{"./"},
+			tools:        nil,
+			contains:     []string{"--add-dir", "./", "--model", "claude-sonnet-4-5-20250929", "-p", "explore"},
+			notContains:  []string{"--print"},
+		},
+		{
+			name:         "with tool restrictions",
+			model:        "claude-code",
+			prompt:       "test",
+			allowedPaths: []string{"/tmp"},
+			tools:        []string{"Read", "Bash"},
+			contains:     []string{"--add-dir", "/tmp", "--tools", "Read,Bash", "-p", "test"},
+			notContains:  []string{"--print", "--model"},
+		},
+		{
+			name:         "multiple paths",
+			model:        "claude-code-opus",
+			prompt:       "analyze",
+			allowedPaths: []string{"./src", "./tests"},
+			tools:        nil,
+			contains:     []string{"--add-dir", "./src", "--add-dir", "./tests", "-p", "analyze"},
+			notContains:  []string{"--print"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args := provider.buildArgsAgentic(tt.model, tt.prompt, tt.allowedPaths, tt.tools)
+
+			for _, expected := range tt.contains {
+				found := false
+				for _, arg := range args {
+					if arg == expected {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("buildArgsAgentic() missing expected arg %q, got: %v", expected, args)
+				}
+			}
+
+			for _, notExpected := range tt.notContains {
+				for _, arg := range args {
+					if arg == notExpected {
+						t.Errorf("buildArgsAgentic() should not contain %q, got: %v", notExpected, args)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestClaudeCodeSendPromptAgenticPathValidation(t *testing.T) {
+	provider := NewClaudeCodeProvider()
+
+	tests := []struct {
+		name          string
+		allowedPaths  []string
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name:         "valid path",
+			allowedPaths: []string{"."},
+			expectError:  false,
+		},
+		{
+			name:          "invalid path",
+			allowedPaths:  []string{"/nonexistent/path/that/does/not/exist"},
+			expectError:   true,
+			errorContains: "allowed_path does not exist",
+		},
+		{
+			name:          "mixed valid and invalid",
+			allowedPaths:  []string{".", "/nonexistent/path"},
+			expectError:   true,
+			errorContains: "allowed_path does not exist",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := provider.SendPromptAgentic("claude-code", "test", tt.allowedPaths, nil, "")
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("SendPromptAgentic() expected error, got nil")
+				} else if tt.errorContains != "" && !strings.Contains(err.Error(), tt.errorContains) {
+					t.Errorf("SendPromptAgentic() error = %v, want error containing %q", err, tt.errorContains)
+				}
+			}
+			// Note: valid paths may still fail if claude binary not found, that's ok
+		})
+	}
 }
