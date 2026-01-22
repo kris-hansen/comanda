@@ -200,6 +200,13 @@ func (c *ClaudeCodeProvider) SendPromptAgentic(modelName string, prompt string, 
 		}
 	}
 
+	// Validate all allowed paths exist
+	for _, path := range allowedPaths {
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			return "", fmt.Errorf("allowed_path does not exist: %s", path)
+		}
+	}
+
 	// Build agentic args (no --print flag)
 	args := c.buildArgsAgentic(modelName, prompt, allowedPaths, tools)
 
@@ -226,29 +233,35 @@ func (c *ClaudeCodeProvider) SendPromptAgentic(modelName string, prompt string, 
 	return response, nil
 }
 
+// getModelFlag returns the --model flag value for a given model name, or empty string if none needed
+func (c *ClaudeCodeProvider) getModelFlag(modelName string) string {
+	if !strings.HasPrefix(strings.ToLower(modelName), "claude-code-") {
+		return ""
+	}
+	variant := strings.TrimPrefix(strings.ToLower(modelName), "claude-code-")
+	switch variant {
+	case "opus":
+		return "claude-opus-4-5-20251101"
+	case "sonnet":
+		return "claude-sonnet-4-5-20250929"
+	case "haiku":
+		return "claude-haiku-4-5-20251001"
+	default:
+		if strings.Contains(variant, "-") {
+			return variant
+		}
+		return ""
+	}
+}
+
 // buildArgs constructs the command line arguments for claude
 func (c *ClaudeCodeProvider) buildArgs(modelName string, prompt string, workDir string) []string {
 	args := []string{
 		"--print", // Non-interactive mode, just print the response
 	}
 
-	// Extract model variant if specified (e.g., claude-code-opus -> opus)
-	if strings.HasPrefix(strings.ToLower(modelName), "claude-code-") {
-		variant := strings.TrimPrefix(strings.ToLower(modelName), "claude-code-")
-		// Map to actual Claude model names
-		switch variant {
-		case "opus":
-			args = append(args, "--model", "claude-opus-4-5-20251101")
-		case "sonnet":
-			args = append(args, "--model", "claude-sonnet-4-5-20250929")
-		case "haiku":
-			args = append(args, "--model", "claude-haiku-4-5-20251001")
-		default:
-			// Use the variant as-is if it looks like a full model name
-			if strings.Contains(variant, "-") {
-				args = append(args, "--model", variant)
-			}
-		}
+	if model := c.getModelFlag(modelName); model != "" {
+		args = append(args, "--model", model)
 	}
 
 	// Add the prompt
@@ -271,23 +284,8 @@ func (c *ClaudeCodeProvider) buildArgsAgentic(modelName string, prompt string, a
 		args = append(args, "--tools", strings.Join(tools, ","))
 	}
 
-	// Extract model variant if specified (e.g., claude-code-opus -> opus)
-	if strings.HasPrefix(strings.ToLower(modelName), "claude-code-") {
-		variant := strings.TrimPrefix(strings.ToLower(modelName), "claude-code-")
-		// Map to actual Claude model names
-		switch variant {
-		case "opus":
-			args = append(args, "--model", "claude-opus-4-5-20251101")
-		case "sonnet":
-			args = append(args, "--model", "claude-sonnet-4-5-20250929")
-		case "haiku":
-			args = append(args, "--model", "claude-haiku-4-5-20251001")
-		default:
-			// Use the variant as-is if it looks like a full model name
-			if strings.Contains(variant, "-") {
-				args = append(args, "--model", variant)
-			}
-		}
+	if model := c.getModelFlag(modelName); model != "" {
+		args = append(args, "--model", model)
 	}
 
 	// Add the prompt

@@ -654,10 +654,12 @@ func (c *EnvConfig) SetToolConfig(tool *ToolConfig) {
 	c.Tool = tool
 }
 
-// IsAgenticToolsAllowed returns whether agentic tool use is allowed globally
+// IsAgenticToolsAllowed returns whether agentic tool use is allowed globally.
+// When enabled (the default), agents can execute shell commands and write files
+// within allowed_paths. Set security.allow_agentic_tools: false to disable.
 func (c *EnvConfig) IsAgenticToolsAllowed() bool {
 	if c.Security == nil {
-		return true // default enabled
+		return true // default enabled for dev convenience
 	}
 	return c.Security.AllowAgenticTools
 }
