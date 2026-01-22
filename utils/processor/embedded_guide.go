@@ -329,12 +329,30 @@ agentic-loop:
   - ` + "`pattern_match`" + `: Exits when output matches ` + "`exit_pattern`" + ` regex
 - ` + "`exit_pattern`" + `: (string) Regex pattern for ` + "`pattern_match`" + ` condition.
 - ` + "`context_window`" + `: (int, default: 5) Number of past iterations to include in context.
+- ` + "`allowed_paths`" + `: (list, optional) Directories where Claude Code can use tools (Read, Write, Edit, Bash, etc.). Without this, Claude Code runs in print-only mode.
+- ` + "`tools`" + `: (list, optional) Restrict available tools (e.g., ` + "`[Read, Glob, Grep]`" + ` for read-only access). If omitted, all tools are available.
 
 **Template Variables in Actions:**
 - ` + "`{{ loop.iteration }}`" + `: Current iteration number (1-based)
 - ` + "`{{ loop.previous_output }}`" + `: Output from previous iteration
 - ` + "`{{ loop.total_iterations }}`" + `: Maximum allowed iterations
 - ` + "`{{ loop.elapsed_seconds }}`" + `: Seconds since loop started
+
+**Example: Agentic Code Exploration**
+` + "```yaml" + `
+explore_codebase:
+  agentic_loop:
+    max_iterations: 3
+    exit_condition: llm_decides
+    allowed_paths: [./src, ./tests]
+    tools: [Read, Glob, Grep]  # Read-only access
+  input: STDIN
+  model: claude-code
+  action: |
+    Explore the codebase and answer: {{ loop.previous_output }}
+    Say DONE when you have the answer.
+  output: STDOUT
+` + "```" + `
 
 **Example: Iterative Code Implementation**
 ` + "```yaml" + `
@@ -878,12 +896,30 @@ agentic-loop:
   - ` + "`pattern_match`" + `: Exits when output matches ` + "`exit_pattern`" + ` regex
 - ` + "`exit_pattern`" + `: (string) Regex pattern for ` + "`pattern_match`" + ` condition.
 - ` + "`context_window`" + `: (int, default: 5) Number of past iterations to include in context.
+- ` + "`allowed_paths`" + `: (list, optional) Directories where Claude Code can use tools (Read, Write, Edit, Bash, etc.). Without this, Claude Code runs in print-only mode.
+- ` + "`tools`" + `: (list, optional) Restrict available tools (e.g., ` + "`[Read, Glob, Grep]`" + ` for read-only access). If omitted, all tools are available.
 
 **Template Variables in Actions:**
 - ` + "`{{ loop.iteration }}`" + `: Current iteration number (1-based)
 - ` + "`{{ loop.previous_output }}`" + `: Output from previous iteration
 - ` + "`{{ loop.total_iterations }}`" + `: Maximum allowed iterations
 - ` + "`{{ loop.elapsed_seconds }}`" + `: Seconds since loop started
+
+**Example: Agentic Code Exploration**
+` + "```yaml" + `
+explore_codebase:
+  agentic_loop:
+    max_iterations: 3
+    exit_condition: llm_decides
+    allowed_paths: [./src, ./tests]
+    tools: [Read, Glob, Grep]  # Read-only access
+  input: STDIN
+  model: claude-code
+  action: |
+    Explore the codebase and answer: {{ loop.previous_output }}
+    Say DONE when you have the answer.
+  output: STDOUT
+` + "```" + `
 
 **Example: Iterative Code Implementation**
 ` + "```yaml" + `

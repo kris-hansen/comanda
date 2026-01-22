@@ -1,0 +1,31 @@
+# Agentic Exploration Example
+# This workflow uses Claude Code's full tool capabilities to explore the codebase
+#
+# The key configuration is in agentic_loop:
+#   - allowed_paths: Directories where tools can operate
+#   - tools: Optional whitelist of allowed tools (default: all)
+#
+# Without allowed_paths, Claude Code runs in --print mode (output only)
+# With allowed_paths, Claude Code can use Read, Write, Edit, Bash, Glob, Grep tools
+
+explore_codebase:
+  input: NA
+  model: claude-code-sonnet
+  agentic_loop:
+    max_iterations: 3
+    exit_condition: llm_decides
+    allowed_paths:
+      - ./
+    # tools:  # Optional - uncomment to restrict tools
+    #   - Read
+    #   - Bash
+    #   - Glob
+    #   - Grep
+  action: |
+    Explore this codebase and provide a brief summary. Use your tools to:
+    1. List the top-level directory structure
+    2. Read the main entry point (main.go or similar)
+    3. Summarize what this project does
+
+    When you have enough information, output "DONE" to exit the loop.
+  output: STDOUT

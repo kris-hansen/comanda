@@ -187,6 +187,27 @@ implement:
 echo "Write a binary search function with tests" | comanda process implement.yaml
 ```
 
+### Agentic Tool Use
+
+Enable Claude Code's full tool capabilities (Read, Write, Edit, Bash) within agentic loops:
+
+```yaml
+explore:
+  agentic_loop:
+    max_iterations: 3
+    exit_condition: llm_decides
+    allowed_paths: [./src, ./tests]  # Enable tool access to these directories
+    tools: [Read, Glob, Grep]        # Restrict to read-only tools
+  input: STDIN
+  model: claude-code
+  action: |
+    Explore the codebase and answer: {{ loop.previous_output }}
+    Say DONE when you have the answer.
+  output: STDOUT
+```
+
+Without `allowed_paths`, Claude Code runs in print-only mode. The `tools` option restricts available tools for safety.
+
 ### Server Mode
 
 Turn any workflow into an HTTP API:

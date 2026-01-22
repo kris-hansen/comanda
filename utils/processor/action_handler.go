@@ -73,6 +73,10 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 	p.debugf("Using model %s with provider %s", modelName, configuredProvider.Name())
 	p.debugf("Processing %d action(s)", len(actions))
 
+	// Check if we're in agentic mode (have allowed paths set in agentic loop)
+	agenticConfig := p.getAgenticConfig()
+	isAgenticMode := agenticConfig != nil && len(agenticConfig.AllowedPaths) > 0
+
 	for i, action := range actions {
 		p.debugf("Processing action %d/%d: %s", i+1, len(actions), action)
 
@@ -89,6 +93,22 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 		inputs := p.handler.GetInputs()
 		if len(inputs) == 0 {
 			// If there are no inputs, just send the action directly
+			// Check for agentic mode with Claude Code
+			if isAgenticMode {
+				if claudeCode, ok := configuredProvider.(*models.ClaudeCodeProvider); ok {
+					p.debugf("Using agentic mode with Claude Code (paths: %v, tools: %v)",
+						agenticConfig.AllowedPaths, agenticConfig.Tools)
+					result, err := claudeCode.SendPromptAgentic(modelName, action,
+						agenticConfig.AllowedPaths, agenticConfig.Tools, p.runtimeDir)
+					if err != nil {
+						return nil, err
+					}
+					return &ActionResult{
+						CombinedResult:       result,
+						HasIndividualResults: false,
+					}, nil
+				}
+			}
 			result, err := configuredProvider.SendPrompt(modelName, action)
 			if err != nil {
 				return nil, err
@@ -238,7 +258,25 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 		// If we have non-file inputs, combine them and use SendPrompt
 		if len(nonFileInputs) > 0 {
 			combinedInput := strings.Join(nonFileInputs, "\n\n")
-			result, err := configuredProvider.SendPrompt(modelName, fmt.Sprintf("Input:\n%s\n\nAction: %s", combinedInput, action))
+			combinedPrompt := fmt.Sprintf("Input:\n%s\n\nAction: %s", combinedInput, action)
+
+			// Check for agentic mode with Claude Code
+			if isAgenticMode {
+				if claudeCode, ok := configuredProvider.(*models.ClaudeCodeProvider); ok {
+					p.debugf("Using agentic mode with Claude Code for non-file inputs")
+					result, err := claudeCode.SendPromptAgentic(modelName, combinedPrompt,
+						agenticConfig.AllowedPaths, agenticConfig.Tools, p.runtimeDir)
+					if err != nil {
+						return nil, err
+					}
+					return &ActionResult{
+						CombinedResult:       result,
+						HasIndividualResults: false,
+					}, nil
+				}
+			}
+
+			result, err := configuredProvider.SendPrompt(modelName, combinedPrompt)
 			if err != nil {
 				return nil, err
 			}

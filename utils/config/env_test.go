@@ -242,3 +242,36 @@ func TestLoadEnvConfigWithPassword(t *testing.T) {
 		t.Error("Loading invalid YAML should fail")
 	}
 }
+
+func TestIsAgenticToolsAllowed(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   *EnvConfig
+		expected bool
+	}{
+		{
+			name:     "nil security config defaults to true",
+			config:   &EnvConfig{Security: nil},
+			expected: true,
+		},
+		{
+			name:     "explicitly enabled",
+			config:   &EnvConfig{Security: &SecurityConfig{AllowAgenticTools: true}},
+			expected: true,
+		},
+		{
+			name:     "explicitly disabled",
+			config:   &EnvConfig{Security: &SecurityConfig{AllowAgenticTools: false}},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.config.IsAgenticToolsAllowed()
+			if result != tt.expected {
+				t.Errorf("IsAgenticToolsAllowed() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
