@@ -194,16 +194,16 @@ func (c *ClaudeCodeProvider) SendPromptAgentic(modelName string, prompt string, 
 	c.debugf("Preparing to send agentic prompt via Claude Code")
 	c.debugf("Prompt length: %d characters, allowed paths: %v, tools: %v", len(prompt), allowedPaths, tools)
 
-	if c.binaryPath == "" {
-		if err := c.Configure("LOCAL"); err != nil {
-			return "", err
-		}
-	}
-
-	// Validate all allowed paths exist
+	// Validate all allowed paths exist (do this first to fail fast on bad config)
 	for _, path := range allowedPaths {
 		if _, err := os.Stat(path); os.IsNotExist(err) {
 			return "", fmt.Errorf("allowed_path does not exist: %s", path)
+		}
+	}
+
+	if c.binaryPath == "" {
+		if err := c.Configure("LOCAL"); err != nil {
+			return "", err
 		}
 	}
 
