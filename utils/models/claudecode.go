@@ -279,6 +279,12 @@ func (c *ClaudeCodeProvider) buildArgsAgentic(modelName string, prompt string, a
 		args = append(args, "--add-dir", path)
 	}
 
+	// Enable bypass permissions for non-interactive agentic use
+	// Without this, Claude Code prompts for permission which blocks non-interactive execution
+	if len(allowedPaths) > 0 {
+		args = append(args, "--permission-mode", "bypassPermissions")
+	}
+
 	// Restrict tools if specified
 	if len(tools) > 0 {
 		args = append(args, "--tools", strings.Join(tools, ","))

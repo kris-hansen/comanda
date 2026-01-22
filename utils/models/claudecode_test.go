@@ -192,7 +192,7 @@ func TestClaudeCodeBuildArgsAgentic(t *testing.T) {
 			prompt:       "explore",
 			allowedPaths: []string{"./"},
 			tools:        nil,
-			contains:     []string{"--add-dir", "./", "--model", "claude-sonnet-4-5-20250929", "-p", "explore"},
+			contains:     []string{"--add-dir", "./", "--permission-mode", "bypassPermissions", "--model", "claude-sonnet-4-5-20250929", "-p", "explore"},
 			notContains:  []string{"--print"},
 		},
 		{
@@ -201,7 +201,7 @@ func TestClaudeCodeBuildArgsAgentic(t *testing.T) {
 			prompt:       "test",
 			allowedPaths: []string{"/tmp"},
 			tools:        []string{"Read", "Bash"},
-			contains:     []string{"--add-dir", "/tmp", "--tools", "Read,Bash", "-p", "test"},
+			contains:     []string{"--add-dir", "/tmp", "--permission-mode", "bypassPermissions", "--tools", "Read,Bash", "-p", "test"},
 			notContains:  []string{"--print", "--model"},
 		},
 		{
@@ -210,8 +210,17 @@ func TestClaudeCodeBuildArgsAgentic(t *testing.T) {
 			prompt:       "analyze",
 			allowedPaths: []string{"./src", "./tests"},
 			tools:        nil,
-			contains:     []string{"--add-dir", "./src", "--add-dir", "./tests", "-p", "analyze"},
+			contains:     []string{"--add-dir", "./src", "--add-dir", "./tests", "--permission-mode", "bypassPermissions", "-p", "analyze"},
 			notContains:  []string{"--print"},
+		},
+		{
+			name:         "no allowed paths skips permission mode",
+			model:        "claude-code",
+			prompt:       "query",
+			allowedPaths: []string{},
+			tools:        nil,
+			contains:     []string{"-p", "query"},
+			notContains:  []string{"--print", "--add-dir", "--permission-mode"},
 		},
 	}
 
