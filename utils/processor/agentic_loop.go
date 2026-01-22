@@ -28,9 +28,9 @@ func (p *Processor) processAgenticLoop(loopName string, config *AgenticLoopConfi
 	}
 
 	// Set the current agentic config (used by action handler)
-	p.currentAgenticConfig = config
+	p.setAgenticConfig(config)
 	defer func() {
-		p.currentAgenticConfig = nil
+		p.setAgenticConfig(nil)
 	}()
 
 	// Apply defaults

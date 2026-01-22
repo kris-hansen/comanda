@@ -74,7 +74,8 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 	p.debugf("Processing %d action(s)", len(actions))
 
 	// Check if we're in agentic mode (have allowed paths set in agentic loop)
-	isAgenticMode := p.currentAgenticConfig != nil && len(p.currentAgenticConfig.AllowedPaths) > 0
+	agenticConfig := p.getAgenticConfig()
+	isAgenticMode := agenticConfig != nil && len(agenticConfig.AllowedPaths) > 0
 
 	for i, action := range actions {
 		p.debugf("Processing action %d/%d: %s", i+1, len(actions), action)
@@ -96,9 +97,9 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 			if isAgenticMode {
 				if claudeCode, ok := configuredProvider.(*models.ClaudeCodeProvider); ok {
 					p.debugf("Using agentic mode with Claude Code (paths: %v, tools: %v)",
-						p.currentAgenticConfig.AllowedPaths, p.currentAgenticConfig.Tools)
+						agenticConfig.AllowedPaths, agenticConfig.Tools)
 					result, err := claudeCode.SendPromptAgentic(modelName, action,
-						p.currentAgenticConfig.AllowedPaths, p.currentAgenticConfig.Tools, p.runtimeDir)
+						agenticConfig.AllowedPaths, agenticConfig.Tools, p.runtimeDir)
 					if err != nil {
 						return nil, err
 					}
@@ -264,7 +265,7 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 				if claudeCode, ok := configuredProvider.(*models.ClaudeCodeProvider); ok {
 					p.debugf("Using agentic mode with Claude Code for non-file inputs")
 					result, err := claudeCode.SendPromptAgentic(modelName, combinedPrompt,
-						p.currentAgenticConfig.AllowedPaths, p.currentAgenticConfig.Tools, p.runtimeDir)
+						agenticConfig.AllowedPaths, agenticConfig.Tools, p.runtimeDir)
 					if err != nil {
 						return nil, err
 					}

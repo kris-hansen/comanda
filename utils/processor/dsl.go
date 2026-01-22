@@ -53,6 +53,20 @@ type Processor struct {
 	currentAgenticConfig *AgenticLoopConfig // Current agentic loop config (set during agentic loop execution)
 }
 
+// setAgenticConfig sets the current agentic config (thread-safe)
+func (p *Processor) setAgenticConfig(config *AgenticLoopConfig) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.currentAgenticConfig = config
+}
+
+// getAgenticConfig returns the current agentic config (thread-safe)
+func (p *Processor) getAgenticConfig() *AgenticLoopConfig {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.currentAgenticConfig
+}
+
 // UnmarshalYAML is a custom unmarshaler for DSLConfig to handle mixed types at the root level
 func (c *DSLConfig) UnmarshalYAML(node *yaml.Node) error {
 	if node.Kind != yaml.MappingNode {
@@ -1266,7 +1280,8 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 		// This helps agents (especially Claude Code in --print mode) understand that they
 		// should output content directly rather than attempting to write files themselves.
 		// Skip this when in agentic mode - the agent can write files directly.
-		isAgenticMode := p.currentAgenticConfig != nil && len(p.currentAgenticConfig.AllowedPaths) > 0
+		agenticConfig := p.getAgenticConfig()
+		isAgenticMode := agenticConfig != nil && len(agenticConfig.AllowedPaths) > 0
 		if !isAgenticMode {
 			if outputPath := getFileOutputPath(step.Config.Output); outputPath != "" {
 				outputContext := "[Output Handling]\nSimply output the content directly. Do not attempt to write files - your output will be captured automatically.\n\n"
