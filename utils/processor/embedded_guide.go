@@ -329,7 +329,7 @@ agentic-loop:
   - ` + "`pattern_match`" + `: Exits when output matches ` + "`exit_pattern`" + ` regex
 - ` + "`exit_pattern`" + `: (string) Regex pattern for ` + "`pattern_match`" + ` condition.
 - ` + "`context_window`" + `: (int, default: 5) Number of past iterations to include in context.
-- ` + "`allowed_paths`" + `: (list, optional) Directories where Claude Code can use tools (Read, Write, Edit, Bash, etc.). Without this, Claude Code runs in print-only mode.
+- ` + "`allowed_paths`" + `: (list, **REQUIRED for file operations**) Directories where Claude Code can use tools (Read, Write, Edit, Bash, etc.). **Without this, Claude Code runs in print-only mode and CANNOT read/write files.** When generating workflows, infer paths from: the ` + "`codebase_index.root`" + ` if present, file paths mentioned in the action, or use ` + "`[.]`" + ` (current directory) as fallback.
 - ` + "`tools`" + `: (list, optional) Restrict available tools (e.g., ` + "`[Read, Glob, Grep]`" + ` for read-only access). If omitted, all tools are available.
 
 **Template Variables in Actions:**
@@ -361,6 +361,7 @@ implement:
     max_iterations: 3
     exit_condition: pattern_match
     exit_pattern: "SATISFIED"
+    allowed_paths: [.]  # Required for file operations
   input: STDIN
   model: claude-code
   action: |
@@ -378,6 +379,7 @@ agentic-loop:
   config:
     max_iterations: 5
     exit_condition: llm_decides
+    allowed_paths: [.]  # Required for file operations
 
   steps:
     plan:
@@ -395,6 +397,13 @@ agentic-loop:
       action: "Generate code based on the plan"
       output: STDOUT
 ` + "```" + `
+
+**CRITICAL: When generating agentic_loop workflows with Claude Code:**
+- **ALWAYS include ` + "`allowed_paths`" + `** - Claude Code CANNOT read/write files without it
+- If the workflow uses ` + "`codebase_index`" + `, use the same ` + "`root`" + ` directory in ` + "`allowed_paths`" + `
+- If the action mentions specific file paths or directories, include those directories
+- When in doubt, use ` + "`allowed_paths: [.]`" + ` for current directory access
+- Forgetting ` + "`allowed_paths`" + ` is a common error that causes "permission denied" failures
 
 ## 5. Codebase Index Step Definition (` + "`codebase_index`" + `)
 
@@ -896,7 +905,7 @@ agentic-loop:
   - ` + "`pattern_match`" + `: Exits when output matches ` + "`exit_pattern`" + ` regex
 - ` + "`exit_pattern`" + `: (string) Regex pattern for ` + "`pattern_match`" + ` condition.
 - ` + "`context_window`" + `: (int, default: 5) Number of past iterations to include in context.
-- ` + "`allowed_paths`" + `: (list, optional) Directories where Claude Code can use tools (Read, Write, Edit, Bash, etc.). Without this, Claude Code runs in print-only mode.
+- ` + "`allowed_paths`" + `: (list, **REQUIRED for file operations**) Directories where Claude Code can use tools (Read, Write, Edit, Bash, etc.). **Without this, Claude Code runs in print-only mode and CANNOT read/write files.** When generating workflows, infer paths from: the ` + "`codebase_index.root`" + ` if present, file paths mentioned in the action, or use ` + "`[.]`" + ` (current directory) as fallback.
 - ` + "`tools`" + `: (list, optional) Restrict available tools (e.g., ` + "`[Read, Glob, Grep]`" + ` for read-only access). If omitted, all tools are available.
 
 **Template Variables in Actions:**
@@ -928,6 +937,7 @@ implement:
     max_iterations: 3
     exit_condition: pattern_match
     exit_pattern: "SATISFIED"
+    allowed_paths: [.]  # Required for file operations
   input: STDIN
   model: claude-code
   action: |
@@ -945,6 +955,7 @@ agentic-loop:
   config:
     max_iterations: 5
     exit_condition: llm_decides
+    allowed_paths: [.]  # Required for file operations
 
   steps:
     plan:
@@ -962,6 +973,13 @@ agentic-loop:
       action: "Generate code based on the plan"
       output: STDOUT
 ` + "```" + `
+
+**CRITICAL: When generating agentic_loop workflows with Claude Code:**
+- **ALWAYS include ` + "`allowed_paths`" + `** - Claude Code CANNOT read/write files without it
+- If the workflow uses ` + "`codebase_index`" + `, use the same ` + "`root`" + ` directory in ` + "`allowed_paths`" + `
+- If the action mentions specific file paths or directories, include those directories
+- When in doubt, use ` + "`allowed_paths: [.]`" + ` for current directory access
+- Forgetting ` + "`allowed_paths`" + ` is a common error that causes "permission denied" failures
 
 ## 5. Codebase Index Step Definition (` + "`codebase_index`" + `)
 
