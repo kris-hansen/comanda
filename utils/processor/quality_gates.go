@@ -2,6 +2,7 @@ package processor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -63,8 +64,8 @@ func (g *CommandGate) Check(ctx context.Context, workDir string) (*QualityGateRe
 		result.Passed = false
 		result.Message = fmt.Sprintf("Command failed: %v", err)
 		result.Details = map[string]interface{}{
-			"output":   string(output),
-			"command":  g.command,
+			"output":    string(output),
+			"command":   g.command,
 			"exit_code": getExitCode(err),
 		}
 		return result, nil
@@ -283,8 +284,8 @@ func (g *TestGate) Check(ctx context.Context, workDir string) (*QualityGateResul
 		result.Passed = false
 		result.Message = "Tests failed"
 		result.Details = map[string]interface{}{
-			"output":   string(output),
-			"command":  g.command,
+			"output":    string(output),
+			"command":   g.command,
 			"exit_code": getExitCode(err),
 		}
 
@@ -445,7 +446,8 @@ func calculateBackoff(attempt, initialDelay int, backoffType string) int {
 
 // getExitCode extracts exit code from error
 func getExitCode(err error) int {
-	if exitErr, ok := err.(*exec.ExitError); ok {
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
 		return exitErr.ExitCode()
 	}
 	return -1
@@ -454,9 +456,9 @@ func getExitCode(err error) int {
 // extractTestSummary tries to extract test summary from common test runners
 func extractTestSummary(output string) string {
 	patterns := []string{
-		`(\d+)\s+passed.*(\d+)\s+failed`,        // Jest, pytest
-		`(\d+)\s+tests?,\s+(\d+)\s+failures?`,   // JUnit, Go
-		`PASS:\s+(\d+).*FAIL:\s+(\d+)`,          // Go test
+		`(\d+)\s+passed.*(\d+)\s+failed`,         // Jest, pytest
+		`(\d+)\s+tests?,\s+(\d+)\s+failures?`,    // JUnit, Go
+		`PASS:\s+(\d+).*FAIL:\s+(\d+)`,           // Go test
 		`(\d+)\s+examples?,\s+(\d+)\s+failures?`, // RSpec
 	}
 

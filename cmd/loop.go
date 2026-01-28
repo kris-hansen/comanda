@@ -212,7 +212,7 @@ var loopCancelCmd = &cobra.Command{
 			return fmt.Errorf("failed to delete loop state: %w", err)
 		}
 
-		log.Printf("Loop '%s' cancelled and state deleted", loopName)
+		log.Printf("Loop '%s' canceled and state deleted", loopName)
 		return nil
 	},
 }
