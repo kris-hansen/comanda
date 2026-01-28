@@ -1,0 +1,78 @@
+# Code Quality Loop with Multiple Gates
+#
+# This example demonstrates a realistic code improvement loop with multiple
+# quality gates: syntax checking, security scanning, and tests.
+#
+# Usage:
+#   comanda process examples/agentic-loop/code-quality-loop.yaml
+#
+# Requirements:
+#   - A codebase with Python, JavaScript, or Go files
+#   - Appropriate syntax checkers installed (python, node, go)
+#
+# The loop will:
+#   1. Analyze code quality
+#   2. Run syntax checks
+#   3. Run security scans
+#   4. Suggest improvements
+#   5. Repeat until code quality is acceptable
+
+agentic-loop:
+  config:
+    name: code-quality-improvement
+    stateful: true
+    max_iterations: 10
+    timeout_seconds: 0
+    checkpoint_interval: 2
+
+    # Multiple quality gates
+    quality_gates:
+      - name: syntax-check
+        type: syntax
+        on_fail: abort
+        timeout: 30
+
+      - name: security-scan
+        type: security
+        on_fail: skip  # Don't block on security warnings
+        timeout: 60
+
+    # Enable agentic tool access for code modifications
+    allowed_paths:
+      - "./src"
+      - "./lib"
+      - "./tests"
+
+    tools:
+      - Read
+      - Write
+      - Edit
+
+  steps:
+    - analyze:
+        input: NA
+        model: claude-code
+        action: |
+          You are improving code quality in an iterative loop.
+
+          Current iteration: {{ loop.iteration }}/{{ loop.total_iterations }}
+          Elapsed: {{ loop.elapsed_seconds }} seconds
+
+          Instructions:
+          1. Read files in ./src or ./lib (if they exist)
+          2. Identify code quality issues:
+             - Syntax errors
+             - Security vulnerabilities
+             - Code smells
+             - Missing error handling
+          3. If significant issues found, make targeted improvements
+          4. If code quality is good, output "DONE"
+          5. Otherwise, output a summary of changes made
+
+          Focus on one or two issues per iteration.
+          Use Read, Write, and Edit tools as needed.
+
+          Quality gates will run after this step:
+          - Syntax check (will abort if syntax errors)
+          - Security scan (warnings only, won't block)
+        output: STDOUT
