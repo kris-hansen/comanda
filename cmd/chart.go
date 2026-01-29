@@ -101,6 +101,12 @@ func buildWorkflowChart(config *processor.DSLConfig) *WorkflowChart {
 	allOutputs := make(map[string]bool)
 	hasStdout := false
 
+	// Check for multi-loop orchestration
+	if len(config.Loops) > 0 {
+		processMultiLoopWorkflow(config, chart)
+		return chart
+	}
+
 	// Process parallel steps first (with nil check)
 	if config.ParallelSteps != nil {
 		for groupName, steps := range config.ParallelSteps {
@@ -489,9 +495,13 @@ func printStatsBox(chart *WorkflowChart, width int) {
 	totalSteps += parallelSteps
 
 	validSteps := 0
+	loopCount := 0
 	for _, node := range chart.Nodes {
 		if node.IsValid {
 			validSteps++
+		}
+		if node.StepType == "agentic-loop" {
+			loopCount++
 		}
 	}
 	for _, nodes := range chart.ParallelGroups {
@@ -520,11 +530,17 @@ func printStatsBox(chart *WorkflowChart, width int) {
 	fmt.Println("+" + strings.Repeat("=", width-2) + "+")
 	fmt.Printf("| %-*s |\n", width-4, "STATISTICS")
 	fmt.Println("|" + strings.Repeat("-", width-2) + "|")
-	fmt.Printf("| %-*s |\n", width-4, fmt.Sprintf("Steps: %d total, %d parallel", totalSteps, parallelSteps))
+	if loopCount > 0 {
+		fmt.Printf("| %-*s |\n", width-4, fmt.Sprintf("Loops: %d agentic", loopCount))
+	} else {
+		fmt.Printf("| %-*s |\n", width-4, fmt.Sprintf("Steps: %d total, %d parallel", totalSteps, parallelSteps))
+	}
 	if len(chart.DeferredSteps) > 0 {
 		fmt.Printf("| %-*s |\n", width-4, fmt.Sprintf("Deferred: %d conditional", len(chart.DeferredSteps)))
 	}
-	fmt.Printf("| %-*s |\n", width-4, fmt.Sprintf("Valid: %d/%d", validSteps, totalSteps))
+	if loopCount == 0 {
+		fmt.Printf("| %-*s |\n", width-4, fmt.Sprintf("Valid: %d/%d", validSteps, totalSteps))
+	}
 
 	if len(modelCounts) > 0 {
 		fmt.Println("|" + strings.Repeat("-", width-2) + "|")
@@ -611,6 +627,11 @@ func renderNodeBox(node ChartNode, stepNum int, boxWidth int) {
 func summarizeAction(action string, stepType string) string {
 	if action == "" {
 		return ""
+	}
+
+	// Handle agentic-loop step type - already formatted
+	if stepType == "agentic-loop" {
+		return action
 	}
 
 	// Handle process step type - already formatted
@@ -746,6 +767,137 @@ func renderParallelGroup(nodes []ChartNode, groupName string, stepNum int, boxWi
 	}
 
 	fmt.Println("+" + strings.Repeat("=", boxWidth-2) + "+")
+}
+
+// processMultiLoopWorkflow handles multi-loop orchestration syntax
+func processMultiLoopWorkflow(config *processor.DSLConfig, chart *WorkflowChart) {
+	// Convert loops to chart nodes
+	for loopName, loopConfig := range config.Loops {
+		node := ChartNode{
+			Name:       loopName,
+			Model:      "claude-code", // Default for agentic loops
+			StepType:   "agentic-loop",
+			IsValid:    true,
+			IsParallel: false,
+		}
+
+		// Build action summary from loop config
+		actionParts := []string{fmt.Sprintf("Loop: %d iterations", loopConfig.MaxIterations)}
+		if loopConfig.Stateful {
+			actionParts = append(actionParts, "stateful")
+		}
+		if len(loopConfig.QualityGates) > 0 {
+			actionParts = append(actionParts, fmt.Sprintf("%d gates", len(loopConfig.QualityGates)))
+		}
+		if loopConfig.TimeoutSeconds == 0 {
+			actionParts = append(actionParts, "unlimited time")
+		}
+		node.Action = strings.Join(actionParts, ", ")
+
+		// Add dependencies from depends_on
+		if len(loopConfig.DependsOn) > 0 {
+			node.DependsOn = loopConfig.DependsOn
+		}
+
+		// Track input/output state variables
+		if loopConfig.InputState != "" {
+			node.Input = []string{loopConfig.InputState}
+		} else {
+			node.Input = []string{"NA"}
+		}
+		if loopConfig.OutputState != "" {
+			node.Output = []string{loopConfig.OutputState}
+		} else {
+			node.Output = []string{"STDOUT"}
+		}
+
+		chart.Nodes = append(chart.Nodes, node)
+	}
+
+	// Determine execution order
+	if len(config.ExecuteLoops) > 0 {
+		// Use execute_loops order
+		chart.SequentialOrder = config.ExecuteLoops
+	} else if len(config.Workflow) > 0 {
+		// Use workflow order (creator/checker pattern)
+		// Map workflow nodes to loop names
+		for nodeName, workflowNode := range config.Workflow {
+			if workflowNode.Loop != "" {
+				chart.SequentialOrder = append(chart.SequentialOrder, workflowNode.Loop)
+			} else {
+				chart.SequentialOrder = append(chart.SequentialOrder, nodeName)
+			}
+		}
+		sort.Strings(chart.SequentialOrder) // Stable order for display
+	} else {
+		// Topological sort based on dependencies
+		chart.SequentialOrder = topologicalSort(chart.Nodes)
+	}
+
+	// Build ProducesFor relationships
+	buildLoopProducesFor(chart)
+}
+
+// topologicalSort orders loop nodes by dependencies
+func topologicalSort(nodes []ChartNode) []string {
+	// Build in-degree map
+	inDegree := make(map[string]int)
+
+	for _, node := range nodes {
+		if _, exists := inDegree[node.Name]; !exists {
+			inDegree[node.Name] = 0
+		}
+		for range node.DependsOn {
+			inDegree[node.Name]++
+		}
+	}
+
+	// Find nodes with no dependencies
+	var queue []string
+	for name, degree := range inDegree {
+		if degree == 0 {
+			queue = append(queue, name)
+		}
+	}
+	sort.Strings(queue) // Stable order
+
+	// Process queue
+	var result []string
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+		result = append(result, current)
+
+		// Reduce in-degree for dependent nodes
+		for _, node := range nodes {
+			for _, dep := range node.DependsOn {
+				if dep == current {
+					inDegree[node.Name]--
+					if inDegree[node.Name] == 0 {
+						queue = append(queue, node.Name)
+						sort.Strings(queue) // Keep stable
+					}
+				}
+			}
+		}
+	}
+
+	return result
+}
+
+// buildLoopProducesFor builds the ProducesFor relationships for loops
+func buildLoopProducesFor(chart *WorkflowChart) {
+	producerToConsumers := make(map[string][]string)
+	for _, node := range chart.Nodes {
+		for _, dep := range node.DependsOn {
+			producerToConsumers[dep] = append(producerToConsumers[dep], node.Name)
+		}
+	}
+	for i := range chart.Nodes {
+		if consumers, exists := producerToConsumers[chart.Nodes[i].Name]; exists {
+			chart.Nodes[i].ProducesFor = consumers
+		}
+	}
 }
 
 // Helper functions
