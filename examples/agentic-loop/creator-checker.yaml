@@ -1,0 +1,107 @@
+# Creator/Checker Pattern with Automatic Rerun
+#
+# This example demonstrates the creator/checker workflow pattern where:
+# - A creator loop implements features
+# - A checker loop validates the implementation
+# - If validation fails, the creator automatically reruns
+#
+# Usage:
+#   comanda process examples/agentic-loop/creator-checker.yaml
+#
+# The workflow will:
+# 1. Run the feature-creator loop to implement a feature
+# 2. Run the code-checker loop to validate the implementation
+# 3. If checker outputs "FAIL", rerun creator (up to 3 times)
+# 4. Continue until checker outputs "PASS"
+
+# Define multiple named loops
+loops:
+  # Creator loop: implements features
+  feature-creator:
+    name: feature-creator
+    stateful: true
+    max_iterations: 3
+    timeout_seconds: 0
+    checkpoint_interval: 1
+    output_state: $CREATOR_RESULT  # Export result to this variable
+
+    steps:
+      - implement:
+          input: NA
+          model: claude-code
+          action: |
+            You are implementing a simple feature in an iterative creator loop.
+
+            Current iteration: {{ loop.iteration }}
+
+            Task: Write a Python function that validates email addresses.
+
+            Requirements:
+            - Function name: validate_email
+            - Takes one parameter: email (string)
+            - Returns True if valid, False otherwise
+            - Must check for @ symbol and domain
+            - Must handle edge cases
+
+            Output your implementation as a complete Python function.
+            If this is iteration 1, provide a basic implementation.
+            If iteration > 1, improve based on previous feedback.
+
+            Format:
+            ```python
+            # Your code here
+            ```
+
+            After the code, output "IMPLEMENTATION COMPLETE"
+          output: STDOUT
+
+  # Checker loop: validates implementation
+  code-checker:
+    name: code-checker
+    depends_on: [feature-creator]  # Wait for creator to complete
+    input_state: $CREATOR_RESULT   # Use creator's output as input
+    stateful: true
+    max_iterations: 1  # Checker only runs once per creation attempt
+    exit_condition: pattern_match
+    exit_pattern: "^(PASS|FAIL)"
+
+    steps:
+      - review:
+          input: STDIN
+          model: claude-code
+          action: |
+            You are reviewing code implementation for correctness.
+
+            Review the following code:
+            ---
+            {{ loop.previous_output }}
+            ---
+
+            Check for:
+            1. Correctness - Does it validate emails properly?
+            2. Edge cases - Does it handle empty strings, missing @, etc.?
+            3. Code quality - Is it well-structured?
+            4. Completeness - Are all requirements met?
+
+            If ALL checks pass, output exactly:
+            PASS - Code is correct and complete
+
+            If ANY check fails, output exactly:
+            FAIL - [specific issues found]
+
+            Be strict - only PASS if the implementation is production-ready.
+          output: STDOUT
+
+# Orchestrate with explicit workflow
+workflow:
+  creator:
+    type: loop
+    loop: feature-creator
+    role: creator
+
+  checker:
+    type: loop
+    loop: code-checker
+    role: checker
+    validates: creator
+    on_fail: rerun_creator  # Automatically rerun creator on validation failure

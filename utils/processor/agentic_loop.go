@@ -3,6 +3,8 @@ package processor
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -10,13 +12,19 @@ import (
 
 // Default values for agentic loop safety
 const (
-	DefaultMaxIterations  = 10
-	DefaultTimeoutSeconds = 300
-	DefaultContextWindow  = 5
+	DefaultMaxIterations      = 10
+	DefaultTimeoutSeconds     = 0 // 0 = no timeout (rely on max_iterations)
+	DefaultContextWindow      = 5
+	DefaultCheckpointInterval = 5 // Save state every N iterations
 )
 
 // processAgenticLoop handles the execution of an agentic loop
 func (p *Processor) processAgenticLoop(loopName string, config *AgenticLoopConfig, initialInput string) (string, error) {
+	return p.processAgenticLoopWithFile(loopName, config, initialInput, "")
+}
+
+// processAgenticLoopWithFile handles the execution of an agentic loop with optional workflow file tracking
+func (p *Processor) processAgenticLoopWithFile(loopName string, config *AgenticLoopConfig, initialInput string, workflowFile string) (string, error) {
 	p.debugf("Starting agentic loop: %s", loopName)
 
 	// Check if agentic tools are enabled and we have allowed paths
@@ -40,7 +48,7 @@ func (p *Processor) processAgenticLoop(loopName string, config *AgenticLoopConfi
 	}
 
 	timeoutSeconds := config.TimeoutSeconds
-	if timeoutSeconds <= 0 {
+	if timeoutSeconds < 0 {
 		timeoutSeconds = DefaultTimeoutSeconds
 	}
 
@@ -49,27 +57,76 @@ func (p *Processor) processAgenticLoop(loopName string, config *AgenticLoopConfi
 		contextWindow = DefaultContextWindow
 	}
 
-	// Initialize loop context
-	loopCtx := &LoopContext{
-		Iteration:      0,
-		PreviousOutput: initialInput,
-		History:        make([]LoopIteration, 0),
-		StartTime:      time.Now(),
+	checkpointInterval := config.CheckpointInterval
+	if checkpointInterval <= 0 && config.Stateful {
+		checkpointInterval = DefaultCheckpointInterval
 	}
 
-	// Create timeout context
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
-	defer cancel()
+	// Initialize state manager if stateful
+	var stateManager *LoopStateManager
+	if config.Stateful {
+		if config.Name == "" {
+			return "", fmt.Errorf("stateful loops require a name")
+		}
+		stateDir := p.getLoopStateDir()
+		stateManager = NewLoopStateManager(stateDir)
+	}
+
+	// Check for existing state (resume capability)
+	var loopCtx *LoopContext
+	if config.Stateful && config.Name != "" {
+		if existingState, err := stateManager.LoadState(config.Name); err == nil {
+			// Validate workflow hasn't changed
+			if workflowFile != "" && existingState.WorkflowFile != "" {
+				if err := ValidateWorkflowChecksum(workflowFile, existingState.WorkflowChecksum); err != nil {
+					p.debugf("Warning: %v - starting fresh", err)
+					loopCtx = p.createNewLoopContext(initialInput)
+				} else {
+					loopCtx = stateToLoopContext(existingState)
+					p.debugf("Resuming loop '%s' from iteration %d", config.Name, loopCtx.Iteration)
+				}
+			} else {
+				loopCtx = stateToLoopContext(existingState)
+				p.debugf("Resuming loop '%s' from iteration %d", config.Name, loopCtx.Iteration)
+			}
+		} else {
+			loopCtx = p.createNewLoopContext(initialInput)
+		}
+	} else {
+		loopCtx = p.createNewLoopContext(initialInput)
+	}
+
+	// Create timeout context (0 = no timeout)
+	var ctx context.Context
+	var cancel context.CancelFunc
+	if timeoutSeconds > 0 {
+		ctx, cancel = context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
+		defer cancel()
+	} else {
+		ctx = context.Background()
+	}
 
 	var finalOutput string
+	var finalErr error
 
 	// Main loop
 	for loopCtx.Iteration < maxIterations {
-		select {
-		case <-ctx.Done():
-			p.debugf("Agentic loop '%s' timed out after %d seconds", loopName, timeoutSeconds)
-			return finalOutput, fmt.Errorf("agentic loop '%s' timed out after %d seconds", loopName, timeoutSeconds)
-		default:
+		// Check timeout if set
+		if timeoutSeconds > 0 {
+			select {
+			case <-ctx.Done():
+				p.debugf("Agentic loop '%s' timed out after %d seconds", loopName, timeoutSeconds)
+				// Save state before timeout exit
+				if config.Stateful {
+					state := loopStateFromContext(loopCtx, config.Name, config, workflowFile, p.variables)
+					state.Status = "paused"
+					if err := stateManager.SaveState(state); err != nil {
+						p.debugf("Warning: Failed to save state on timeout: %v", err)
+					}
+				}
+				return finalOutput, fmt.Errorf("agentic loop '%s' timed out, state saved for resume", loopName)
+			default:
+			}
 		}
 
 		loopCtx.Iteration++
@@ -84,7 +141,16 @@ func (p *Processor) processAgenticLoop(loopName string, config *AgenticLoopConfi
 		// Execute the loop steps
 		output, err := p.executeLoopSteps(config.Steps, iterationInput)
 		if err != nil {
-			return "", fmt.Errorf("error in agentic loop '%s' iteration %d: %w", loopName, loopCtx.Iteration, err)
+			finalErr = fmt.Errorf("error in agentic loop '%s' iteration %d: %w", loopName, loopCtx.Iteration, err)
+			// Save failed state
+			if config.Stateful {
+				state := loopStateFromContext(loopCtx, config.Name, config, workflowFile, p.variables)
+				state.Status = "failed"
+				if saveErr := stateManager.SaveState(state); saveErr != nil {
+					p.debugf("Warning: Failed to save failed state: %v", saveErr)
+				}
+			}
+			return "", finalErr
 		}
 
 		// Record this iteration
@@ -96,6 +162,46 @@ func (p *Processor) processAgenticLoop(loopName string, config *AgenticLoopConfi
 		loopCtx.History = append(loopCtx.History, iteration)
 		loopCtx.PreviousOutput = output
 		finalOutput = output
+
+		// Run quality gates
+		if len(config.QualityGates) > 0 {
+			p.debugf("Running %d quality gates for iteration %d", len(config.QualityGates), loopCtx.Iteration)
+			gateResults, err := RunQualityGates(config.QualityGates, p.runtimeDir)
+
+			if err != nil {
+				p.debugf("Quality gate failure: %v", err)
+				// Save failed state
+				if config.Stateful {
+					state := loopStateFromContext(loopCtx, config.Name, config, workflowFile, p.variables)
+					state.Status = "failed"
+					state.QualityGateResults = gateResults
+					if saveErr := stateManager.SaveState(state); saveErr != nil {
+						p.debugf("Warning: Failed to save failed state: %v", saveErr)
+					}
+				}
+				return finalOutput, fmt.Errorf("quality gate failed in iteration %d: %w", loopCtx.Iteration, err)
+			}
+
+			// Log gate results
+			for _, result := range gateResults {
+				if result.Passed {
+					p.debugf("Quality gate '%s' passed (attempts: %d, duration: %v)", result.GateName, result.Attempts, result.Duration)
+				} else {
+					p.debugf("Quality gate '%s' failed after %d attempts: %s", result.GateName, result.Attempts, result.Message)
+				}
+			}
+		}
+
+		// Checkpoint save
+		if config.Stateful && checkpointInterval > 0 && loopCtx.Iteration%checkpointInterval == 0 {
+			state := loopStateFromContext(loopCtx, config.Name, config, workflowFile, p.variables)
+			state.Status = "running"
+			if err := stateManager.SaveState(state); err != nil {
+				p.debugf("Warning: Failed to save checkpoint: %v", err)
+			} else {
+				p.debugf("Checkpoint saved at iteration %d", loopCtx.Iteration)
+			}
+		}
 
 		// Check exit condition
 		shouldExit, reason := p.checkExitCondition(config, output)
@@ -109,7 +215,39 @@ func (p *Processor) processAgenticLoop(loopName string, config *AgenticLoopConfi
 		p.debugf("Agentic loop '%s' reached max iterations (%d)", loopName, maxIterations)
 	}
 
+	// Final state save
+	if config.Stateful {
+		finalState := loopStateFromContext(loopCtx, config.Name, config, workflowFile, p.variables)
+		finalState.Status = "completed"
+		if err := stateManager.SaveState(finalState); err != nil {
+			p.debugf("Warning: Failed to save final state: %v", err)
+		} else {
+			p.debugf("Loop completed, final state saved")
+		}
+	}
+
 	return finalOutput, nil
+}
+
+// createNewLoopContext initializes a fresh loop context
+func (p *Processor) createNewLoopContext(initialInput string) *LoopContext {
+	return &LoopContext{
+		Iteration:      0,
+		PreviousOutput: initialInput,
+		History:        make([]LoopIteration, 0),
+		StartTime:      time.Now(),
+	}
+}
+
+// getLoopStateDir returns the directory for storing loop states
+func (p *Processor) getLoopStateDir() string {
+	// Use the config helper to get the loop state directory
+	// Import cycle prevention: we use a local implementation
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return ".comanda/loop-states"
+	}
+	return filepath.Join(homeDir, ".comanda", "loop-states")
 }
 
 // setLoopVariables sets template variables for the current loop iteration

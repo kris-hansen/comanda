@@ -123,6 +123,27 @@ func EnsureComandaDir() (string, error) {
 	return comandaDir, nil
 }
 
+// GetLoopStateDir returns the path to the loop-states directory
+func GetLoopStateDir() (string, error) {
+	comandaDir, err := GetComandaDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(comandaDir, "loop-states"), nil
+}
+
+// EnsureLoopStateDir creates the ~/.comanda/loop-states directory if it doesn't exist
+func EnsureLoopStateDir() (string, error) {
+	loopStateDir, err := GetLoopStateDir()
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(loopStateDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create loop-states directory: %w", err)
+	}
+	return loopStateDir, nil
+}
+
 // GetEnvPath returns the environment file path, checking in order:
 // 1. COMANDA_ENV environment variable (explicit override)
 // 2. ~/.comanda/config.yaml (preferred default)

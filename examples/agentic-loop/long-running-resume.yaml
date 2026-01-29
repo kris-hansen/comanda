@@ -1,0 +1,47 @@
+# Long-Running Loop with Resume Capability
+#
+# This example demonstrates a stateful agentic loop that can be:
+# - Interrupted (Ctrl-C)
+# - Resumed from the last checkpoint
+# - Run for many iterations without timeout
+#
+# Usage:
+#   comanda process examples/agentic-loop/long-running-resume.yaml
+#
+# To test resume:
+#   1. Start the loop
+#   2. Press Ctrl-C after a few iterations
+#   3. Run: comanda loop status long-test
+#   4. Run: comanda process examples/agentic-loop/long-running-resume.yaml
+#      (it will automatically resume from the last checkpoint)
+
+agentic-loop:
+  config:
+    name: long-test                  # Required for stateful loops
+    stateful: true                   # Enable state persistence
+    max_iterations: 100
+    timeout_seconds: 0               # No timeout - run indefinitely
+    checkpoint_interval: 5           # Save state every 5 iterations
+
+    exit_condition: llm_decides      # Continue until LLM outputs DONE
+    context_window: 3                # Keep last 3 iterations in context
+
+  steps:
+    - task:
+        input: NA
+        model: claude-code
+        action: |
+          You are counting iterations in a long-running loop.
+
+          Current iteration: {{ loop.iteration }}
+          Max iterations: {{ loop.total_iterations }}
+          Elapsed time: {{ loop.elapsed_seconds }} seconds
+
+          Instructions:
+          - Output the current iteration number
+          - Add a brief message about progress
+          - If iteration >= 100, output "DONE" to complete the loop
+          - Otherwise, output "Continue to next iteration"
+
+          Be concise - just 1-2 sentences.
+        output: STDOUT

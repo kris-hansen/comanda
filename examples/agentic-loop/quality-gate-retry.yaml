@@ -1,0 +1,52 @@
+# Quality Gate with Retry Logic
+#
+# This example demonstrates quality gates with exponential backoff retry.
+# The gate will retry up to 5 times with increasing delays if it fails.
+#
+# Usage:
+#   comanda process examples/agentic-loop/quality-gate-retry.yaml
+#
+# The flaky-test gate has a 50% failure rate to demonstrate retry behavior.
+# You'll see exponential backoff delays: 1s, 2s, 4s, 8s, 16s
+
+agentic-loop:
+  config:
+    name: gate-retry-test
+    stateful: true
+    max_iterations: 3
+    timeout_seconds: 0
+    checkpoint_interval: 1
+
+    # Quality gate with retry logic
+    quality_gates:
+      - name: flaky-test
+        command: "bash -c 'exit $((RANDOM % 2))'"  # 50% fail rate
+        on_fail: retry
+        timeout: 10
+        retry:
+          max_attempts: 5
+          backoff_type: exponential
+          initial_delay: 1
+
+      - name: always-pass
+        command: "echo 'This gate always passes'"
+        on_fail: abort
+        timeout: 5
+
+  steps:
+    - task:
+        input: NA
+        model: claude-code
+        action: |
+          You are testing quality gate retry behavior.
+
+          Current iteration: {{ loop.iteration }}
+
+          Instructions:
+          - Output a brief message about this iteration
+          - Note that quality gates will run after this step
+          - If iteration >= 3, output "DONE"
+          - Otherwise, output "Continue"
+
+          Keep it brief.
+        output: STDOUT

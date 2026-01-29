@@ -77,6 +77,8 @@ func (c *DSLConfig) UnmarshalYAML(node *yaml.Node) error {
 	c.ParallelSteps = make(map[string][]Step)
 	c.Defer = make(map[string]StepConfig)
 	c.AgenticLoops = make(map[string]*AgenticLoopConfig)
+	c.Loops = make(map[string]*AgenticLoopConfig)
+	c.Workflow = make(map[string]*WorkflowNode)
 
 	for i := 0; i < len(node.Content); i += 2 {
 		keyNode := node.Content[i]
@@ -110,6 +112,27 @@ func (c *DSLConfig) UnmarshalYAML(node *yaml.Node) error {
 			if err := c.parseAgenticLoopBlock(valueNode); err != nil {
 				return fmt.Errorf("failed to decode agentic loop: %w", err)
 			}
+		case "loops":
+			// Parse named loops for orchestration
+			var loops map[string]*AgenticLoopConfig
+			if err := valueNode.Decode(&loops); err != nil {
+				return fmt.Errorf("failed to decode loops: %w", err)
+			}
+			c.Loops = loops
+		case "execute_loops":
+			// Parse simple execution order
+			var executeLoops []string
+			if err := valueNode.Decode(&executeLoops); err != nil {
+				return fmt.Errorf("failed to decode execute_loops: %w", err)
+			}
+			c.ExecuteLoops = executeLoops
+		case "workflow":
+			// Parse workflow nodes
+			var workflow map[string]*WorkflowNode
+			if err := valueNode.Decode(&workflow); err != nil {
+				return fmt.Errorf("failed to decode workflow: %w", err)
+			}
+			c.Workflow = workflow
 		default:
 			// Try to decode as a standard step config first
 			var stepConfig StepConfig
@@ -667,6 +690,12 @@ func (p *Processor) checkCircularDependencies(
 
 // Process executes the DSL processing pipeline
 func (p *Processor) Process() error {
+	// Check for multi-loop orchestration first
+	if len(p.config.Loops) > 0 {
+		p.debugf("Detected multi-loop orchestration with %d loops", len(p.config.Loops))
+		return p.processMultiLoopOrchestration()
+	}
+
 	// Check if we have any steps to process
 	if len(p.config.Steps) == 0 && len(p.config.ParallelSteps) == 0 {
 		err := fmt.Errorf("no steps defined in DSL configuration")
@@ -1994,6 +2023,357 @@ func (p *Processor) getProviderForModel(modelName string) (models.Provider, erro
 	}
 
 	return nil, fmt.Errorf("no provider configured or found for model %s", modelName)
+}
+
+// processMultiLoopOrchestration handles multi-loop workflows
+func (p *Processor) processMultiLoopOrchestration() error {
+	p.spinner.Start("Initializing multi-loop orchestration")
+
+	// Determine which loops to execute
+	loopsToExecute := p.config.Loops
+
+	// If workflow is specified, process it (creator/checker pattern)
+	if len(p.config.Workflow) > 0 {
+		p.spinner.Stop()
+		return p.processWorkflow()
+	}
+
+	// If execute_loops is specified, filter loops
+	if len(p.config.ExecuteLoops) > 0 {
+		filtered := make(map[string]*AgenticLoopConfig)
+		for _, loopName := range p.config.ExecuteLoops {
+			if config, exists := p.config.Loops[loopName]; exists {
+				filtered[loopName] = config
+			} else {
+				p.spinner.Stop()
+				return fmt.Errorf("loop '%s' specified in execute_loops not found in loops", loopName)
+			}
+		}
+		loopsToExecute = filtered
+	}
+
+	// Create orchestrator
+	orchestrator := NewLoopOrchestrator(p, loopsToExecute, p.runtimeDir)
+
+	p.spinner.Stop()
+	p.spinner.Start("Building dependency graph")
+
+	// Execute loops
+	p.spinner.Stop()
+	p.spinner.Start("Executing loops in dependency order")
+	if err := orchestrator.Execute(); err != nil {
+		p.spinner.Stop()
+		return fmt.Errorf("orchestration failed: %w", err)
+	}
+
+	p.spinner.Stop()
+
+	// Output results
+	log.Println("\n=== Multi-Loop Orchestration Results ===")
+	outputs := orchestrator.GetAllOutputs()
+	for loopName, output := range outputs {
+		duration := output.EndTime.Sub(output.StartTime)
+		log.Printf("\nLoop: %s", loopName)
+		log.Printf("  Status: %s", output.Status)
+		log.Printf("  Duration: %s", duration)
+		if len(output.Variables) > 0 {
+			log.Printf("  Exported Variables:")
+			for varName, varValue := range output.Variables {
+				preview := varValue
+				if len(preview) > 100 {
+					preview = preview[:97] + "..."
+				}
+				log.Printf("    %s = %s", varName, preview)
+			}
+		}
+		if len(output.Result) > 0 {
+			preview := output.Result
+			if len(preview) > 200 {
+				preview = preview[:197] + "..."
+			}
+			log.Printf("  Result: %s", preview)
+		}
+	}
+
+	log.Println("\n=== Orchestration Complete ===")
+	return nil
+}
+
+// processWorkflow handles workflow-based orchestration with creator/checker patterns
+func (p *Processor) processWorkflow() error {
+	p.debugf("Processing workflow with %d nodes", len(p.config.Workflow))
+
+	// Build execution order from workflow
+	executionOrder, err := p.buildWorkflowExecutionOrder()
+	if err != nil {
+		return fmt.Errorf("failed to build workflow execution order: %w", err)
+	}
+
+	p.debugf("Workflow execution order: %v", executionOrder)
+
+	// Execute workflow nodes
+	loopOutputs := make(map[string]*LoopOutput)
+	maxRerunAttempts := 3 // Maximum times to rerun creator on checker failure
+
+	for _, nodeName := range executionOrder {
+		node := p.config.Workflow[nodeName]
+		if node == nil {
+			return fmt.Errorf("workflow node '%s' not found", nodeName)
+		}
+
+		p.spinner.Stop()
+		p.spinner.Start(fmt.Sprintf("Executing workflow node: %s (%s)", nodeName, node.Role))
+
+		// Handle different node types
+		switch node.Type {
+		case "loop", "":
+			// Execute loop
+			loopConfig := p.config.Loops[node.Loop]
+			if loopConfig == nil {
+				return fmt.Errorf("loop '%s' referenced by workflow node '%s' not found", node.Loop, nodeName)
+			}
+
+			// Prepare input
+			input, err := p.prepareWorkflowNodeInput(loopConfig, loopOutputs)
+			if err != nil {
+				return fmt.Errorf("failed to prepare input for node '%s': %w", nodeName, err)
+			}
+
+			// Execute loop with potential rerun logic for checker nodes
+			var output *LoopOutput
+			if node.Role == "checker" && node.Validates != "" {
+				output, err = p.executeCheckerLoop(node, loopConfig, input, loopOutputs, maxRerunAttempts)
+			} else {
+				output, err = p.executeWorkflowLoop(node.Loop, loopConfig, input)
+			}
+
+			if err != nil {
+				return fmt.Errorf("workflow node '%s' failed: %w", nodeName, err)
+			}
+
+			loopOutputs[node.Loop] = output
+			p.debugf("Workflow node '%s' completed with status: %s", nodeName, output.Status)
+
+		default:
+			return fmt.Errorf("unsupported workflow node type: %s", node.Type)
+		}
+	}
+
+	// Output results
+	p.spinner.Stop()
+	log.Println("\n=== Workflow Results ===")
+	for nodeName, node := range p.config.Workflow {
+		if node.Type == "loop" || node.Type == "" {
+			output := loopOutputs[node.Loop]
+			if output != nil {
+				duration := output.EndTime.Sub(output.StartTime)
+				log.Printf("\nNode: %s (Role: %s)", nodeName, node.Role)
+				log.Printf("  Loop: %s", node.Loop)
+				log.Printf("  Status: %s", output.Status)
+				log.Printf("  Duration: %s", duration)
+			}
+		}
+	}
+	log.Println("\n=== Workflow Complete ===")
+
+	return nil
+}
+
+// buildWorkflowExecutionOrder builds execution order from workflow definition
+func (p *Processor) buildWorkflowExecutionOrder() ([]string, error) {
+	// Build dependency graph based on validates relationships
+	deps := make(map[string][]string)
+	nodes := make(map[string]bool)
+
+	for nodeName, node := range p.config.Workflow {
+		nodes[nodeName] = true
+		if node.Validates != "" {
+			// Checker depends on creator
+			deps[nodeName] = []string{node.Validates}
+		} else {
+			deps[nodeName] = []string{}
+		}
+	}
+
+	// Topological sort
+	return topologicalSort(nodes, deps)
+}
+
+// prepareWorkflowNodeInput prepares input for a workflow node
+func (p *Processor) prepareWorkflowNodeInput(config *AgenticLoopConfig, outputs map[string]*LoopOutput) (string, error) {
+	// Check for input_state variable
+	if config.InputState != "" {
+		value, exists := p.variables[config.InputState]
+		if !exists {
+			return "", fmt.Errorf("input variable '%s' not found", config.InputState)
+		}
+		return value, nil
+	}
+
+	// Check for dependencies
+	if len(config.DependsOn) > 0 {
+		firstDep := config.DependsOn[0]
+		output, exists := outputs[firstDep]
+		if !exists {
+			return "", fmt.Errorf("dependency loop '%s' has not completed", firstDep)
+		}
+		return output.Result, nil
+	}
+
+	return "NA", nil
+}
+
+// executeWorkflowLoop executes a single loop in the workflow
+func (p *Processor) executeWorkflowLoop(loopName string, config *AgenticLoopConfig, input string) (*LoopOutput, error) {
+	startTime := time.Now()
+	result, err := p.processAgenticLoopWithFile(loopName, config, input, p.runtimeDir)
+	endTime := time.Now()
+
+	output := &LoopOutput{
+		LoopName:  loopName,
+		StartTime: startTime,
+		EndTime:   endTime,
+		Result:    result,
+		Variables: make(map[string]string),
+	}
+
+	if err != nil {
+		output.Status = "failed"
+		return output, err
+	}
+
+	output.Status = "completed"
+
+	// Export variables if output_state is specified
+	if config.OutputState != "" {
+		p.variables[config.OutputState] = result
+		output.Variables[config.OutputState] = result
+	}
+
+	return output, nil
+}
+
+// executeCheckerLoop executes a checker loop with rerun logic
+func (p *Processor) executeCheckerLoop(node *WorkflowNode, config *AgenticLoopConfig, input string, outputs map[string]*LoopOutput, maxAttempts int) (*LoopOutput, error) {
+	creatorNodeName := node.Validates
+	creatorNode := p.config.Workflow[creatorNodeName]
+	if creatorNode == nil {
+		return nil, fmt.Errorf("creator node '%s' not found", creatorNodeName)
+	}
+
+	creatorLoopName := creatorNode.Loop
+	creatorConfig := p.config.Loops[creatorLoopName]
+	if creatorConfig == nil {
+		return nil, fmt.Errorf("creator loop '%s' not found", creatorLoopName)
+	}
+
+	attempts := 0
+	for attempts < maxAttempts {
+		attempts++
+		p.debugf("Checker attempt %d/%d", attempts, maxAttempts)
+
+		// Execute checker loop
+		output, err := p.executeWorkflowLoop(node.Loop, config, input)
+		if err != nil {
+			return output, err
+		}
+
+		// Check if validation passed
+		// Look for "PASS" in the output (simple heuristic)
+		if strings.Contains(strings.ToUpper(output.Result), "PASS") {
+			p.debugf("Checker passed on attempt %d", attempts)
+			return output, nil
+		}
+
+		// Validation failed
+		p.debugf("Checker failed on attempt %d", attempts)
+
+		// Handle failure based on on_fail policy
+		switch node.OnFail {
+		case "rerun_creator":
+			if attempts >= maxAttempts {
+				return output, fmt.Errorf("checker failed after %d attempts", maxAttempts)
+			}
+
+			p.spinner.Stop()
+			p.spinner.Start(fmt.Sprintf("Re-running creator: %s (attempt %d/%d)", creatorLoopName, attempts+1, maxAttempts))
+
+			// Re-run creator
+			creatorInput := "NA"
+			if creatorConfig.InputState != "" {
+				if value, exists := p.variables[creatorConfig.InputState]; exists {
+					creatorInput = value
+				}
+			}
+
+			creatorOutput, err := p.executeWorkflowLoop(creatorLoopName, creatorConfig, creatorInput)
+			if err != nil {
+				return nil, fmt.Errorf("creator rerun failed: %w", err)
+			}
+
+			outputs[creatorLoopName] = creatorOutput
+
+			// Update input for next checker attempt
+			if creatorConfig.OutputState != "" {
+				input = p.variables[creatorConfig.OutputState]
+			} else {
+				input = creatorOutput.Result
+			}
+
+		case "abort":
+			return output, fmt.Errorf("checker failed, aborting workflow")
+
+		case "manual":
+			// Just return the failed output for manual review
+			return output, nil
+
+		default:
+			// Default to abort
+			return output, fmt.Errorf("checker failed")
+		}
+	}
+
+	return nil, fmt.Errorf("checker failed after %d rerun attempts", maxAttempts)
+}
+
+// topologicalSort performs topological sort on a dependency graph
+func topologicalSort(nodes map[string]bool, deps map[string][]string) ([]string, error) {
+	inDegree := make(map[string]int)
+	for node := range nodes {
+		inDegree[node] = len(deps[node])
+	}
+
+	queue := []string{}
+	for node, degree := range inDegree {
+		if degree == 0 {
+			queue = append(queue, node)
+		}
+	}
+
+	result := []string{}
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+		result = append(result, current)
+
+		// Find nodes that depend on current
+		for node, nodeDeps := range deps {
+			for _, dep := range nodeDeps {
+				if dep == current {
+					inDegree[node]--
+					if inDegree[node] == 0 {
+						queue = append(queue, node)
+					}
+				}
+			}
+		}
+	}
+
+	if len(result) != len(nodes) {
+		return nil, fmt.Errorf("cycle detected in workflow dependencies")
+	}
+
+	return result, nil
 }
 
 // getFileOutputPath returns the file path if output is a file, empty string otherwise.

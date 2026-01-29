@@ -1,0 +1,119 @@
+# Multi-Loop Dependency Graph
+#
+# This example demonstrates complex dependency relationships between loops.
+# It shows how multiple loops can depend on each other and pass data through
+# the dependency chain.
+#
+# Usage:
+#   comanda process examples/agentic-loop/dependency-graph.yaml
+#
+# Execution order (determined by topological sort):
+#   1. data-collector (no dependencies)
+#   2. data-analyzer (depends on collector)
+#   3. report-generator (depends on analyzer)
+
+loops:
+  # First loop: Collect data
+  data-collector:
+    name: data-collector
+    stateful: true
+    max_iterations: 2
+    timeout_seconds: 0
+    exit_condition: llm_decides
+    output_state: $RAW_DATA  # Export data for next loop
+
+    steps:
+      - collect:
+          input: NA
+          model: claude-code
+          action: |
+            You are collecting sample data for analysis.
+
+            Task: Generate sample data about website visits.
+
+            Output a JSON array with 3-5 sample records:
+            ```json
+            [
+              {"page": "/home", "visits": 1250, "avg_duration": 45},
+              {"page": "/about", "visits": 890, "avg_duration": 30},
+              ...
+            ]
+            ```
+
+            Then output "DATA COLLECTION COMPLETE"
+          output: STDOUT
+
+  # Second loop: Analyze collected data
+  data-analyzer:
+    name: data-analyzer
+    depends_on: [data-collector]  # Must wait for collector
+    input_state: $RAW_DATA         # Read collector's output
+    stateful: true
+    max_iterations: 2
+    timeout_seconds: 0
+    exit_condition: llm_decides
+    output_state: $ANALYSIS        # Export analysis for report
+
+    steps:
+      - analyze:
+          input: STDIN
+          model: claude-code
+          action: |
+            You are analyzing collected data.
+
+            Raw data:
+            ---
+            {{ loop.previous_output }}
+            ---
+
+            Task: Analyze this data and provide insights.
+
+            Output:
+            1. Total visits across all pages
+            2. Average duration across all pages
+            3. Most visited page
+            4. Least visited page
+            5. Key insight or recommendation
+
+            Format as a bulleted list, then output "ANALYSIS COMPLETE"
+          output: STDOUT
+
+  # Third loop: Generate report
+  report-generator:
+    name: report-generator
+    depends_on: [data-analyzer]  # Must wait for analyzer
+    input_state: $ANALYSIS        # Read analyzer's output
+    stateful: true
+    max_iterations: 1
+    timeout_seconds: 0
+    exit_condition: llm_decides
+
+    steps:
+      - generate:
+          input: STDIN
+          model: claude-code
+          action: |
+            You are generating a final report.
+
+            Analysis results:
+            ---
+            {{ loop.previous_output }}
+            ---
+
+            Task: Create a professional markdown report.
+
+            Include:
+            - Executive Summary
+            - Data Overview
+            - Key Findings (from analysis)
+            - Recommendations
+
+            Format as proper markdown with headers.
+            End with "REPORT COMPLETE"
+          output: STDOUT
+
+# Simple execution order (topological sort will determine actual order)
+execute_loops:
+  - data-collector
+  - data-analyzer
+  - report-generator
