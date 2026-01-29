@@ -5,13 +5,24 @@ import "time"
 // AgenticLoopConfig represents the configuration for an agentic loop
 type AgenticLoopConfig struct {
 	MaxIterations  int      `yaml:"max_iterations"`          // Maximum iterations before stopping (default: 10)
-	TimeoutSeconds int      `yaml:"timeout_seconds"`         // Total timeout in seconds (default: 300)
+	TimeoutSeconds int      `yaml:"timeout_seconds"`         // Total timeout in seconds (default: 0 = no timeout)
 	ExitCondition  string   `yaml:"exit_condition"`          // Exit condition: llm_decides, pattern_match
 	ExitPattern    string   `yaml:"exit_pattern"`            // Regex pattern for pattern_match exit condition
 	ContextWindow  int      `yaml:"context_window"`          // Number of past iterations to include in context (default: 5)
 	Steps          []Step   `yaml:"steps,omitempty"`         // Sub-steps to execute within each iteration
 	AllowedPaths   []string `yaml:"allowed_paths,omitempty"` // Directories for agentic tool access
 	Tools          []string `yaml:"tools,omitempty"`         // Optional tool whitelist (Read, Write, Edit, Bash, etc.)
+
+	// State persistence & quality gates
+	Name               string              `yaml:"name,omitempty"`                // Loop name (required for stateful loops)
+	Stateful           bool                `yaml:"stateful,omitempty"`            // Enable state persistence
+	CheckpointInterval int                 `yaml:"checkpoint_interval,omitempty"` // Save state every N iterations (default: 5)
+	QualityGates       []QualityGateConfig `yaml:"quality_gates,omitempty"`       // Quality gates to run after each iteration
+
+	// Multi-loop orchestration
+	DependsOn   []string `yaml:"depends_on,omitempty"`   // Wait for these loops to complete
+	InputState  string   `yaml:"input_state,omitempty"`  // Variable to read from dependent loop
+	OutputState string   `yaml:"output_state,omitempty"` // Variable to export for dependent loops
 }
 
 // LoopContext holds runtime state for an agentic loop
@@ -86,7 +97,12 @@ type DSLConfig struct {
 	Steps         []Step
 	ParallelSteps map[string][]Step             // Steps that can be executed in parallel
 	Defer         map[string]StepConfig         `yaml:"defer,omitempty"`
-	AgenticLoops  map[string]*AgenticLoopConfig // Block-style agentic loops
+	AgenticLoops  map[string]*AgenticLoopConfig // Block-style agentic loops (legacy)
+
+	// Multi-loop orchestration
+	Loops        map[string]*AgenticLoopConfig `yaml:"loops,omitempty"`         // Named loops for orchestration
+	ExecuteLoops []string                      `yaml:"execute_loops,omitempty"` // Simple execution order
+	Workflow     map[string]*WorkflowNode      `yaml:"workflow,omitempty"`      // Complex workflow definition
 }
 
 // StepDependency represents a dependency between steps
@@ -143,4 +159,51 @@ type AdapterOverride struct {
 	IgnoreGlobs     []string `yaml:"ignore_globs,omitempty"`
 	PriorityFiles   []string `yaml:"priority_files,omitempty"`
 	ReplaceDefaults bool     `yaml:"replace_defaults,omitempty"`
+}
+
+// QualityGateConfig represents the configuration for a quality gate
+type QualityGateConfig struct {
+	Name    string       `yaml:"name"`              // Gate name
+	Command string       `yaml:"command,omitempty"` // Shell command to execute
+	Type    string       `yaml:"type,omitempty"`    // Built-in type: syntax, security, test
+	OnFail  string       `yaml:"on_fail"`           // Action on failure: retry, skip, abort
+	Timeout int          `yaml:"timeout,omitempty"` // Timeout in seconds
+	Retry   *RetryConfig `yaml:"retry,omitempty"`   // Retry configuration
+}
+
+// RetryConfig configures retry behavior for quality gates
+type RetryConfig struct {
+	MaxAttempts  int    `yaml:"max_attempts"`  // Maximum retry attempts (default: 3)
+	BackoffType  string `yaml:"backoff_type"`  // Backoff strategy: linear, exponential
+	InitialDelay int    `yaml:"initial_delay"` // Initial delay in seconds
+}
+
+// QualityGateResult represents the result of running a quality gate
+type QualityGateResult struct {
+	GateName string                 `json:"gate_name"`
+	Passed   bool                   `json:"passed"`
+	Message  string                 `json:"message"`
+	Details  map[string]interface{} `json:"details,omitempty"`
+	Duration time.Duration          `json:"duration"`
+	Attempts int                    `json:"attempts"` // Number of attempts made
+}
+
+// WorkflowNode represents a node in a multi-loop workflow
+type WorkflowNode struct {
+	Type      string `yaml:"type"`                // Node type: loop, step, parallel
+	Loop      string `yaml:"loop,omitempty"`      // Loop name to execute
+	Role      string `yaml:"role,omitempty"`      // Role: creator, checker, finalizer
+	Validates string `yaml:"validates,omitempty"` // Loop name this node validates
+	OnFail    string `yaml:"on_fail,omitempty"`   // Action on validation failure: rerun_creator, abort, manual
+}
+
+// LoopOutput represents the output of a completed loop
+type LoopOutput struct {
+	LoopName     string              `json:"loop_name"`
+	Status       string              `json:"status"`        // completed, failed
+	Result       string              `json:"result"`        // Final output
+	Variables    map[string]string   `json:"variables"`     // Variables to pass to dependent loops
+	QualityGates []QualityGateResult `json:"quality_gates"` // Quality gate results
+	StartTime    time.Time           `json:"start_time"`
+	EndTime      time.Time           `json:"end_time"`
 }

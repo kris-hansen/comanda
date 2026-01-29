@@ -218,12 +218,18 @@ func TestAgenticLoopConfigDefaults(t *testing.T) {
 		t.Errorf("DefaultMaxIterations = %d, want 10", DefaultMaxIterations)
 	}
 
-	if DefaultTimeoutSeconds != 300 {
-		t.Errorf("DefaultTimeoutSeconds = %d, want 300", DefaultTimeoutSeconds)
+	// Default timeout is 0 (no timeout, rely on max_iterations instead)
+	if DefaultTimeoutSeconds != 0 {
+		t.Errorf("DefaultTimeoutSeconds = %d, want 0", DefaultTimeoutSeconds)
 	}
 
 	if DefaultContextWindow != 5 {
 		t.Errorf("DefaultContextWindow = %d, want 5", DefaultContextWindow)
+	}
+
+	// Default checkpoint interval for stateful loops
+	if DefaultCheckpointInterval != 5 {
+		t.Errorf("DefaultCheckpointInterval = %d, want 5", DefaultCheckpointInterval)
 	}
 }
 

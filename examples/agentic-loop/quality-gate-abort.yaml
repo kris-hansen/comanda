@@ -1,0 +1,44 @@
+# Quality Gate with Abort on Failure
+#
+# This example demonstrates a quality gate that aborts the loop on failure.
+# The loop will stop after the first iteration when the gate fails.
+#
+# Usage:
+#   comanda process examples/agentic-loop/quality-gate-abort.yaml
+#
+# After running, check the state:
+#   comanda loop status abort-test
+#
+# The status will show "failed" and include quality gate results.
+
+agentic-loop:
+  config:
+    name: abort-test
+    stateful: true
+    max_iterations: 10
+    timeout_seconds: 0
+    checkpoint_interval: 1
+
+    # Quality gate that always fails and aborts
+    quality_gates:
+      - name: always-fail
+        command: "exit 1"
+        on_fail: abort
+        timeout: 5
+
+  steps:
+    - task:
+        input: NA
+        model: claude-code
+        action: |
+          You are testing quality gate abort behavior.
+
+          Current iteration: {{ loop.iteration }}
+
+          Instructions:
+          - Output a brief message: "Iteration {{ loop.iteration }} completed"
+          - Note: A quality gate will fail after this step
+          - The loop should abort and save state as "failed"
+
+          Keep it very brief.
+        output: STDOUT
