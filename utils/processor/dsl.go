@@ -697,15 +697,15 @@ func (p *Processor) Process() error {
 	}
 
 	// Check if we have any steps to process
-	if len(p.config.Steps) == 0 && len(p.config.ParallelSteps) == 0 {
+	if len(p.config.Steps) == 0 && len(p.config.ParallelSteps) == 0 && len(p.config.AgenticLoops) == 0 {
 		err := fmt.Errorf("no steps defined in DSL configuration")
 		p.debugf("Validation error: %v", err)
 		p.emitError(err)
 		return fmt.Errorf("validation failed: %w", err)
 	}
 
-	p.debugf("Initial validation passed: found %d sequential steps and %d parallel step groups",
-		len(p.config.Steps), len(p.config.ParallelSteps))
+	p.debugf("Initial validation passed: found %d sequential steps, %d parallel step groups, and %d agentic loops",
+		len(p.config.Steps), len(p.config.ParallelSteps), len(p.config.AgenticLoops))
 
 	// First validate all steps before processing
 	p.spinner.Start("Validating DSL configuration")

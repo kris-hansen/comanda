@@ -31,6 +31,7 @@ type ChartNode struct {
 type WorkflowChart struct {
 	Nodes           []ChartNode
 	ParallelGroups  map[string][]ChartNode
+	AgenticLoopCfgs map[string]*processor.AgenticLoopConfig // standalone agentic-loop blocks
 	DeferredSteps   []ChartNode
 	EntryInputs     []string
 	FinalOutputs    []string
@@ -88,9 +89,10 @@ func init() {
 // buildWorkflowChart parses the DSLConfig and builds a WorkflowChart
 func buildWorkflowChart(config *processor.DSLConfig) *WorkflowChart {
 	chart := &WorkflowChart{
-		Nodes:          []ChartNode{},
-		ParallelGroups: make(map[string][]ChartNode),
-		DeferredSteps:  []ChartNode{},
+		Nodes:           []ChartNode{},
+		ParallelGroups:  make(map[string][]ChartNode),
+		AgenticLoopCfgs: make(map[string]*processor.AgenticLoopConfig),
+		DeferredSteps:   []ChartNode{},
 	}
 
 	// Track output producers for dependency detection
@@ -104,6 +106,12 @@ func buildWorkflowChart(config *processor.DSLConfig) *WorkflowChart {
 	// Check for multi-loop orchestration
 	if len(config.Loops) > 0 {
 		processMultiLoopWorkflow(config, chart)
+		return chart
+	}
+
+	// Check for standalone agentic-loop blocks
+	if len(config.AgenticLoops) > 0 {
+		processAgenticLoopBlocks(config, chart)
 		return chart
 	}
 
@@ -380,6 +388,12 @@ func renderChart(chart *WorkflowChart, filename string) {
 			groupName := strings.TrimPrefix(item, "parallel:")
 			stepNum++
 			renderParallelGroup(chart.ParallelGroups[groupName], groupName, stepNum, boxWidth)
+		} else if strings.HasPrefix(item, "agentic-loop:") {
+			loopKey := strings.TrimPrefix(item, "agentic-loop:")
+			stepNum++
+			if loopCfg, ok := chart.AgenticLoopCfgs[loopKey]; ok {
+				renderAgenticLoopBox(loopCfg, boxWidth)
+			}
 		} else {
 			for _, node := range chart.Nodes {
 				if node.Name == item {
@@ -766,6 +780,84 @@ func renderParallelGroup(nodes []ChartNode, groupName string, stepNum int, boxWi
 		}
 	}
 
+	fmt.Println("+" + strings.Repeat("=", boxWidth-2) + "+")
+}
+
+// processAgenticLoopBlocks handles standalone agentic-loop blocks (config.AgenticLoops)
+func processAgenticLoopBlocks(config *processor.DSLConfig, chart *WorkflowChart) {
+	for loopName, loopConfig := range config.AgenticLoops {
+		chart.AgenticLoopCfgs[loopName] = loopConfig
+		chart.SequentialOrder = append(chart.SequentialOrder, "agentic-loop:"+loopName)
+
+		// Count sub-steps as nodes for stats
+		for _, step := range loopConfig.Steps {
+			node := stepToChartNode(step, false, "")
+			node.StepType = "agentic-loop"
+			chart.Nodes = append(chart.Nodes, node)
+		}
+	}
+}
+
+// renderAgenticLoopBox draws a standalone agentic loop container
+func renderAgenticLoopBox(config *processor.AgenticLoopConfig, boxWidth int) {
+	displayName := "agentic-loop"
+	if config.Name != "" {
+		displayName = config.Name
+	}
+
+	// Header
+	fmt.Println("+" + strings.Repeat("=", boxWidth-2) + "+")
+	header := fmt.Sprintf("AGENTIC LOOP: %s", displayName)
+	if len(header) > boxWidth-4 {
+		header = header[:boxWidth-7] + "..."
+	}
+	fmt.Printf("| %-*s |\n", boxWidth-4, header)
+
+	// Config line
+	exitInfo := config.ExitCondition
+	if exitInfo == "" {
+		exitInfo = "llm_decides"
+	}
+	configLine := fmt.Sprintf("Iterations: %d | Exit: %s", config.MaxIterations, exitInfo)
+	if config.TimeoutSeconds > 0 {
+		configLine += fmt.Sprintf(" | Timeout: %ds", config.TimeoutSeconds)
+	}
+	if config.Stateful {
+		configLine += " | Stateful"
+	}
+	if len(configLine) > boxWidth-4 {
+		configLine = configLine[:boxWidth-7] + "..."
+	}
+	fmt.Printf("| %-*s |\n", boxWidth-4, configLine)
+
+	if config.ContextWindow > 0 {
+		ctxLine := fmt.Sprintf("Context Window: %d iterations", config.ContextWindow)
+		fmt.Printf("| %-*s |\n", boxWidth-4, ctxLine)
+	}
+
+	fmt.Println("+" + strings.Repeat("-", boxWidth-2) + "+")
+
+	// Render each step
+	for i, step := range config.Steps {
+		node := stepToChartNode(step, false, "")
+		renderNodeInline(node, boxWidth)
+		if i < len(config.Steps)-1 {
+			fmt.Println("  " + strings.Repeat(" ", (boxWidth-6)/2) + "|")
+			fmt.Println("  " + strings.Repeat(" ", (boxWidth-6)/2) + "v")
+		}
+	}
+
+	// Loop-back indicator
+	maxIter := config.MaxIterations
+	if maxIter == 0 {
+		maxIter = 10
+	}
+	fmt.Println("|" + strings.Repeat(" ", boxWidth-2) + "|")
+	loopBack := fmt.Sprintf("^--- loop back (up to %d iterations) ---", maxIter)
+	if len(loopBack) > boxWidth-4 {
+		loopBack = loopBack[:boxWidth-7] + "..."
+	}
+	fmt.Printf("| %-*s |\n", boxWidth-4, loopBack)
 	fmt.Println("+" + strings.Repeat("=", boxWidth-2) + "+")
 }
 
