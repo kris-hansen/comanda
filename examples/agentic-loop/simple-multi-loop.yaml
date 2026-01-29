@@ -1,0 +1,113 @@
+# Simple Multi-Loop Execution
+#
+# This example demonstrates basic multi-loop orchestration without
+# complex dependencies or workflows.
+#
+# Usage:
+#   comanda process examples/agentic-loop/simple-multi-loop.yaml
+#
+# This will execute three independent loops in sequence:
+#   1. task-a
+#   2. task-b
+#   3. task-c
+
+loops:
+  # First task
+  task-a:
+    name: task-a
+    stateful: true
+    max_iterations: 2
+    timeout_seconds: 0
+    exit_condition: llm_decides
+    output_state: $TASK_A_RESULT
+
+    steps:
+      - execute:
+          input: NA
+          model: claude-code
+          action: |
+            You are executing Task A in a multi-loop workflow.
+
+            Current iteration: {{ loop.iteration }}
+
+            Task: Count from 1 to 5 and provide a brief status message.
+
+            Format:
+            Numbers: 1, 2, 3, 4, 5
+            Status: Task A iteration {{ loop.iteration }} complete
+
+            If iteration >= 2, output "DONE"
+          output: STDOUT
+
+  # Second task (depends on task-a)
+  task-b:
+    name: task-b
+    depends_on: [task-a]           # Wait for task-a
+    input_state: $TASK_A_RESULT    # Receive data from task-a
+    stateful: true
+    max_iterations: 2
+    timeout_seconds: 0
+    exit_condition: llm_decides
+    output_state: $TASK_B_RESULT
+
+    steps:
+      - execute:
+          input: STDIN
+          model: claude-code
+          action: |
+            You are executing Task B in a multi-loop workflow.
+
+            Previous task output:
+            ---
+            {{ loop.previous_output }}
+            ---
+
+            Task: Acknowledge the previous task and count backwards from 5 to 1.
+
+            Format:
+            Received: [brief summary of previous output]
+            Numbers: 5, 4, 3, 2, 1
+            Status: Task B iteration {{ loop.iteration }} complete
+
+            If iteration >= 2, output "DONE"
+          output: STDOUT
+
+  # Third task (depends on task-b)
+  task-c:
+    name: task-c
+    depends_on: [task-b]           # Wait for task-b
+    input_state: $TASK_B_RESULT    # Receive data from task-b
+    stateful: true
+    max_iterations: 1
+    timeout_seconds: 0
+    exit_condition: llm_decides
+
+    steps:
+      - execute:
+          input: STDIN
+          model: claude-code
+          action: |
+            You are executing Task C (final task) in a multi-loop workflow.
+
+            Previous task output:
+            ---
+            {{ loop.previous_output }}
+            ---
+
+            Task: Provide a final summary of all tasks.
+
+            Format:
+            === Multi-Loop Workflow Summary ===
+            - Task A: [status]
+            - Task B: [status]
+            - Task C: Finalizing workflow
+
+            All tasks complete!
+            Output "DONE"
+          output: STDOUT
+
+# Execute all loops in dependency order
+execute_loops:
+  - task-a
+  - task-b
+  - task-c

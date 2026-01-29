@@ -1,0 +1,56 @@
+# Cycle Detection Example
+#
+# This example demonstrates cycle detection in the dependency graph.
+# It intentionally creates a circular dependency that will be caught
+# and reported with a clear error message.
+#
+# Usage:
+#   comanda process examples/agentic-loop/cycle-detection.yaml
+#
+# Expected result:
+#   Error: dependency cycle detected: loop-a -> loop-b -> loop-c -> loop-a
+#
+# This workflow will NOT execute - it's designed to show error handling.
+
+loops:
+  loop-a:
+    name: loop-a
+    depends_on: [loop-c]  # Depends on loop-c (creates cycle)
+    max_iterations: 1
+    steps:
+      - task:
+          input: NA
+          model: claude-code
+          action: "This won't execute due to cycle"
+          output: STDOUT
+
+  loop-b:
+    name: loop-b
+    depends_on: [loop-a]  # Depends on loop-a
+    max_iterations: 1
+    steps:
+      - task:
+          input: NA
+          model: claude-code
+          action: "This won't execute due to cycle"
+          output: STDOUT
+
+  loop-c:
+    name: loop-c
+    depends_on: [loop-b]  # Depends on loop-b (completes cycle)
+    max_iterations: 1
+    steps:
+      - task:
+          input: NA
+          model: claude-code
+          action: "This won't execute due to cycle"
+          output: STDOUT
+
+execute_loops:
+  - loop-a
+  - loop-b
+  - loop-c
+
+# The orchestrator will detect the cycle:
+# loop-a -> loop-c -> loop-b -> loop-a
+# and report it with a clear error message before any execution begins.
