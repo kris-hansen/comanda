@@ -165,12 +165,13 @@ This guide specifies the YAML-based Domain Specific Language (DSL) for Comanda w
 
 ## Overview
 
-Comanda workflows consist of one or more named steps. Each step performs an operation. There are five main types of steps:
+Comanda workflows consist of one or more named steps. Each step performs an operation. There are six main types of steps:
 1.  **Standard Processing Step:** Involves LLMs, file processing, data operations.
 2.  **Generate Step:** Uses an LLM to dynamically create a new Comanda workflow YAML file.
 3.  **Process Step:** Executes another Comanda workflow file (static or dynamically generated).
 4.  **Agentic Loop Step:** Iteratively processes until an exit condition is met (for refinement, planning, autonomous tasks).
-5.  **Codebase Index Step:** Scans a repository and generates a compact Markdown index for LLM consumption.
+5.  **Multi-Loop Orchestration:** Coordinates multiple interdependent agentic loops with variable passing and creator/checker patterns.
+6.  **Codebase Index Step:** Scans a repository and generates a compact Markdown index for LLM consumption.
 
 ## Core Workflow Structure
 
@@ -322,15 +323,58 @@ agentic-loop:
 ` + "```" + `
 
 **` + "`agentic_loop`" + ` Configuration:**
+
+**Core Settings:**
 - ` + "`max_iterations`" + `: (int, default: 10) Maximum iterations before stopping.
-- ` + "`timeout_seconds`" + `: (int, default: 300) Total time limit in seconds.
+- ` + "`timeout_seconds`" + `: (int, default: 0) Total time limit in seconds. **0 = no timeout** (loop runs until max_iterations or exit condition).
 - ` + "`exit_condition`" + `: (string) How to detect completion:
   - ` + "`llm_decides`" + `: Exits when output contains "DONE", "COMPLETE", or "FINISHED"
   - ` + "`pattern_match`" + `: Exits when output matches ` + "`exit_pattern`" + ` regex
 - ` + "`exit_pattern`" + `: (string) Regex pattern for ` + "`pattern_match`" + ` condition.
 - ` + "`context_window`" + `: (int, default: 5) Number of past iterations to include in context.
+
+**File Access (REQUIRED for Claude Code):**
 - ` + "`allowed_paths`" + `: (list, **REQUIRED for file operations**) Directories where Claude Code can use tools (Read, Write, Edit, Bash, etc.). **Without this, Claude Code runs in print-only mode and CANNOT read/write files.** When generating workflows, infer paths from: the ` + "`codebase_index.root`" + ` if present, file paths mentioned in the action, or use ` + "`[.]`" + ` (current directory) as fallback.
 - ` + "`tools`" + `: (list, optional) Restrict available tools (e.g., ` + "`[Read, Glob, Grep]`" + ` for read-only access). If omitted, all tools are available.
+
+**State Persistence (for Long-Running Loops):**
+- ` + "`name`" + `: (string, **REQUIRED for stateful loops**) Unique identifier for the loop. Enables state persistence and resume capability.
+- ` + "`stateful`" + `: (bool, default: false) Enable state persistence to ` + "`~/.comanda/loop-states/{name}.json`" + `. Allows resuming after interruption.
+- ` + "`checkpoint_interval`" + `: (int, default: 5) Save state every N iterations. Lower values = more frequent saves = safer resume.
+
+**Quality Gates (Automated Validation):**
+- ` + "`quality_gates`" + `: (list, optional) Automated checks to run after each iteration. Each gate validates loop output and can trigger retry/abort/skip actions.
+
+**Quality Gate Configuration:**
+` + "```yaml" + `
+quality_gates:
+  - name: typecheck           # Gate name
+    command: "npm run typecheck"  # Shell command to execute
+    on_fail: retry            # Action: retry, abort, or skip
+    timeout: 60               # Timeout in seconds
+    retry:                    # Retry configuration (optional)
+      max_attempts: 3         # Maximum retry attempts
+      backoff_type: exponential  # linear or exponential
+      initial_delay: 5        # Initial delay in seconds
+
+  - name: security
+    type: security            # Built-in gate type (syntax, security, test)
+    on_fail: abort
+
+  - name: tests
+    command: "npm test"
+    on_fail: skip             # Continue even if this fails
+` + "```" + `
+
+**Built-in Quality Gate Types:**
+- ` + "`syntax`" + `: Checks for syntax errors (Python, JS, Go, etc.)
+- ` + "`security`" + `: Scans for hardcoded secrets, security issues
+- ` + "`test`" + `: Runs test commands with coverage reporting
+
+**Quality Gate Actions (` + "`on_fail`" + `):**
+- ` + "`retry`" + `: Retry the gate with backoff (exponential or linear)
+- ` + "`abort`" + `: Stop loop immediately and save state as "failed"
+- ` + "`skip`" + `: Log warning and continue to next iteration
 
 **Template Variables in Actions:**
 - ` + "`{{ loop.iteration }}`" + `: Current iteration number (1-based)
@@ -398,14 +442,378 @@ agentic-loop:
       output: STDOUT
 ` + "```" + `
 
+**Example: Long-Running Loop with State Persistence**
+` + "```yaml" + `
+agentic-loop:
+  config:
+    name: code-refactor-loop      # Required for stateful loops
+    stateful: true                 # Enable state persistence
+    max_iterations: 50
+    timeout_seconds: 0             # No timeout - run until complete
+    checkpoint_interval: 5         # Save every 5 iterations
+    exit_condition: llm_decides
+    allowed_paths: [./src]
+
+    quality_gates:
+      - name: syntax-check
+        type: syntax
+        on_fail: retry
+        retry:
+          max_attempts: 3
+          backoff_type: exponential
+          initial_delay: 2
+
+      - name: tests
+        command: "npm test"
+        on_fail: abort              # Stop if tests fail
+        timeout: 300
+
+  steps:
+    analyze:
+      input: STDIN
+      model: claude-code
+      action: |
+        Iteration {{ loop.iteration }} of {{ loop.total_iterations }}.
+        Analyze code and refactor one module.
+        Say DONE when all modules are refactored.
+      output: STDOUT
+` + "```" + `
+
+**Example: Quality Gates with Retry**
+` + "```yaml" + `
+code_improvement:
+  agentic_loop:
+    name: improve-code
+    stateful: true
+    max_iterations: 10
+    allowed_paths: [.]
+
+    quality_gates:
+      - name: typecheck
+        command: "npm run typecheck"
+        on_fail: retry
+        timeout: 60
+        retry:
+          max_attempts: 3
+          backoff_type: exponential
+          initial_delay: 5
+
+      - name: lint
+        command: "npm run lint"
+        on_fail: skip               # Non-critical, continue
+
+  input: STDIN
+  model: claude-code
+  action: "Improve code quality. Say COMPLETE when done."
+  output: STDOUT
+` + "```" + `
+
 **CRITICAL: When generating agentic_loop workflows with Claude Code:**
 - **ALWAYS include ` + "`allowed_paths`" + `** - Claude Code CANNOT read/write files without it
 - If the workflow uses ` + "`codebase_index`" + `, use the same ` + "`root`" + ` directory in ` + "`allowed_paths`" + `
 - If the action mentions specific file paths or directories, include those directories
 - When in doubt, use ` + "`allowed_paths: [.]`" + ` for current directory access
 - Forgetting ` + "`allowed_paths`" + ` is a common error that causes "permission denied" failures
+- For long-running tasks (hours/days), use ` + "`stateful: true`" + ` and ` + "`timeout_seconds: 0`" + `
+- **Default to ` + "`claude-code`" + ` model for agentic workflows** - it provides the best tool use and autonomous capabilities
 
-## 5. Codebase Index Step Definition (` + "`codebase_index`" + `)
+## 5. Multi-Loop Orchestration
+
+Multi-loop orchestration enables complex autonomous workflows with multiple interdependent agentic loops. This is essential for creator/checker patterns, sequential processing pipelines, and complex task decomposition.
+
+**When to use multi-loop orchestration:**
+- Creator/checker validation workflows (loop A creates, loop B validates, rerun A if validation fails)
+- Sequential data processing (collect → analyze → report)
+- Complex task decomposition (break large task into specialized sub-loops)
+- Workflows requiring variable passing between autonomous agents
+
+### Named Loops Syntax
+
+Define multiple named loops with dependencies and variable passing:
+
+` + "```yaml" + `
+loops:
+  data-collector:
+    name: data-collector
+    stateful: true
+    max_iterations: 10
+    timeout_seconds: 0
+    exit_condition: llm_decides
+    allowed_paths: [.]
+    output_state: $RAW_DATA         # Export result to variable
+
+    steps:
+      - collect:
+          input: STDIN
+          model: claude-code
+          action: "Collect data and say DONE when complete"
+          output: STDOUT
+
+  data-analyzer:
+    name: data-analyzer
+    depends_on: [data-collector]    # Wait for collector to complete
+    input_state: $RAW_DATA           # Read collector's output
+    stateful: true
+    max_iterations: 5
+    exit_condition: llm_decides
+    allowed_paths: [.]
+    output_state: $ANALYSIS          # Export analysis result
+
+    steps:
+      - analyze:
+          input: STDIN
+          model: claude-code
+          action: |
+            Analyze this data: {{ loop.previous_output }}
+            Say DONE when analysis is complete.
+          output: STDOUT
+
+  report-generator:
+    name: report-generator
+    depends_on: [data-analyzer]     # Wait for analyzer
+    input_state: $ANALYSIS           # Read analyzer's output
+    max_iterations: 1
+    allowed_paths: [.]
+
+    steps:
+      - generate:
+          input: STDIN
+          model: claude-code
+          action: "Create final report based on analysis"
+          output: STDOUT
+
+# Execute loops in dependency order (topological sort)
+execute_loops:
+  - data-collector
+  - data-analyzer
+  - report-generator
+` + "```" + `
+
+**Key Configuration Fields:**
+- ` + "`loops`" + `: (map) Named loop definitions
+- ` + "`depends_on`" + `: (list) Loops that must complete before this one starts
+- ` + "`input_state`" + `: (string) Variable to read as input (e.g., ` + "`$RAW_DATA`" + `)
+- ` + "`output_state`" + `: (string) Variable to export result to (e.g., ` + "`$ANALYSIS`" + `)
+- ` + "`execute_loops`" + `: (list) Simple execution order (dependencies override this)
+
+### Creator/Checker Pattern
+
+Advanced workflow pattern where a creator loop implements features and a checker loop validates them, with automatic rerun on failure:
+
+` + "```yaml" + `
+loops:
+  # Creator loop: implements features
+  feature-creator:
+    name: feature-creator
+    stateful: true
+    max_iterations: 3
+    timeout_seconds: 0
+    exit_condition: llm_decides
+    allowed_paths: [.]
+    output_state: $CODE
+
+    quality_gates:
+      - name: syntax
+        type: syntax
+        on_fail: abort
+
+    steps:
+      - implement:
+          input: STDIN
+          model: claude-code
+          action: |
+            Iteration {{ loop.iteration }}.
+            Implement the requested feature.
+            Say DONE when implementation is complete.
+          output: STDOUT
+
+  # Checker loop: validates implementation
+  code-checker:
+    name: code-checker
+    depends_on: [feature-creator]   # Wait for creator
+    input_state: $CODE               # Read creator's output
+    max_iterations: 1
+    exit_condition: pattern_match
+    exit_pattern: "^PASS"            # Exit when output starts with PASS
+
+    steps:
+      - review:
+          input: STDIN
+          model: claude-code
+          action: |
+            Review this implementation: {{ loop.previous_output }}
+
+            Check for:
+            - Correctness
+            - Edge cases
+            - Code quality
+            - Test coverage
+
+            Output: PASS if acceptable, or FAIL with specific issues.
+          output: STDOUT
+
+# Advanced workflow with creator/checker relationship
+workflow:
+  creator:
+    type: loop
+    loop: feature-creator
+    role: creator
+
+  checker:
+    type: loop
+    loop: code-checker
+    role: checker
+    validates: creator               # This loop validates the creator
+    on_fail: rerun_creator          # Auto-rerun creator if validation fails
+` + "```" + `
+
+**Workflow Node Configuration:**
+- ` + "`type`" + `: Always ` + "`loop`" + ` for loop nodes
+- ` + "`loop`" + `: Name of the loop to execute
+- ` + "`role`" + `: Node role (` + "`creator`" + `, ` + "`checker`" + `, ` + "`finalizer`" + `)
+- ` + "`validates`" + `: Name of the node this checker validates
+- ` + "`on_fail`" + `: Action on validation failure:
+  - ` + "`rerun_creator`" + `: Automatically rerun the creator loop (max 3 attempts)
+  - ` + "`abort`" + `: Stop workflow immediately
+  - ` + "`manual`" + `: Return for manual review
+
+**Validation Logic:**
+- Checker loop output is scanned for "PASS" or "FAIL"
+- If "PASS" found → workflow continues
+- If "FAIL" found and ` + "`on_fail: rerun_creator`" + ` → creator reruns with checker feedback
+- Maximum 3 rerun attempts (prevents infinite loops)
+
+### Dependency Graph Execution
+
+Comanda automatically executes loops in correct order using topological sort:
+
+1. **Build dependency graph** from ` + "`depends_on`" + ` relationships
+2. **Detect cycles** - fail fast if circular dependencies exist
+3. **Topological sort** using Kahn's algorithm
+4. **Execute in order** - each loop waits for its dependencies
+
+**Cycle Detection Example:**
+` + "```yaml" + `
+loops:
+  loop-a:
+    depends_on: [loop-b]
+
+  loop-b:
+    depends_on: [loop-a]
+
+execute_loops:
+  - loop-a
+  - loop-b
+
+# Error: dependency cycle detected: loop-a -> loop-b -> loop-a
+` + "```" + `
+
+### Variable Passing
+
+Variables flow between loops via ` + "`input_state`" + ` and ` + "`output_state`" + `:
+
+` + "```yaml" + `
+loops:
+  producer:
+    output_state: $MY_DATA          # Write to variable
+
+  consumer:
+    depends_on: [producer]
+    input_state: $MY_DATA            # Read from variable
+` + "```" + `
+
+**Variable Rules:**
+- Variables are stored in memory during workflow execution
+- ` + "`output_state`" + ` exports loop's final output to a variable
+- ` + "`input_state`" + ` reads variable as loop input
+- Variables persist across loop boundaries
+- Missing variable causes error (check dependencies)
+
+### Complete Example: Codebase Analysis Pipeline
+
+` + "```yaml" + `
+# Multi-loop workflow: analyze codebase → identify issues → generate report
+loops:
+  codebase-analyzer:
+    name: codebase-analyzer
+    stateful: true
+    max_iterations: 20
+    timeout_seconds: 0
+    exit_condition: llm_decides
+    allowed_paths: [/tmp/code]
+    output_state: $ANALYSIS
+
+    steps:
+      - analyze:
+          input: NA
+          model: claude-code
+          action: |
+            Analyze the codebase at /tmp/code.
+            Find patterns, architecture issues, dependencies.
+            Say DONE when analysis is complete.
+          output: STDOUT
+
+  tech-debt-finder:
+    name: tech-debt-finder
+    depends_on: [codebase-analyzer]
+    input_state: $ANALYSIS
+    stateful: true
+    max_iterations: 10
+    timeout_seconds: 0
+    exit_condition: llm_decides
+    allowed_paths: [/tmp/code]
+    output_state: $TECH_DEBT
+
+    steps:
+      - identify:
+          input: STDIN
+          model: claude-code
+          action: |
+            Based on this analysis: {{ loop.previous_output }}
+
+            Identify tech debt and anti-patterns:
+            - Code smells
+            - Security issues
+            - Performance bottlenecks
+            - Maintainability problems
+
+            Say DONE when complete.
+          output: STDOUT
+
+  report-writer:
+    name: report-writer
+    depends_on: [tech-debt-finder]
+    input_state: $TECH_DEBT
+    max_iterations: 1
+    allowed_paths: [.]
+
+    steps:
+      - write:
+          input: STDIN
+          model: claude-code
+          action: |
+            Create a comprehensive markdown report:
+            {{ loop.previous_output }}
+
+            Save to ./tech-debt-report.md
+          output: STDOUT
+
+execute_loops:
+  - codebase-analyzer
+  - tech-debt-finder
+  - report-writer
+` + "```" + `
+
+**CRITICAL: When generating multi-loop workflows:**
+- **Use ` + "`claude-code`" + ` as default model** for agentic capabilities
+- **Always include ` + "`allowed_paths`" + `** for each loop that needs file access
+- **Use ` + "`stateful: true`" + `** for long-running loops
+- **Set ` + "`timeout_seconds: 0`" + `** for unlimited runtime
+- **Use meaningful variable names** (` + "`$RAW_DATA`" + `, not ` + "`$OUTPUT`" + `)
+- **Infer ` + "`allowed_paths`" + ` from user prompt** (e.g., "/tmp/code" → ` + "`allowed_paths: [/tmp/code]`" + `)
+- **Default ` + "`checkpoint_interval: 5`" + `** for safety
+
+## 6. Codebase Index Step Definition (` + "`codebase_index`" + `)
 
 This step scans a repository and generates a compact Markdown index optimized for LLM consumption. It supports multiple programming languages and exposes workflow variables for downstream steps.
 
@@ -741,12 +1149,13 @@ This guide specifies the YAML-based Domain Specific Language (DSL) for Comanda w
 
 ## Overview
 
-Comanda workflows consist of one or more named steps. Each step performs an operation. There are five main types of steps:
+Comanda workflows consist of one or more named steps. Each step performs an operation. There are six main types of steps:
 1.  **Standard Processing Step:** Involves LLMs, file processing, data operations.
 2.  **Generate Step:** Uses an LLM to dynamically create a new Comanda workflow YAML file.
 3.  **Process Step:** Executes another Comanda workflow file (static or dynamically generated).
 4.  **Agentic Loop Step:** Iteratively processes until an exit condition is met (for refinement, planning, autonomous tasks).
-5.  **Codebase Index Step:** Scans a repository and generates a compact Markdown index for LLM consumption.
+5.  **Multi-Loop Orchestration:** Coordinates multiple interdependent agentic loops with variable passing and creator/checker patterns.
+6.  **Codebase Index Step:** Scans a repository and generates a compact Markdown index for LLM consumption.
 
 ## Core Workflow Structure
 
@@ -898,15 +1307,58 @@ agentic-loop:
 ` + "```" + `
 
 **` + "`agentic_loop`" + ` Configuration:**
+
+**Core Settings:**
 - ` + "`max_iterations`" + `: (int, default: 10) Maximum iterations before stopping.
-- ` + "`timeout_seconds`" + `: (int, default: 300) Total time limit in seconds.
+- ` + "`timeout_seconds`" + `: (int, default: 0) Total time limit in seconds. **0 = no timeout** (loop runs until max_iterations or exit condition).
 - ` + "`exit_condition`" + `: (string) How to detect completion:
   - ` + "`llm_decides`" + `: Exits when output contains "DONE", "COMPLETE", or "FINISHED"
   - ` + "`pattern_match`" + `: Exits when output matches ` + "`exit_pattern`" + ` regex
 - ` + "`exit_pattern`" + `: (string) Regex pattern for ` + "`pattern_match`" + ` condition.
 - ` + "`context_window`" + `: (int, default: 5) Number of past iterations to include in context.
+
+**File Access (REQUIRED for Claude Code):**
 - ` + "`allowed_paths`" + `: (list, **REQUIRED for file operations**) Directories where Claude Code can use tools (Read, Write, Edit, Bash, etc.). **Without this, Claude Code runs in print-only mode and CANNOT read/write files.** When generating workflows, infer paths from: the ` + "`codebase_index.root`" + ` if present, file paths mentioned in the action, or use ` + "`[.]`" + ` (current directory) as fallback.
 - ` + "`tools`" + `: (list, optional) Restrict available tools (e.g., ` + "`[Read, Glob, Grep]`" + ` for read-only access). If omitted, all tools are available.
+
+**State Persistence (for Long-Running Loops):**
+- ` + "`name`" + `: (string, **REQUIRED for stateful loops**) Unique identifier for the loop. Enables state persistence and resume capability.
+- ` + "`stateful`" + `: (bool, default: false) Enable state persistence to ` + "`~/.comanda/loop-states/{name}.json`" + `. Allows resuming after interruption.
+- ` + "`checkpoint_interval`" + `: (int, default: 5) Save state every N iterations. Lower values = more frequent saves = safer resume.
+
+**Quality Gates (Automated Validation):**
+- ` + "`quality_gates`" + `: (list, optional) Automated checks to run after each iteration. Each gate validates loop output and can trigger retry/abort/skip actions.
+
+**Quality Gate Configuration:**
+` + "```yaml" + `
+quality_gates:
+  - name: typecheck           # Gate name
+    command: "npm run typecheck"  # Shell command to execute
+    on_fail: retry            # Action: retry, abort, or skip
+    timeout: 60               # Timeout in seconds
+    retry:                    # Retry configuration (optional)
+      max_attempts: 3         # Maximum retry attempts
+      backoff_type: exponential  # linear or exponential
+      initial_delay: 5        # Initial delay in seconds
+
+  - name: security
+    type: security            # Built-in gate type (syntax, security, test)
+    on_fail: abort
+
+  - name: tests
+    command: "npm test"
+    on_fail: skip             # Continue even if this fails
+` + "```" + `
+
+**Built-in Quality Gate Types:**
+- ` + "`syntax`" + `: Checks for syntax errors (Python, JS, Go, etc.)
+- ` + "`security`" + `: Scans for hardcoded secrets, security issues
+- ` + "`test`" + `: Runs test commands with coverage reporting
+
+**Quality Gate Actions (` + "`on_fail`" + `):**
+- ` + "`retry`" + `: Retry the gate with backoff (exponential or linear)
+- ` + "`abort`" + `: Stop loop immediately and save state as "failed"
+- ` + "`skip`" + `: Log warning and continue to next iteration
 
 **Template Variables in Actions:**
 - ` + "`{{ loop.iteration }}`" + `: Current iteration number (1-based)
@@ -974,14 +1426,378 @@ agentic-loop:
       output: STDOUT
 ` + "```" + `
 
+**Example: Long-Running Loop with State Persistence**
+` + "```yaml" + `
+agentic-loop:
+  config:
+    name: code-refactor-loop      # Required for stateful loops
+    stateful: true                 # Enable state persistence
+    max_iterations: 50
+    timeout_seconds: 0             # No timeout - run until complete
+    checkpoint_interval: 5         # Save every 5 iterations
+    exit_condition: llm_decides
+    allowed_paths: [./src]
+
+    quality_gates:
+      - name: syntax-check
+        type: syntax
+        on_fail: retry
+        retry:
+          max_attempts: 3
+          backoff_type: exponential
+          initial_delay: 2
+
+      - name: tests
+        command: "npm test"
+        on_fail: abort              # Stop if tests fail
+        timeout: 300
+
+  steps:
+    analyze:
+      input: STDIN
+      model: claude-code
+      action: |
+        Iteration {{ loop.iteration }} of {{ loop.total_iterations }}.
+        Analyze code and refactor one module.
+        Say DONE when all modules are refactored.
+      output: STDOUT
+` + "```" + `
+
+**Example: Quality Gates with Retry**
+` + "```yaml" + `
+code_improvement:
+  agentic_loop:
+    name: improve-code
+    stateful: true
+    max_iterations: 10
+    allowed_paths: [.]
+
+    quality_gates:
+      - name: typecheck
+        command: "npm run typecheck"
+        on_fail: retry
+        timeout: 60
+        retry:
+          max_attempts: 3
+          backoff_type: exponential
+          initial_delay: 5
+
+      - name: lint
+        command: "npm run lint"
+        on_fail: skip               # Non-critical, continue
+
+  input: STDIN
+  model: claude-code
+  action: "Improve code quality. Say COMPLETE when done."
+  output: STDOUT
+` + "```" + `
+
 **CRITICAL: When generating agentic_loop workflows with Claude Code:**
 - **ALWAYS include ` + "`allowed_paths`" + `** - Claude Code CANNOT read/write files without it
 - If the workflow uses ` + "`codebase_index`" + `, use the same ` + "`root`" + ` directory in ` + "`allowed_paths`" + `
 - If the action mentions specific file paths or directories, include those directories
 - When in doubt, use ` + "`allowed_paths: [.]`" + ` for current directory access
 - Forgetting ` + "`allowed_paths`" + ` is a common error that causes "permission denied" failures
+- For long-running tasks (hours/days), use ` + "`stateful: true`" + ` and ` + "`timeout_seconds: 0`" + `
+- **Default to ` + "`claude-code`" + ` model for agentic workflows** - it provides the best tool use and autonomous capabilities
 
-## 5. Codebase Index Step Definition (` + "`codebase_index`" + `)
+## 5. Multi-Loop Orchestration
+
+Multi-loop orchestration enables complex autonomous workflows with multiple interdependent agentic loops. This is essential for creator/checker patterns, sequential processing pipelines, and complex task decomposition.
+
+**When to use multi-loop orchestration:**
+- Creator/checker validation workflows (loop A creates, loop B validates, rerun A if validation fails)
+- Sequential data processing (collect → analyze → report)
+- Complex task decomposition (break large task into specialized sub-loops)
+- Workflows requiring variable passing between autonomous agents
+
+### Named Loops Syntax
+
+Define multiple named loops with dependencies and variable passing:
+
+` + "```yaml" + `
+loops:
+  data-collector:
+    name: data-collector
+    stateful: true
+    max_iterations: 10
+    timeout_seconds: 0
+    exit_condition: llm_decides
+    allowed_paths: [.]
+    output_state: $RAW_DATA         # Export result to variable
+
+    steps:
+      - collect:
+          input: STDIN
+          model: claude-code
+          action: "Collect data and say DONE when complete"
+          output: STDOUT
+
+  data-analyzer:
+    name: data-analyzer
+    depends_on: [data-collector]    # Wait for collector to complete
+    input_state: $RAW_DATA           # Read collector's output
+    stateful: true
+    max_iterations: 5
+    exit_condition: llm_decides
+    allowed_paths: [.]
+    output_state: $ANALYSIS          # Export analysis result
+
+    steps:
+      - analyze:
+          input: STDIN
+          model: claude-code
+          action: |
+            Analyze this data: {{ loop.previous_output }}
+            Say DONE when analysis is complete.
+          output: STDOUT
+
+  report-generator:
+    name: report-generator
+    depends_on: [data-analyzer]     # Wait for analyzer
+    input_state: $ANALYSIS           # Read analyzer's output
+    max_iterations: 1
+    allowed_paths: [.]
+
+    steps:
+      - generate:
+          input: STDIN
+          model: claude-code
+          action: "Create final report based on analysis"
+          output: STDOUT
+
+# Execute loops in dependency order (topological sort)
+execute_loops:
+  - data-collector
+  - data-analyzer
+  - report-generator
+` + "```" + `
+
+**Key Configuration Fields:**
+- ` + "`loops`" + `: (map) Named loop definitions
+- ` + "`depends_on`" + `: (list) Loops that must complete before this one starts
+- ` + "`input_state`" + `: (string) Variable to read as input (e.g., ` + "`$RAW_DATA`" + `)
+- ` + "`output_state`" + `: (string) Variable to export result to (e.g., ` + "`$ANALYSIS`" + `)
+- ` + "`execute_loops`" + `: (list) Simple execution order (dependencies override this)
+
+### Creator/Checker Pattern
+
+Advanced workflow pattern where a creator loop implements features and a checker loop validates them, with automatic rerun on failure:
+
+` + "```yaml" + `
+loops:
+  # Creator loop: implements features
+  feature-creator:
+    name: feature-creator
+    stateful: true
+    max_iterations: 3
+    timeout_seconds: 0
+    exit_condition: llm_decides
+    allowed_paths: [.]
+    output_state: $CODE
+
+    quality_gates:
+      - name: syntax
+        type: syntax
+        on_fail: abort
+
+    steps:
+      - implement:
+          input: STDIN
+          model: claude-code
+          action: |
+            Iteration {{ loop.iteration }}.
+            Implement the requested feature.
+            Say DONE when implementation is complete.
+          output: STDOUT
+
+  # Checker loop: validates implementation
+  code-checker:
+    name: code-checker
+    depends_on: [feature-creator]   # Wait for creator
+    input_state: $CODE               # Read creator's output
+    max_iterations: 1
+    exit_condition: pattern_match
+    exit_pattern: "^PASS"            # Exit when output starts with PASS
+
+    steps:
+      - review:
+          input: STDIN
+          model: claude-code
+          action: |
+            Review this implementation: {{ loop.previous_output }}
+
+            Check for:
+            - Correctness
+            - Edge cases
+            - Code quality
+            - Test coverage
+
+            Output: PASS if acceptable, or FAIL with specific issues.
+          output: STDOUT
+
+# Advanced workflow with creator/checker relationship
+workflow:
+  creator:
+    type: loop
+    loop: feature-creator
+    role: creator
+
+  checker:
+    type: loop
+    loop: code-checker
+    role: checker
+    validates: creator               # This loop validates the creator
+    on_fail: rerun_creator          # Auto-rerun creator if validation fails
+` + "```" + `
+
+**Workflow Node Configuration:**
+- ` + "`type`" + `: Always ` + "`loop`" + ` for loop nodes
+- ` + "`loop`" + `: Name of the loop to execute
+- ` + "`role`" + `: Node role (` + "`creator`" + `, ` + "`checker`" + `, ` + "`finalizer`" + `)
+- ` + "`validates`" + `: Name of the node this checker validates
+- ` + "`on_fail`" + `: Action on validation failure:
+  - ` + "`rerun_creator`" + `: Automatically rerun the creator loop (max 3 attempts)
+  - ` + "`abort`" + `: Stop workflow immediately
+  - ` + "`manual`" + `: Return for manual review
+
+**Validation Logic:**
+- Checker loop output is scanned for "PASS" or "FAIL"
+- If "PASS" found → workflow continues
+- If "FAIL" found and ` + "`on_fail: rerun_creator`" + ` → creator reruns with checker feedback
+- Maximum 3 rerun attempts (prevents infinite loops)
+
+### Dependency Graph Execution
+
+Comanda automatically executes loops in correct order using topological sort:
+
+1. **Build dependency graph** from ` + "`depends_on`" + ` relationships
+2. **Detect cycles** - fail fast if circular dependencies exist
+3. **Topological sort** using Kahn's algorithm
+4. **Execute in order** - each loop waits for its dependencies
+
+**Cycle Detection Example:**
+` + "```yaml" + `
+loops:
+  loop-a:
+    depends_on: [loop-b]
+
+  loop-b:
+    depends_on: [loop-a]
+
+execute_loops:
+  - loop-a
+  - loop-b
+
+# Error: dependency cycle detected: loop-a -> loop-b -> loop-a
+` + "```" + `
+
+### Variable Passing
+
+Variables flow between loops via ` + "`input_state`" + ` and ` + "`output_state`" + `:
+
+` + "```yaml" + `
+loops:
+  producer:
+    output_state: $MY_DATA          # Write to variable
+
+  consumer:
+    depends_on: [producer]
+    input_state: $MY_DATA            # Read from variable
+` + "```" + `
+
+**Variable Rules:**
+- Variables are stored in memory during workflow execution
+- ` + "`output_state`" + ` exports loop's final output to a variable
+- ` + "`input_state`" + ` reads variable as loop input
+- Variables persist across loop boundaries
+- Missing variable causes error (check dependencies)
+
+### Complete Example: Codebase Analysis Pipeline
+
+` + "```yaml" + `
+# Multi-loop workflow: analyze codebase → identify issues → generate report
+loops:
+  codebase-analyzer:
+    name: codebase-analyzer
+    stateful: true
+    max_iterations: 20
+    timeout_seconds: 0
+    exit_condition: llm_decides
+    allowed_paths: [/tmp/code]
+    output_state: $ANALYSIS
+
+    steps:
+      - analyze:
+          input: NA
+          model: claude-code
+          action: |
+            Analyze the codebase at /tmp/code.
+            Find patterns, architecture issues, dependencies.
+            Say DONE when analysis is complete.
+          output: STDOUT
+
+  tech-debt-finder:
+    name: tech-debt-finder
+    depends_on: [codebase-analyzer]
+    input_state: $ANALYSIS
+    stateful: true
+    max_iterations: 10
+    timeout_seconds: 0
+    exit_condition: llm_decides
+    allowed_paths: [/tmp/code]
+    output_state: $TECH_DEBT
+
+    steps:
+      - identify:
+          input: STDIN
+          model: claude-code
+          action: |
+            Based on this analysis: {{ loop.previous_output }}
+
+            Identify tech debt and anti-patterns:
+            - Code smells
+            - Security issues
+            - Performance bottlenecks
+            - Maintainability problems
+
+            Say DONE when complete.
+          output: STDOUT
+
+  report-writer:
+    name: report-writer
+    depends_on: [tech-debt-finder]
+    input_state: $TECH_DEBT
+    max_iterations: 1
+    allowed_paths: [.]
+
+    steps:
+      - write:
+          input: STDIN
+          model: claude-code
+          action: |
+            Create a comprehensive markdown report:
+            {{ loop.previous_output }}
+
+            Save to ./tech-debt-report.md
+          output: STDOUT
+
+execute_loops:
+  - codebase-analyzer
+  - tech-debt-finder
+  - report-writer
+` + "```" + `
+
+**CRITICAL: When generating multi-loop workflows:**
+- **Use ` + "`claude-code`" + ` as default model** for agentic capabilities
+- **Always include ` + "`allowed_paths`" + `** for each loop that needs file access
+- **Use ` + "`stateful: true`" + `** for long-running loops
+- **Set ` + "`timeout_seconds: 0`" + `** for unlimited runtime
+- **Use meaningful variable names** (` + "`$RAW_DATA`" + `, not ` + "`$OUTPUT`" + `)
+- **Infer ` + "`allowed_paths`" + ` from user prompt** (e.g., "/tmp/code" → ` + "`allowed_paths: [/tmp/code]`" + `)
+- **Default ` + "`checkpoint_interval: 5`" + `** for safety
+
+## 6. Codebase Index Step Definition (` + "`codebase_index`" + `)
 
 This step scans a repository and generates a compact Markdown index optimized for LLM consumption. It supports multiple programming languages and exposes workflow variables for downstream steps.
 
