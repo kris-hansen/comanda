@@ -194,12 +194,21 @@ func (c *ClaudeCodeProvider) SendPromptAgentic(modelName string, prompt string, 
 	c.debugf("Preparing to send agentic prompt via Claude Code")
 	c.debugf("Prompt length: %d characters, allowed paths: %v, tools: %v", len(prompt), allowedPaths, tools)
 
+	// Expand paths (handle ~, $HOME, etc.) before validation
+	expandedPaths, err := fileutil.ExpandPaths(allowedPaths)
+	if err != nil {
+		return "", fmt.Errorf("failed to expand allowed_paths: %w", err)
+	}
+
 	// Validate all allowed paths exist (do this first to fail fast on bad config)
-	for _, path := range allowedPaths {
+	for i, path := range expandedPaths {
 		if _, err := os.Stat(path); os.IsNotExist(err) {
-			return "", fmt.Errorf("allowed_path does not exist: %s", path)
+			return "", fmt.Errorf("allowed_path does not exist: %s (expanded from %s)", path, allowedPaths[i])
 		}
 	}
+
+	// Use expanded paths from here on
+	allowedPaths = expandedPaths
 
 	if c.binaryPath == "" {
 		if err := c.Configure("LOCAL"); err != nil {
