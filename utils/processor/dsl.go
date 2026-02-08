@@ -51,6 +51,7 @@ type Processor struct {
 	externalMemory       string             // External memory context (e.g., from OpenAI messages)
 	mu                   sync.Mutex         // Mutex for thread-safe debug logging
 	currentAgenticConfig *AgenticLoopConfig // Current agentic loop config (set during agentic loop execution)
+	streamLog            *StreamLogger      // Stream logger for real-time monitoring of long operations
 }
 
 // setAgenticConfig sets the current agentic config (thread-safe)
@@ -344,6 +345,27 @@ func NewProcessor(dslConfig *DSLConfig, envConfig *config.EnvConfig, serverConfi
 func (p *Processor) SetProgressWriter(w ProgressWriter) {
 	p.progress = w
 	p.spinner.SetProgressWriter(w)
+}
+
+// SetStreamLog sets up stream logging to a file for real-time monitoring
+func (p *Processor) SetStreamLog(path string) error {
+	if path == "" {
+		return nil
+	}
+	logger, err := NewStreamLogger(path)
+	if err != nil {
+		return err
+	}
+	p.streamLog = logger
+	p.debugf("Stream logging enabled: %s", path)
+	return nil
+}
+
+// CloseStreamLog closes the stream log file
+func (p *Processor) CloseStreamLog() {
+	if p.streamLog != nil {
+		p.streamLog.Close()
+	}
 }
 
 // SetLastOutput sets the last output value, useful for initializing with STDIN data

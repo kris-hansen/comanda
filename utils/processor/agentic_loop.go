@@ -27,6 +27,16 @@ func (p *Processor) processAgenticLoop(loopName string, config *AgenticLoopConfi
 func (p *Processor) processAgenticLoopWithFile(loopName string, config *AgenticLoopConfig, initialInput string, workflowFile string) (string, error) {
 	p.debugf("Starting agentic loop: %s", loopName)
 
+	// Stream log header
+	if p.streamLog != nil && p.streamLog.IsEnabled() {
+		p.streamLog.LogSection(fmt.Sprintf("AGENTIC LOOP: %s", loopName))
+		p.streamLog.Log("Max iterations: %d", config.MaxIterations)
+		p.streamLog.Log("Exit condition: %s", config.ExitCondition)
+		if len(config.AllowedPaths) > 0 {
+			p.streamLog.Log("Allowed paths: %v", config.AllowedPaths)
+		}
+	}
+
 	// Check if agentic tools are enabled and we have allowed paths
 	if len(config.AllowedPaths) > 0 {
 		if p.envConfig != nil && !p.envConfig.IsAgenticToolsAllowed() {
@@ -132,6 +142,11 @@ func (p *Processor) processAgenticLoopWithFile(loopName string, config *AgenticL
 		loopCtx.Iteration++
 		p.debugf("Agentic loop '%s' iteration %d/%d", loopName, loopCtx.Iteration, maxIterations)
 
+		// Stream log iteration start
+		if p.streamLog != nil {
+			p.streamLog.LogIteration(loopCtx.Iteration, maxIterations, loopName)
+		}
+
 		// Set loop template variables
 		p.setLoopVariables(loopCtx, maxIterations)
 
@@ -142,6 +157,10 @@ func (p *Processor) processAgenticLoopWithFile(loopName string, config *AgenticL
 		output, err := p.executeLoopSteps(config.Steps, iterationInput)
 		if err != nil {
 			finalErr = fmt.Errorf("error in agentic loop '%s' iteration %d: %w", loopName, loopCtx.Iteration, err)
+			// Stream log error
+			if p.streamLog != nil {
+				p.streamLog.LogError(finalErr)
+			}
 			// Save failed state
 			if config.Stateful {
 				state := loopStateFromContext(loopCtx, config.Name, config, workflowFile, p.variables)
@@ -151,6 +170,11 @@ func (p *Processor) processAgenticLoopWithFile(loopName string, config *AgenticL
 				}
 			}
 			return "", finalErr
+		}
+
+		// Stream log iteration output
+		if p.streamLog != nil {
+			p.streamLog.LogOutput(output, 50) // Show first 50 lines
 		}
 
 		// Record this iteration
@@ -207,6 +231,10 @@ func (p *Processor) processAgenticLoopWithFile(loopName string, config *AgenticL
 		shouldExit, reason := p.checkExitCondition(config, output)
 		if shouldExit {
 			p.debugf("Agentic loop '%s' exiting: %s", loopName, reason)
+			// Stream log exit
+			if p.streamLog != nil {
+				p.streamLog.LogExit(reason)
+			}
 			break
 		}
 	}
