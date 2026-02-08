@@ -20,6 +20,9 @@ var runtimeDir string
 // Variable substitution flags
 var varsFlags []string
 
+// Stream log file for real-time monitoring
+var streamLogFile string
+
 var processCmd = &cobra.Command{
 	Use:   "process <workflow.yaml> [additional workflows...]",
 	Short: "Execute one or more workflow files",
@@ -46,7 +49,11 @@ Input can be provided via:
   comanda process workflow.yaml --vars filename=/path/to/file.txt
 
   # Map STDIN to a variable
-  cat data.txt | comanda process workflow.yaml --vars data=STDIN`,
+  cat data.txt | comanda process workflow.yaml --vars data=STDIN
+
+  # Monitor long-running agentic loops in real-time
+  comanda process agentic.yaml --stream-log /tmp/progress.log
+  # In another terminal: tail -f /tmp/progress.log`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		// The environment configuration is already loaded in rootCmd's PersistentPreRunE
@@ -110,6 +117,16 @@ Input can be provided via:
 			cliVars := parseVarsFlags(varsFlags, stdinData)
 
 			proc := processor.NewProcessor(&dslConfig, envConfig, serverConfig, verbose, runtimeDir, cliVars)
+
+			// Set up stream logging if requested
+			if streamLogFile != "" {
+				if err := proc.SetStreamLog(streamLogFile); err != nil {
+					log.Printf("Warning: Failed to set up stream log: %v\n", err)
+				} else {
+					log.Printf("Stream logging to: %s (use 'tail -f %s' to monitor)\n", streamLogFile, streamLogFile)
+				}
+				defer proc.CloseStreamLog()
+			}
 
 			// If we have STDIN data, set it as initial output
 			if stdinData != "" {
@@ -233,6 +250,9 @@ func init() {
 
 	// Add variable substitution flag
 	processCmd.Flags().StringArrayVar(&varsFlags, "vars", []string{}, "Variable substitution in format key=value (can be repeated, use STDIN as value to map stdin)")
+
+	// Add stream log flag for real-time monitoring of long-running operations
+	processCmd.Flags().StringVar(&streamLogFile, "stream-log", "", "Write real-time progress to file (use with tail -f for monitoring)")
 }
 
 // parseVarsFlags parses the --vars flags into a map, handling STDIN as a special value
