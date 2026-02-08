@@ -321,27 +321,43 @@ func (c *ClaudeCodeProvider) executeCommand(args []string, workDir string) (stri
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
+	c.debugf("Starting claude command in %s", workDir)
+	startTime := time.Now()
+
 	// Set a generous timeout for agentic tasks
 	done := make(chan error, 1)
 	go func() {
 		done <- cmd.Run()
 	}()
 
-	// 10 minute timeout for complex tasks
-	timeout := 10 * time.Minute
-	select {
-	case err := <-done:
-		if err != nil {
-			stderrStr := stderr.String()
-			c.debugf("Command failed: %v, stderr: %s", err, stderrStr)
-			return "", fmt.Errorf("claude command failed: %w (stderr: %s)", err, stderrStr)
+	// Progress ticker - log every 30 seconds
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	// 30 minute timeout for complex tasks (increased from 10)
+	timeout := 30 * time.Minute
+	for {
+		select {
+		case err := <-done:
+			elapsed := time.Since(startTime).Round(time.Second)
+			if err != nil {
+				stderrStr := stderr.String()
+				c.debugf("Command failed after %v: %v, stderr: %s", elapsed, err, stderrStr)
+				return "", fmt.Errorf("claude command failed: %w (stderr: %s)", err, stderrStr)
+			}
+			c.debugf("Command completed successfully in %v", elapsed)
+			return stdout.String(), nil
+		case <-ticker.C:
+			elapsed := time.Since(startTime).Round(time.Second)
+			stdoutLen := stdout.Len()
+			stderrLen := stderr.Len()
+			c.debugf("Claude still running... %v elapsed (stdout: %d bytes, stderr: %d bytes)", elapsed, stdoutLen, stderrLen)
+		case <-time.After(timeout):
+			if cmd.Process != nil {
+				_ = cmd.Process.Kill()
+			}
+			return "", fmt.Errorf("claude command timed out after %v", timeout)
 		}
-		return stdout.String(), nil
-	case <-time.After(timeout):
-		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
-		}
-		return "", fmt.Errorf("claude command timed out after %v", timeout)
 	}
 }
 

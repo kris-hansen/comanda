@@ -323,8 +323,46 @@ func (p *Processor) executeLoopSteps(steps []Step, input string) (string, error)
 	// Set the input for the first step
 	p.lastOutput = input
 
-	for _, step := range steps {
+	for i, step := range steps {
+		// Log step start
+		if p.streamLog != nil {
+			stepName := step.Name
+			if stepName == "" {
+				stepName = fmt.Sprintf("step-%d", i+1)
+			}
+			model := fmt.Sprintf("%v", step.Config.Model)
+			if model == "" || model == "<nil>" {
+				model = "(default)"
+			}
+			p.streamLog.Log("→ Starting %s [model: %s]", stepName, model)
+			if step.Config.Action != nil {
+				p.streamLog.Log("  Action: %v", step.Config.Action)
+			}
+			inputPreview := p.lastOutput
+			if len(inputPreview) > 200 {
+				inputPreview = inputPreview[:200] + "..."
+			}
+			p.streamLog.Log("  Input: %s", inputPreview)
+		}
+
+		stepStart := time.Now()
 		result, err := p.processStep(step, false, "")
+
+		// Log step completion
+		if p.streamLog != nil {
+			elapsed := time.Since(stepStart)
+			if err != nil {
+				p.streamLog.Log("✖ Step failed after %v: %v", elapsed.Round(time.Second), err)
+			} else {
+				outputPreview := result
+				if len(outputPreview) > 300 {
+					outputPreview = outputPreview[:300] + "..."
+				}
+				p.streamLog.Log("✓ Step completed in %v", elapsed.Round(time.Second))
+				p.streamLog.Log("  Output: %s", outputPreview)
+			}
+		}
+
 		if err != nil {
 			return "", err
 		}
