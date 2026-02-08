@@ -56,7 +56,7 @@ func (s *StreamLogger) Log(format string, args ...interface{}) {
 	timestamp := time.Now().Format("15:04:05")
 	message := fmt.Sprintf(format, args...)
 	fmt.Fprintf(s.file, "[%s] %s\n", timestamp, message)
-	s.file.Sync() // Flush immediately for tail -f
+	_ = s.file.Sync() // Flush immediately for tail -f
 }
 
 // LogSection writes a section header to the stream log
