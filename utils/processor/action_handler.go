@@ -99,8 +99,12 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 					p.debugf("Using agentic mode with Claude Code (paths: %v, tools: %v)",
 						agenticConfig.AllowedPaths, agenticConfig.Tools)
 					// Pass stream log path to claude-code for debug visibility
-					if streamLogPath := p.GetStreamLogPath(); streamLogPath != "" {
-						claudeCode.SetDebugFile(streamLogPath + ".claude-debug")
+					streamLogPath := p.GetStreamLogPath()
+					p.debugf("Stream log path: %q", streamLogPath)
+					if streamLogPath != "" {
+						debugPath := streamLogPath + ".claude-debug"
+						p.debugf("Setting claude-code debug file: %s", debugPath)
+						claudeCode.SetDebugFile(debugPath)
 					}
 					result, err := claudeCode.SendPromptAgentic(modelName, action,
 						agenticConfig.AllowedPaths, agenticConfig.Tools, p.runtimeDir)
@@ -269,8 +273,12 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 				if claudeCode, ok := configuredProvider.(*models.ClaudeCodeProvider); ok {
 					p.debugf("Using agentic mode with Claude Code for non-file inputs")
 					// Pass stream log path to claude-code for debug visibility
-					if streamLogPath := p.GetStreamLogPath(); streamLogPath != "" {
-						claudeCode.SetDebugFile(streamLogPath + ".claude-debug")
+					streamLogPath := p.GetStreamLogPath()
+					p.debugf("Stream log path (non-file): %q", streamLogPath)
+					if streamLogPath != "" {
+						debugPath := streamLogPath + ".claude-debug"
+						p.debugf("Setting claude-code debug file: %s", debugPath)
+						claudeCode.SetDebugFile(debugPath)
 					}
 					result, err := claudeCode.SendPromptAgentic(modelName, combinedPrompt,
 						agenticConfig.AllowedPaths, agenticConfig.Tools, p.runtimeDir)

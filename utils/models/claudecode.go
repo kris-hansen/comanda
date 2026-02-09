@@ -286,7 +286,10 @@ func (c *ClaudeCodeProvider) buildArgsAgentic(modelName string, prompt string, a
 
 	// Add debug file for streaming visibility into tool calls
 	if c.debugFile != "" {
+		c.debugf("Adding --debug-file flag: %s", c.debugFile)
 		args = append(args, "--debug-file", c.debugFile)
+	} else {
+		c.debugf("No debug file set for agentic mode")
 	}
 
 	// Add allowed paths for tool access scope
