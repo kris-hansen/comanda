@@ -40,6 +40,9 @@ func (m *Manager) synthesize(scan *ScanResult) (string, error) {
 	// 6. Important files (always include)
 	m.writeImportantFiles(&sb, scan)
 
+	// 6.5. Token budget warnings (for large files)
+	m.writeTokenBudget(&sb, scan)
+
 	// 7. Operational notes (if found)
 	m.writeOperationalNotes(&sb, scan)
 
@@ -541,6 +544,47 @@ func (m *Manager) detectConventions(scan *ScanResult) []string {
 	}
 
 	return hints
+}
+
+// writeTokenBudget writes the token budget section for large files
+func (m *Manager) writeTokenBudget(sb *strings.Builder, scan *ScanResult) {
+	var largeFiles, oversizedFiles []*FileEntry
+
+	// Categorize files by token budget
+	for _, f := range scan.Candidates {
+		switch f.TokenBudgetCategory() {
+		case "large":
+			largeFiles = append(largeFiles, f)
+		case "oversized":
+			oversizedFiles = append(oversizedFiles, f)
+		}
+	}
+
+	// Only write section if there are files to warn about
+	if len(largeFiles) == 0 && len(oversizedFiles) == 0 {
+		return
+	}
+
+	sb.WriteString("## ⚠️ Token Budget\n\n")
+	sb.WriteString("Some files exceed recommended token limits for single reads.\n\n")
+
+	if len(oversizedFiles) > 0 {
+		sb.WriteString("### ❌ Oversized (>25k tokens) — Use grep or chunked reads\n\n")
+		for _, f := range oversizedFiles {
+			sb.WriteString(fmt.Sprintf("- `%s` (~%dk tokens)\n", f.Path, f.EstimatedTokens/1000))
+		}
+		sb.WriteString("\n")
+	}
+
+	if len(largeFiles) > 0 {
+		sb.WriteString("### ⚡ Large (10k-25k tokens) — Read with care\n\n")
+		for _, f := range largeFiles {
+			sb.WriteString(fmt.Sprintf("- `%s` (~%dk tokens)\n", f.Path, f.EstimatedTokens/1000))
+		}
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString("**Tip:** For oversized files, use `grep` to find relevant sections, or read with `offset` and `limit` parameters.\n\n")
 }
 
 // writeFooter writes the footer metadata section
