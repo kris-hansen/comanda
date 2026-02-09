@@ -112,6 +112,9 @@ type FileEntry struct {
 	ModTime time.Time
 	Hash    string // xxhash or sha256 depending on config
 
+	// Token estimation (Size / 4 as rough approximation)
+	EstimatedTokens int
+
 	// Scoring
 	Score        int
 	Depth        int
@@ -124,6 +127,23 @@ type FileEntry struct {
 
 	// Extracted symbols (populated during extraction phase)
 	Symbols *SymbolInfo
+}
+
+// Token budget thresholds
+const (
+	TokenThresholdSafe    = 10000  // Files under this are safe to read fully
+	TokenThresholdLarge   = 25000  // Files under this can be read with care
+	TokenThresholdMax     = 25000  // Claude-code's max file read limit
+)
+
+// TokenBudgetCategory returns the token budget category for a file
+func (f *FileEntry) TokenBudgetCategory() string {
+	if f.EstimatedTokens < TokenThresholdSafe {
+		return "safe"
+	} else if f.EstimatedTokens < TokenThresholdLarge {
+		return "large"
+	}
+	return "oversized"
 }
 
 // DirNode represents a directory in the tree structure

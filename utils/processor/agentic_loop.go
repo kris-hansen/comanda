@@ -43,6 +43,26 @@ func (p *Processor) processAgenticLoopWithFile(loopName string, config *AgenticL
 			return "", fmt.Errorf("agentic tool use is disabled in global config (security.allow_agentic_tools: false)")
 		}
 		p.debugf("Agentic tools enabled with allowed paths: %v, tools: %v", config.AllowedPaths, config.Tools)
+
+		// Generate file manifest for token awareness
+		manifest, err := GenerateFileManifest(config.AllowedPaths)
+		if err != nil {
+			p.debugf("Warning: failed to generate file manifest: %v", err)
+		} else if len(manifest.Oversized) > 0 || len(manifest.LargeFiles) > 0 {
+			// Prepend manifest to initial input so agent is aware of large files
+			manifestStr := manifest.String()
+			initialInput = manifestStr + "\n---\n\n" + initialInput
+			p.debugf("Injected file manifest: %d oversized, %d large files", len(manifest.Oversized), len(manifest.LargeFiles))
+
+			// Log to stream log
+			if p.streamLog != nil {
+				p.streamLog.Log("📁 File manifest: %d total files, %d oversized (>25k tokens), %d large (10-25k tokens)",
+					manifest.TotalFiles, len(manifest.Oversized), len(manifest.LargeFiles))
+				for _, f := range manifest.Oversized {
+					p.streamLog.Log("   ❌ %s (~%dk tokens)", f.Path, f.EstimatedTokens/1000)
+				}
+			}
+		}
 	}
 
 	// Set the current agentic config (used by action handler)

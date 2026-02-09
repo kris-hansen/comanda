@@ -193,10 +193,11 @@ func (m *Manager) processFile(path string) *FileEntry {
 	depth := strings.Count(relPath, string(os.PathSeparator))
 
 	entry := &FileEntry{
-		Path:    relPath,
-		Size:    info.Size(),
-		ModTime: info.ModTime(),
-		Depth:   depth,
+		Path:            relPath,
+		Size:            info.Size(),
+		ModTime:         info.ModTime(),
+		Depth:           depth,
+		EstimatedTokens: int(info.Size() / 4), // Rough estimate: ~4 bytes per token
 	}
 
 	// Determine language
