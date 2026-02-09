@@ -2,6 +2,8 @@ package codebaseindex
 
 import (
 	"time"
+
+	"github.com/kris-hansen/comanda/utils/filescan"
 )
 
 // HashAlgorithm specifies the hashing algorithm to use
@@ -129,18 +131,12 @@ type FileEntry struct {
 	Symbols *SymbolInfo
 }
 
-// Token budget thresholds
-const (
-	TokenThresholdSafe    = 10000  // Files under this are safe to read fully
-	TokenThresholdLarge   = 25000  // Files under this can be read with care
-	TokenThresholdMax     = 25000  // Claude-code's max file read limit
-)
-
 // TokenBudgetCategory returns the token budget category for a file
+// Uses shared thresholds from filescan package
 func (f *FileEntry) TokenBudgetCategory() string {
-	if f.EstimatedTokens < TokenThresholdSafe {
+	if f.EstimatedTokens < filescan.TokenThresholdSafe {
 		return "safe"
-	} else if f.EstimatedTokens < TokenThresholdLarge {
+	} else if f.EstimatedTokens < filescan.TokenThresholdLarge {
 		return "large"
 	}
 	return "oversized"
