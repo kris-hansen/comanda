@@ -59,7 +59,7 @@ func (w *DebugWatcher) watch() {
 	defer ticker.Stop()
 
 	var lastContextPct float64
-	var effectiveWindow int = 180000 // Default assumption
+	effectiveWindow := 180000 // Default assumption
 
 	for {
 		select {
@@ -85,7 +85,9 @@ func (w *DebugWatcher) parseNewLines(
 
 	// Seek to last position
 	if w.lastOffset > 0 {
-		file.Seek(w.lastOffset, 0)
+		if _, err := file.Seek(w.lastOffset, 0); err != nil {
+			return // Start from beginning if seek fails
+		}
 	}
 
 	scanner := bufio.NewScanner(file)
