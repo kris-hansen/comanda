@@ -20,6 +20,7 @@ import (
 type ClaudeCodeProvider struct {
 	verbose    bool
 	binaryPath string
+	debugFile  string // Optional debug file path for streaming output
 	mu         sync.Mutex
 }
 
@@ -283,6 +284,11 @@ func (c *ClaudeCodeProvider) buildArgs(modelName string, prompt string, workDir 
 func (c *ClaudeCodeProvider) buildArgsAgentic(modelName string, prompt string, allowedPaths []string, tools []string) []string {
 	args := []string{} // NO --print flag - enables tool use
 
+	// Add debug file for streaming visibility into tool calls
+	if c.debugFile != "" {
+		args = append(args, "--debug-file", c.debugFile)
+	}
+
 	// Add allowed paths for tool access scope
 	for _, path := range allowedPaths {
 		args = append(args, "--add-dir", path)
@@ -364,6 +370,12 @@ func (c *ClaudeCodeProvider) executeCommand(args []string, workDir string) (stri
 // SetVerbose enables or disables verbose mode
 func (c *ClaudeCodeProvider) SetVerbose(verbose bool) {
 	c.verbose = verbose
+}
+
+// SetDebugFile sets the path for claude-code's debug output
+// This enables --debug-file which streams tool calls and execution details
+func (c *ClaudeCodeProvider) SetDebugFile(path string) {
+	c.debugFile = path
 }
 
 // ValidateModel checks if the model is valid for Claude Code

@@ -98,6 +98,10 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 				if claudeCode, ok := configuredProvider.(*models.ClaudeCodeProvider); ok {
 					p.debugf("Using agentic mode with Claude Code (paths: %v, tools: %v)",
 						agenticConfig.AllowedPaths, agenticConfig.Tools)
+					// Pass stream log path to claude-code for debug visibility
+					if streamLogPath := p.GetStreamLogPath(); streamLogPath != "" {
+						claudeCode.SetDebugFile(streamLogPath + ".claude-debug")
+					}
 					result, err := claudeCode.SendPromptAgentic(modelName, action,
 						agenticConfig.AllowedPaths, agenticConfig.Tools, p.runtimeDir)
 					if err != nil {
@@ -264,6 +268,10 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 			if isAgenticMode {
 				if claudeCode, ok := configuredProvider.(*models.ClaudeCodeProvider); ok {
 					p.debugf("Using agentic mode with Claude Code for non-file inputs")
+					// Pass stream log path to claude-code for debug visibility
+					if streamLogPath := p.GetStreamLogPath(); streamLogPath != "" {
+						claudeCode.SetDebugFile(streamLogPath + ".claude-debug")
+					}
 					result, err := claudeCode.SendPromptAgentic(modelName, combinedPrompt,
 						agenticConfig.AllowedPaths, agenticConfig.Tools, p.runtimeDir)
 					if err != nil {
