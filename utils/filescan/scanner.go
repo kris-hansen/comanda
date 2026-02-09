@@ -9,10 +9,10 @@ import (
 
 // Token thresholds (matching claude-code limits)
 const (
-	TokenThresholdSafe    = 10000  // Files under this are safe to read fully
-	TokenThresholdLarge   = 25000  // Files under this can be read with care
-	TokenThresholdMax     = 25000  // Claude-code's max file read limit
-	BytesPerToken         = 4      // Rough estimate for text files
+	TokenThresholdSafe  = 10000 // Files under this are safe to read fully
+	TokenThresholdLarge = 25000 // Files under this can be read with care
+	TokenThresholdMax   = 25000 // Claude-code's max file read limit
+	BytesPerToken       = 4     // Rough estimate for text files
 )
 
 // FileInfo holds basic file information with token estimation
@@ -36,12 +36,12 @@ func (f *FileInfo) TokenCategory() string {
 
 // ScanResult holds the results of a directory scan
 type ScanResult struct {
-	Root        string
-	Files       []FileInfo
-	TotalFiles  int
-	TotalTokens int
-	SafeCount   int
-	LargeCount  int
+	Root           string
+	Files          []FileInfo
+	TotalFiles     int
+	TotalTokens    int
+	SafeCount      int
+	LargeCount     int
 	OversizedCount int
 }
 
@@ -49,13 +49,13 @@ type ScanResult struct {
 type ScanOptions struct {
 	// IgnoreDirs is a set of directory names to skip
 	IgnoreDirs map[string]bool
-	
+
 	// IgnoreHidden skips files and dirs starting with "."
 	IgnoreHidden bool
-	
+
 	// IgnoreBinary skips common binary file extensions
 	IgnoreBinary bool
-	
+
 	// MaxDepth limits recursion depth (0 = unlimited)
 	MaxDepth int
 }
@@ -169,8 +169,8 @@ func scanDir(root, dir string, depth int, opts ScanOptions, result *ScanResult) 
 		return nil
 	}
 
-	entries, err := os.ReadDir(dir)
-	if err != nil {
+	entries, _ := os.ReadDir(dir)
+	if entries == nil {
 		return nil // Skip unreadable directories
 	}
 
