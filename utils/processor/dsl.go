@@ -52,6 +52,7 @@ type Processor struct {
 	mu                   sync.Mutex         // Mutex for thread-safe debug logging
 	currentAgenticConfig *AgenticLoopConfig // Current agentic loop config (set during agentic loop execution)
 	streamLog            *StreamLogger      // Stream logger for real-time monitoring of long operations
+	streamLogPath        string             // Path to stream log file (for passing to sub-processes)
 }
 
 // setAgenticConfig sets the current agentic config (thread-safe)
@@ -357,8 +358,14 @@ func (p *Processor) SetStreamLog(path string) error {
 		return err
 	}
 	p.streamLog = logger
+	p.streamLogPath = path
 	p.debugf("Stream logging enabled: %s", path)
 	return nil
+}
+
+// GetStreamLogPath returns the path to the stream log file
+func (p *Processor) GetStreamLogPath() string {
+	return p.streamLogPath
 }
 
 // CloseStreamLog closes the stream log file
