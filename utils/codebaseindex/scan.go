@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cespare/xxhash/v2"
+	"github.com/kris-hansen/comanda/utils/filescan"
 	gitignore "github.com/sabhiram/go-gitignore"
 )
 
@@ -197,7 +198,7 @@ func (m *Manager) processFile(path string) *FileEntry {
 		Size:            info.Size(),
 		ModTime:         info.ModTime(),
 		Depth:           depth,
-		EstimatedTokens: int(info.Size() / 4), // Rough estimate: ~4 bytes per token
+		EstimatedTokens: int(info.Size() / filescan.BytesPerToken),
 	}
 
 	// Determine language
