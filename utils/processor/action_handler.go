@@ -101,13 +101,23 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 					// Pass stream log path to claude-code for debug visibility
 					streamLogPath := p.GetStreamLogPath()
 					p.debugf("Stream log path: %q", streamLogPath)
+					var debugWatcher *DebugWatcher
 					if streamLogPath != "" {
 						debugPath := streamLogPath + ".claude-debug"
 						p.debugf("Setting claude-code debug file: %s", debugPath)
 						claudeCode.SetDebugFile(debugPath)
+						// Start watching the debug file for context usage
+						if p.streamLog != nil {
+							debugWatcher = NewDebugWatcher(debugPath, p.streamLog)
+							debugWatcher.Start()
+						}
 					}
 					result, err := claudeCode.SendPromptAgentic(modelName, action,
 						agenticConfig.AllowedPaths, agenticConfig.Tools, p.runtimeDir)
+					// Stop the debug watcher
+					if debugWatcher != nil {
+						debugWatcher.Stop()
+					}
 					if err != nil {
 						return nil, err
 					}
@@ -275,13 +285,23 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 					// Pass stream log path to claude-code for debug visibility
 					streamLogPath := p.GetStreamLogPath()
 					p.debugf("Stream log path (non-file): %q", streamLogPath)
+					var debugWatcher *DebugWatcher
 					if streamLogPath != "" {
 						debugPath := streamLogPath + ".claude-debug"
 						p.debugf("Setting claude-code debug file: %s", debugPath)
 						claudeCode.SetDebugFile(debugPath)
+						// Start watching the debug file for context usage
+						if p.streamLog != nil {
+							debugWatcher = NewDebugWatcher(debugPath, p.streamLog)
+							debugWatcher.Start()
+						}
 					}
 					result, err := claudeCode.SendPromptAgentic(modelName, combinedPrompt,
 						agenticConfig.AllowedPaths, agenticConfig.Tools, p.runtimeDir)
+					// Stop the debug watcher
+					if debugWatcher != nil {
+						debugWatcher.Stop()
+					}
 					if err != nil {
 						return nil, err
 					}

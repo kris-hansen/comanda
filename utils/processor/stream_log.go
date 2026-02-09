@@ -130,6 +130,40 @@ func (s *StreamLogger) LogError(err error) {
 	s.Log("✖ ERROR: %v", err)
 }
 
+// LogContextUsage writes context usage info
+func (s *StreamLogger) LogContextUsage(usedTokens, thresholdTokens, windowTokens int, percentage float64) {
+	if !s.enabled {
+		return
+	}
+	bar := s.contextBar(percentage)
+	s.Log("📊 CONTEXT: %s %.1f%% (%dk/%dk tokens, %dk window)",
+		bar, percentage, usedTokens/1000, thresholdTokens/1000, windowTokens/1000)
+}
+
+// contextBar creates a visual progress bar for context usage
+func (s *StreamLogger) contextBar(percentage float64) string {
+	width := 20
+	filled := int(percentage / 100 * float64(width))
+	if filled > width {
+		filled = width
+	}
+	bar := ""
+	for i := 0; i < width; i++ {
+		if i < filled {
+			if percentage >= 90 {
+				bar += "█" // Full block for danger zone
+			} else if percentage >= 70 {
+				bar += "▓" // Dark shade for warning
+			} else {
+				bar += "▒" // Medium shade for normal
+			}
+		} else {
+			bar += "░"
+		}
+	}
+	return "[" + bar + "]"
+}
+
 // splitLines splits a string into lines
 func splitLines(s string) []string {
 	var lines []string

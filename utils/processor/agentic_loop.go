@@ -390,6 +390,25 @@ func (p *Processor) checkExitCondition(config *AgenticLoopConfig, output string)
 				return true, "LLM indicated completion"
 			}
 		}
+
+		// Check for context exhaustion / completion plan signals
+		// These indicate the agent realized it can't continue and documented remaining work
+		contextExhaustionPatterns := []string{
+			`(?i)completion[_\-\s]?plan`,
+			`(?i)context[_\s]*(limit|exhaust|full|window)`,
+			`(?i)remaining[_\s]*work`,
+			`(?i)continue[_\s]*in[_\s]*(a\s+)?new[_\s]*session`,
+			`(?i)documented.*remaining`,
+			`(?i)out\s+of\s+(context|tokens?)`,
+			`(?i)cannot\s+continue`,
+			`(?i)unable\s+to\s+complete`,
+		}
+		for _, pattern := range contextExhaustionPatterns {
+			if matched, _ := regexp.MatchString(pattern, output); matched {
+				return true, "Agent signaled context exhaustion or documented remaining work"
+			}
+		}
+
 		return false, ""
 
 	case "pattern_match":
