@@ -857,7 +857,7 @@ step_name:
 
 **Workflow Variables Exported:**
 
-After the step runs, these variables are available (where ` + "`<REPO>`" + ` is the uppercase repository name, e.g., ` + "`core`" + ` becomes ` + "`CORE`" + `):
+After the step runs, these variables are available (where ` + "`<REPO>`" + ` is the uppercase repository name, e.g., ` + "`src`" + ` becomes ` + "`SRC`" + `):
 - ` + "`$<REPO>_INDEX`" + `: Full Markdown content of the index
 - ` + "`$<REPO>_INDEX_PATH`" + `: Absolute path to the saved index file
 - ` + "`$<REPO>_INDEX_SHA`" + `: Hash of the index content
@@ -872,10 +872,10 @@ When a later step needs the codebase index content, you MUST use the exported va
 index_codebase:
   step_type: codebase-index
   codebase_index:
-    root: ~/erebor/core
+    root: ./src
 
 analyze_codebase:
-  input: $CORE_INDEX          # ✅ Use the variable!
+  input: $SRC_INDEX          # ✅ Use the variable!
   model: claude-sonnet-4-20250514
   action: "Analyze this codebase structure"
   output: STDOUT
@@ -886,7 +886,7 @@ analyze_codebase:
 index_codebase:
   step_type: codebase-index
   codebase_index:
-    root: ~/erebor/core
+    root: ./src
     output:
       path: .comanda/INDEX.md
 
@@ -1929,7 +1929,7 @@ step_name:
 
 **Workflow Variables Exported:**
 
-After the step runs, these variables are available (where ` + "`<REPO>`" + ` is the uppercase repository name, e.g., ` + "`core`" + ` becomes ` + "`CORE`" + `):
+After the step runs, these variables are available (where ` + "`<REPO>`" + ` is the uppercase repository name, e.g., ` + "`src`" + ` becomes ` + "`SRC`" + `):
 - ` + "`$<REPO>_INDEX`" + `: Full Markdown content of the index
 - ` + "`$<REPO>_INDEX_PATH`" + `: Absolute path to the saved index file
 - ` + "`$<REPO>_INDEX_SHA`" + `: Hash of the index content
@@ -1944,10 +1944,10 @@ When a later step needs the codebase index content, you MUST use the exported va
 index_codebase:
   step_type: codebase-index
   codebase_index:
-    root: ~/erebor/core
+    root: ./src
 
 analyze_codebase:
-  input: $CORE_INDEX          # ✅ Use the variable!
+  input: $SRC_INDEX          # ✅ Use the variable!
   model: claude-sonnet-4-20250514
   action: "Analyze this codebase structure"
   output: STDOUT
@@ -1958,7 +1958,7 @@ analyze_codebase:
 index_codebase:
   step_type: codebase-index
   codebase_index:
-    root: ~/erebor/core
+    root: ./src
     output:
       path: .comanda/INDEX.md
 

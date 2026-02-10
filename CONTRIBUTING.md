@@ -121,6 +121,15 @@ Our linting configuration (`.golangci.yml`) enforces:
 - Add comments for complex logic
 - Use meaningful variable and function names
 
+### Example Naming Conventions
+
+When writing examples in documentation, DSL guides, or tests:
+
+- **Use generic names** like `./src`, `./my-project`, `./app` for paths
+- **Avoid internal/private project names** - don't reference real internal codebases
+- **Use descriptive but neutral names** like `analyze_codebase`, `process_data`
+- **Variable examples**: `$SRC_INDEX`, `$PROJECT_DATA`, `$RESULTS`
+
 ### Error Handling
 
 ```go
