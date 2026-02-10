@@ -975,9 +975,30 @@ consolidate_results:
 
 ### Outputs
 - Console: ` + "`output: STDOUT`" + `
-- File: ` + "`output: results.txt`" + `
+- File: ` + "`output: results.txt`" + ` or ` + "`output: ./path/to/output.md`" + `
 - Database: ` + "`output: { database: { type: \"postgres\", table: \"results_table\" } }`" + `
 - Output with alias (if supported for variable creation from output): ` + "`output: STDOUT as $step_output_var`" + `
+
+**⚠️ IMPORTANT: Writing to files**
+When the result should be saved to a file, use the ` + "`output:`" + ` field directly. Do NOT instruct the LLM to "write to a file" in the action.
+
+✅ **CORRECT** - Use ` + "`output:`" + ` for file writing:
+` + "```yaml" + `
+summarize_document:
+  input: report.txt
+  model: claude-sonnet-4-20250514
+  action: "Summarize this document"
+  output: ./summary.md
+` + "```" + `
+
+❌ **WRONG** - Do NOT tell the LLM to write the file:
+` + "```yaml" + `
+summarize_document:
+  input: report.txt
+  model: claude-sonnet-4-20250514
+  action: "Summarize this document and write it to ./summary.md"
+  output: STDOUT
+` + "```" + `
 
 ## Variables
 - Definition: ` + "`input: data.txt as $initial_data`" + `
@@ -2058,9 +2079,30 @@ generate_haiku:
 
 ### Outputs
 - Console: ` + "`output: STDOUT`" + `
-- File: ` + "`output: results.txt`" + `
+- File: ` + "`output: results.txt`" + ` or ` + "`output: ./path/to/output.md`" + `
 - Database: ` + "`output: { database: { type: \"postgres\", table: \"results_table\" } }`" + `
 - Output with alias (if supported for variable creation from output): ` + "`output: STDOUT as $step_output_var`" + `
+
+**⚠️ IMPORTANT: Writing to files**
+When the result should be saved to a file, use the ` + "`output:`" + ` field directly. Do NOT instruct the LLM to "write to a file" in the action.
+
+✅ **CORRECT** - Use ` + "`output:`" + ` for file writing:
+` + "```yaml" + `
+summarize_document:
+  input: report.txt
+  model: claude-sonnet-4-20250514
+  action: "Summarize this document"
+  output: ./summary.md
+` + "```" + `
+
+❌ **WRONG** - Do NOT tell the LLM to write the file:
+` + "```yaml" + `
+summarize_document:
+  input: report.txt
+  model: claude-sonnet-4-20250514
+  action: "Summarize this document and write it to ./summary.md"
+  output: STDOUT
+` + "```" + `
 
 ### Tool Use (Shell Command Execution)
 
