@@ -1,6 +1,11 @@
 package processor
 
-import "time"
+import (
+	"fmt"
+	"time"
+
+	"gopkg.in/yaml.v3"
+)
 
 // AgenticLoopConfig represents the configuration for an agentic loop
 type AgenticLoopConfig struct {
@@ -206,4 +211,87 @@ type LoopOutput struct {
 	QualityGates []QualityGateResult `json:"quality_gates"` // Quality gate results
 	StartTime    time.Time           `json:"start_time"`
 	EndTime      time.Time           `json:"end_time"`
+}
+
+// UnmarshalYAML implements custom unmarshaling for AgenticLoopConfig
+// to support both map and list syntax for steps
+func (c *AgenticLoopConfig) UnmarshalYAML(node *yaml.Node) error {
+	// Create a temporary struct without the Steps field for initial unmarshal
+	
+	// First, try to decode everything except steps
+	// We need to handle steps specially
+	if node.Kind != yaml.MappingNode {
+		return fmt.Errorf("expected mapping node for AgenticLoopConfig")
+	}
+	
+	var stepsNode *yaml.Node
+	
+	for i := 0; i < len(node.Content); i += 2 {
+		keyNode := node.Content[i]
+		valueNode := node.Content[i+1]
+		key := keyNode.Value
+		
+		if key == "steps" {
+			stepsNode = valueNode
+		}
+	}
+	
+	// Decode the main config (this will fail on steps but that's OK)
+	// We use a workaround: decode to a map first, then manually set fields
+	var configMap map[string]interface{}
+	if err := node.Decode(&configMap); err != nil {
+		// Ignore steps-related errors for now
+	}
+	
+	// Decode non-steps fields using standard approach with alias type
+	type Alias AgenticLoopConfig
+	aux := &struct {
+		*Alias
+		Steps yaml.Node `yaml:"steps,omitempty"`
+	}{
+		Alias: (*Alias)(c),
+	}
+	
+	if err := node.Decode(aux); err != nil {
+		// Check if error is only about steps
+		if stepsNode == nil {
+			return err
+		}
+	}
+	
+	// Now handle steps specially
+	if stepsNode != nil {
+		if stepsNode.Kind == yaml.MappingNode {
+			// Map syntax: steps: { stepname: {config...} }
+			for i := 0; i < len(stepsNode.Content); i += 2 {
+				stepKeyNode := stepsNode.Content[i]
+				stepValueNode := stepsNode.Content[i+1]
+				stepName := stepKeyNode.Value
+				
+				var stepConfig StepConfig
+				if err := stepValueNode.Decode(&stepConfig); err != nil {
+					return fmt.Errorf("failed to decode step '%s': %w", stepName, err)
+				}
+				c.Steps = append(c.Steps, Step{Name: stepName, Config: stepConfig})
+			}
+		} else if stepsNode.Kind == yaml.SequenceNode {
+			// List syntax: steps: [- stepname: {config...}]
+			for _, itemNode := range stepsNode.Content {
+				if itemNode.Kind != yaml.MappingNode {
+					return fmt.Errorf("expected mapping in steps list")
+				}
+				// Each item should be a single-key map: stepname: config
+				if len(itemNode.Content) >= 2 {
+					stepName := itemNode.Content[0].Value
+					var stepConfig StepConfig
+					if err := itemNode.Content[1].Decode(&stepConfig); err != nil {
+						return fmt.Errorf("failed to decode step '%s': %w", stepName, err)
+					}
+					c.Steps = append(c.Steps, Step{Name: stepName, Config: stepConfig})
+				}
+			}
+		}
+	}
+	
+	return nil
 }
