@@ -455,7 +455,7 @@ agentic-loop:
     allowed_paths: [./src]
 
     quality_gates:
-      - name: syntax-check
+    name: syntax-check
         type: syntax
         on_fail: retry
         retry:
@@ -463,7 +463,7 @@ agentic-loop:
           backoff_type: exponential
           initial_delay: 2
 
-      - name: tests
+    name: tests
         command: "npm test"
         on_fail: abort              # Stop if tests fail
         timeout: 300
@@ -489,7 +489,7 @@ code_improvement:
     allowed_paths: [.]
 
     quality_gates:
-      - name: typecheck
+    name: typecheck
         command: "npm run typecheck"
         on_fail: retry
         timeout: 60
@@ -498,7 +498,7 @@ code_improvement:
           backoff_type: exponential
           initial_delay: 5
 
-      - name: lint
+    name: lint
         command: "npm run lint"
         on_fail: skip               # Non-critical, continue
 
@@ -543,7 +543,7 @@ loops:
     output_state: $RAW_DATA         # Export result to variable
 
     steps:
-      - collect:
+    collect:
           input: STDIN
           model: claude-code
           action: "Collect data and say DONE when complete"
@@ -560,7 +560,7 @@ loops:
     output_state: $ANALYSIS          # Export analysis result
 
     steps:
-      - analyze:
+    analyze:
           input: STDIN
           model: claude-code
           action: |
@@ -576,7 +576,7 @@ loops:
     allowed_paths: [.]
 
     steps:
-      - generate:
+    generate:
           input: STDIN
           model: claude-code
           action: "Create final report based on analysis"
@@ -613,12 +613,12 @@ loops:
     output_state: $CODE
 
     quality_gates:
-      - name: syntax
+    name: syntax
         type: syntax
         on_fail: abort
 
     steps:
-      - implement:
+    implement:
           input: STDIN
           model: claude-code
           action: |
@@ -637,7 +637,7 @@ loops:
     exit_pattern: "^PASS"            # Exit when output starts with PASS
 
     steps:
-      - review:
+    review:
           input: STDIN
           model: claude-code
           action: |
@@ -744,7 +744,7 @@ loops:
     output_state: $ANALYSIS
 
     steps:
-      - analyze:
+    analyze:
           input: NA
           model: claude-code
           action: |
@@ -765,7 +765,7 @@ loops:
     output_state: $TECH_DEBT
 
     steps:
-      - identify:
+    identify:
           input: STDIN
           model: claude-code
           action: |
@@ -788,7 +788,7 @@ loops:
     allowed_paths: [.]
 
     steps:
-      - write:
+    write:
           input: STDIN
           model: claude-code
           action: |
@@ -1527,7 +1527,7 @@ agentic-loop:
     allowed_paths: [./src]
 
     quality_gates:
-      - name: syntax-check
+    name: syntax-check
         type: syntax
         on_fail: retry
         retry:
@@ -1535,7 +1535,7 @@ agentic-loop:
           backoff_type: exponential
           initial_delay: 2
 
-      - name: tests
+    name: tests
         command: "npm test"
         on_fail: abort              # Stop if tests fail
         timeout: 300
@@ -1561,7 +1561,7 @@ code_improvement:
     allowed_paths: [.]
 
     quality_gates:
-      - name: typecheck
+    name: typecheck
         command: "npm run typecheck"
         on_fail: retry
         timeout: 60
@@ -1570,7 +1570,7 @@ code_improvement:
           backoff_type: exponential
           initial_delay: 5
 
-      - name: lint
+    name: lint
         command: "npm run lint"
         on_fail: skip               # Non-critical, continue
 
@@ -1615,7 +1615,7 @@ loops:
     output_state: $RAW_DATA         # Export result to variable
 
     steps:
-      - collect:
+    collect:
           input: STDIN
           model: claude-code
           action: "Collect data and say DONE when complete"
@@ -1632,7 +1632,7 @@ loops:
     output_state: $ANALYSIS          # Export analysis result
 
     steps:
-      - analyze:
+    analyze:
           input: STDIN
           model: claude-code
           action: |
@@ -1648,7 +1648,7 @@ loops:
     allowed_paths: [.]
 
     steps:
-      - generate:
+    generate:
           input: STDIN
           model: claude-code
           action: "Create final report based on analysis"
@@ -1685,12 +1685,12 @@ loops:
     output_state: $CODE
 
     quality_gates:
-      - name: syntax
+    name: syntax
         type: syntax
         on_fail: abort
 
     steps:
-      - implement:
+    implement:
           input: STDIN
           model: claude-code
           action: |
@@ -1709,7 +1709,7 @@ loops:
     exit_pattern: "^PASS"            # Exit when output starts with PASS
 
     steps:
-      - review:
+    review:
           input: STDIN
           model: claude-code
           action: |
@@ -1816,7 +1816,7 @@ loops:
     output_state: $ANALYSIS
 
     steps:
-      - analyze:
+    analyze:
           input: NA
           model: claude-code
           action: |
@@ -1837,7 +1837,7 @@ loops:
     output_state: $TECH_DEBT
 
     steps:
-      - identify:
+    identify:
           input: STDIN
           model: claude-code
           action: |
@@ -1860,7 +1860,7 @@ loops:
     allowed_paths: [.]
 
     steps:
-      - write:
+    write:
           input: STDIN
           model: claude-code
           action: |
