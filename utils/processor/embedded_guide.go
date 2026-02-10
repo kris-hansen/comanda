@@ -1147,6 +1147,14 @@ const embeddedLLMGuideTemplate = `# Comanda YAML DSL Guide (for LLM Consumption)
 
 This guide specifies the YAML-based Domain Specific Language (DSL) for Comanda workflows, enabling LLMs to generate valid workflow files.
 
+## ⚠️ CRITICAL RULES - READ FIRST ⚠️
+
+Before generating any workflow, you MUST follow these rules:
+
+1. **MODEL RESTRICTION**: You may ONLY use models from the "Supported Models" list in this guide. DO NOT invent model names.
+2. **STEP NAMING**: Every step name must be descriptive (e.g., ` + "`extract_customer_emails`" + `, NOT ` + "`step_1`" + `).
+3. **SIMPLICITY**: Use the minimum number of steps needed. Most tasks need 1-2 steps.
+
 ## Overview
 
 Comanda workflows consist of one or more named steps. Each step performs an operation. There are six main types of steps:
@@ -1162,12 +1170,35 @@ Comanda workflows consist of one or more named steps. Each step performs an oper
 A Comanda workflow is a YAML map where each key is a ` + "`step_name`" + ` (string, user-defined), mapping to a dictionary defining the step.
 
 ` + "```yaml" + `
-# Example of a workflow structure
-workflow_step_1:
+# Example of a workflow structure (note: descriptive step names!)
+extract_customer_emails:
   # ... step definition ...
-another_step_name:
+summarize_quarterly_report:
   # ... step definition ...
 ` + "```" + `
+
+### Step Naming Requirements
+
+**Step names MUST be descriptive and meaningful.** They should clearly describe what the step does.
+
+**✅ GOOD step names** (use these patterns):
+- ` + "`extract_customer_emails`" + ` - describes the extraction action and target
+- ` + "`summarize_quarterly_report`" + ` - describes action and document type
+- ` + "`validate_json_schema`" + ` - describes the validation being performed
+- ` + "`translate_to_spanish`" + ` - describes transformation and target language
+- ` + "`analyze_sentiment_scores`" + ` - describes analysis type
+- ` + "`generate_markdown_index`" + ` - describes output format
+
+**❌ BAD step names** (DO NOT use these):
+- ` + "`step_1`" + `, ` + "`step_2`" + `, ` + "`step_3`" + ` - meaningless numbers
+- ` + "`analyze`" + `, ` + "`process`" + `, ` + "`transform`" + ` - too generic
+- ` + "`do_thing`" + `, ` + "`run_llm`" + `, ` + "`handle_data`" + ` - vague and unhelpful
+- ` + "`first`" + `, ` + "`second`" + `, ` + "`final`" + ` - positional, not descriptive
+
+**Naming pattern:** ` + "`<verb>_<object>_<qualifier>`" + ` where:
+- **verb**: extract, summarize, validate, translate, analyze, generate, filter, merge, compare
+- **object**: what is being acted on (emails, report, schema, data, logs)
+- **qualifier**: optional specifics (quarterly, customer, json, spanish)
 
 ## 1. Standard Processing Step Definition
 
@@ -1896,13 +1927,24 @@ index_repo:
 - List with aliases: ` + "`input: [file1.txt as $file1_content, file2.txt as $file2_content]`" + `
 
 ### Models
+
+**⚠️ CRITICAL MODEL RESTRICTION ⚠️**
+
+You **MUST ONLY** use models from the "Supported Models" list below. **DO NOT invent, guess, or use model names not explicitly listed.** Using unlisted model names will cause the workflow to fail at runtime.
+
+**Syntax:**
 - Single model: ` + "`model: gpt-4o-mini`" + `
 - No model (for non-LLM operations): ` + "`model: NA`" + `
 - Multiple models (for comparison): ` + "`model: [gpt-4o-mini, claude-3-opus-20240229]`" + `
-- **IMPORTANT**: When specifying a model, you **must** use one of the supported models listed below. Do not use model names that are not in this list.
 
-### Supported Models
+### Supported Models (USE ONLY THESE)
 {{SUPPORTED_MODELS}}
+
+**🚫 DO NOT USE** model names that are not in the list above. Common mistakes:
+- ❌ ` + "`gpt-4`" + ` (use ` + "`gpt-4o`" + ` or ` + "`gpt-4o-mini`" + ` instead)
+- ❌ ` + "`claude-3`" + ` (use the full model name like ` + "`claude-sonnet-4-5`" + `)
+- ❌ ` + "`gemini-pro`" + ` (use the exact name from the list above)
+- ❌ Any model name you are "pretty sure" exists - ONLY use names from the list
 
 ### Claude Code Models (Local Agentic AI)
 
@@ -2052,10 +2094,96 @@ step_name:
   output: STDOUT
 ` + "```" + `
 
-## Variables
+## Variables and Data Flow Between Steps
+
+Understanding when to use variables vs files is critical for building effective workflows.
+
+### Workflow Variables (` + "`$VARNAME`" + `)
 - Definition: ` + "`input: data.txt as $initial_data`" + `
 - Reference: ` + "`action: \"Compare this analysis with $initial_data\"`" + `
-- Scope: Variables are typically scoped to the workflow. For ` + "`process`" + ` steps, parent variables are not directly accessible by default; use the ` + "`process.inputs`" + ` map to pass data.
+- Scope: Variables are scoped to the workflow. For ` + "`process`" + ` steps, use the ` + "`process.inputs`" + ` map to pass data.
+
+### When to Use Variables vs Files
+
+**Use ` + "`$VARIABLES`" + ` for:**
+- **Ephemeral values** that are only needed within the workflow
+- **Small text** (under ~10KB) being passed between steps
+- **Loop state** in agentic loops (` + "`$PLAN`" + `, ` + "`$ANALYSIS`" + `, ` + "`$RESULT`" + `)
+- **Intermediate processing** that doesn't need to persist
+
+**Use **files** (` + "`.md`" + `, ` + "`.txt`" + `, ` + "`.json`" + `) for:**
+- **Persistent outputs** that users will want to access later
+- **Large content** (over ~10KB) - variables can bloat memory
+- **Multi-step independent access** - when step 3 needs output from both step 1 AND step 2
+- **Final deliverables** (reports, summaries, generated code)
+- **Audit trail** - when you need to see intermediate results
+
+### Chaining Patterns
+
+**Pattern 1: Sequential STDIN/STDOUT (simplest)**
+Use when each step only needs the previous step's output:
+` + "```yaml" + `
+extract_key_points:
+  input: document.txt
+  model: gpt-4o-mini
+  action: "Extract key points"
+  output: STDOUT
+
+translate_to_spanish:
+  input: STDIN  # Gets output from extract_key_points
+  model: gpt-4o-mini
+  action: "Translate to Spanish"
+  output: translated_points.md  # Final output saved to file
+` + "```" + `
+
+**Pattern 2: Variables for Agentic Loops**
+Use ` + "`$VARIABLES`" + ` within agentic loops to pass ephemeral state:
+` + "```yaml" + `
+agentic-loop:
+  config:
+    max_iterations: 5
+    exit_condition: llm_decides
+  steps:
+    plan_next_action:
+      input: STDIN
+      model: claude-code
+      action: "Plan the next step"
+      output: $PLAN  # Ephemeral - only needed for next step
+
+    execute_plan:
+      input: $PLAN  # Uses the variable
+      model: claude-code
+      action: "Execute the plan"
+      output: STDOUT
+` + "```" + `
+
+**Pattern 3: Files for Multi-Access**
+Use files when multiple steps need independent access:
+` + "```yaml" + `
+analyze_code_structure:
+  input: source_code.py
+  model: gpt-4o-mini
+  action: "Analyze code structure"
+  output: structure_analysis.md  # Save to file
+
+identify_security_issues:
+  input: source_code.py
+  model: gpt-4o-mini
+  action: "Identify security vulnerabilities"
+  output: security_report.md  # Save to file
+
+create_combined_report:
+  input: [structure_analysis.md, security_report.md]  # Access both files
+  model: gpt-4o-mini
+  action: "Create comprehensive report from both analyses"
+  output: final_report.md
+` + "```" + `
+
+### Variable Naming Conventions
+
+Use **descriptive names** that indicate the content:
+- ✅ ` + "`$EXTRACTED_EMAILS`" + `, ` + "`$CODE_ANALYSIS`" + `, ` + "`$TRANSLATION_RESULT`" + `
+- ❌ ` + "`$OUTPUT`" + `, ` + "`$RESULT`" + `, ` + "`$DATA`" + `, ` + "`$TEMP`" + `
 
 ## CLI Variables (Runtime Substitution)
 
