@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/kris-hansen/comanda/utils/codebaseindex"
+	"github.com/kris-hansen/comanda/utils/fileutil"
 )
 
 // processCodebaseIndexStep handles the codebase-index step type
@@ -63,12 +64,26 @@ func (p *Processor) buildCodebaseIndexConfig(stepConfig StepConfig) *codebaseind
 		ci := stepConfig.CodebaseIndex
 
 		if ci.Root != "" {
-			config.Root = ci.Root
+			// Expand ~ in root path
+			expandedRoot, err := fileutil.ExpandPath(ci.Root)
+			if err != nil {
+				p.debugf("Warning: failed to expand root path %s: %v", ci.Root, err)
+				config.Root = ci.Root // Fall back to unexpanded path
+			} else {
+				config.Root = expandedRoot
+			}
 		}
 
 		if ci.Output != nil {
 			if ci.Output.Path != "" {
-				config.OutputPath = ci.Output.Path
+				// Expand ~ in output path
+				expandedOutput, err := fileutil.ExpandPath(ci.Output.Path)
+				if err != nil {
+					p.debugf("Warning: failed to expand output path %s: %v", ci.Output.Path, err)
+					config.OutputPath = ci.Output.Path // Fall back to unexpanded path
+				} else {
+					config.OutputPath = expandedOutput
+				}
 			}
 			if ci.Output.Store != "" {
 				switch ci.Output.Store {
