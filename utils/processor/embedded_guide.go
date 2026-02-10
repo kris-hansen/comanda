@@ -857,11 +857,47 @@ step_name:
 
 **Workflow Variables Exported:**
 
-After the step runs, these variables are available (where ` + "`<REPO>`" + ` is the uppercase repository name):
-- ` + "`<REPO>_INDEX`" + `: Full Markdown content of the index
-- ` + "`<REPO>_INDEX_PATH`" + `: Path to the saved index file
-- ` + "`<REPO>_INDEX_SHA`" + `: Hash of the index content
-- ` + "`<REPO>_INDEX_UPDATED`" + `: ` + "`true`" + ` if index was regenerated
+After the step runs, these variables are available (where ` + "`<REPO>`" + ` is the uppercase repository name, e.g., ` + "`core`" + ` becomes ` + "`CORE`" + `):
+- ` + "`$<REPO>_INDEX`" + `: Full Markdown content of the index
+- ` + "`$<REPO>_INDEX_PATH`" + `: Absolute path to the saved index file
+- ` + "`$<REPO>_INDEX_SHA`" + `: Hash of the index content
+- ` + "`$<REPO>_INDEX_UPDATED`" + `: ` + "`true`" + ` if index was regenerated
+
+**⚠️ CRITICAL: Referencing the Index in Subsequent Steps**
+
+When a later step needs the codebase index content, you MUST use the exported variable — NOT the file path.
+
+✅ **CORRECT** - Use the exported variable:
+` + "```yaml" + `
+index_codebase:
+  step_type: codebase-index
+  codebase_index:
+    root: ~/erebor/core
+
+analyze_codebase:
+  input: $CORE_INDEX          # ✅ Use the variable!
+  model: claude-sonnet-4-20250514
+  action: "Analyze this codebase structure"
+  output: STDOUT
+` + "```" + `
+
+❌ **WRONG** - Do NOT use the file path directly:
+` + "```yaml" + `
+index_codebase:
+  step_type: codebase-index
+  codebase_index:
+    root: ~/erebor/core
+    output:
+      path: .comanda/INDEX.md
+
+analyze_codebase:
+  input: .comanda/INDEX.md    # ❌ WRONG! Path may not resolve correctly
+  model: claude-sonnet-4-20250514
+  action: "Analyze this codebase structure"
+  output: STDOUT
+` + "```" + `
+
+**Why?** The ` + "`output.path`" + ` is relative to the repository root (when ` + "`store: repo`" + `), not the current working directory. The exported variable always contains the correct content regardless of where you run the workflow.
 
 **Supported Languages:**
 - **Go**: Uses AST parsing. Detection: ` + "`go.mod`" + `, ` + "`go.sum`" + `
@@ -1893,11 +1929,47 @@ step_name:
 
 **Workflow Variables Exported:**
 
-After the step runs, these variables are available (where ` + "`<REPO>`" + ` is the uppercase repository name):
-- ` + "`<REPO>_INDEX`" + `: Full Markdown content of the index
-- ` + "`<REPO>_INDEX_PATH`" + `: Path to the saved index file
-- ` + "`<REPO>_INDEX_SHA`" + `: Hash of the index content
-- ` + "`<REPO>_INDEX_UPDATED`" + `: ` + "`true`" + ` if index was regenerated
+After the step runs, these variables are available (where ` + "`<REPO>`" + ` is the uppercase repository name, e.g., ` + "`core`" + ` becomes ` + "`CORE`" + `):
+- ` + "`$<REPO>_INDEX`" + `: Full Markdown content of the index
+- ` + "`$<REPO>_INDEX_PATH`" + `: Absolute path to the saved index file
+- ` + "`$<REPO>_INDEX_SHA`" + `: Hash of the index content
+- ` + "`$<REPO>_INDEX_UPDATED`" + `: ` + "`true`" + ` if index was regenerated
+
+**⚠️ CRITICAL: Referencing the Index in Subsequent Steps**
+
+When a later step needs the codebase index content, you MUST use the exported variable — NOT the file path.
+
+✅ **CORRECT** - Use the exported variable:
+` + "```yaml" + `
+index_codebase:
+  step_type: codebase-index
+  codebase_index:
+    root: ~/erebor/core
+
+analyze_codebase:
+  input: $CORE_INDEX          # ✅ Use the variable!
+  model: claude-sonnet-4-20250514
+  action: "Analyze this codebase structure"
+  output: STDOUT
+` + "```" + `
+
+❌ **WRONG** - Do NOT use the file path directly:
+` + "```yaml" + `
+index_codebase:
+  step_type: codebase-index
+  codebase_index:
+    root: ~/erebor/core
+    output:
+      path: .comanda/INDEX.md
+
+analyze_codebase:
+  input: .comanda/INDEX.md    # ❌ WRONG! Path may not resolve correctly
+  model: claude-sonnet-4-20250514
+  action: "Analyze this codebase structure"
+  output: STDOUT
+` + "```" + `
+
+**Why?** The ` + "`output.path`" + ` is relative to the repository root (when ` + "`store: repo`" + `), not the current working directory. The exported variable always contains the correct content regardless of where you run the workflow.
 
 **Supported Languages:**
 - **Go**: Uses AST parsing. Detection: ` + "`go.mod`" + `, ` + "`go.sum`" + `
