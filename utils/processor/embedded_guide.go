@@ -2175,7 +2175,7 @@ identify_security_issues:
 create_combined_report:
   input: [structure_analysis.md, security_report.md]  # Access both files
   model: gpt-4o-mini
-  action: "Create comprehensive report from both analyses"
+  action: "Create comprehensive report from both analysis outputs"
   output: final_report.md
 ` + "```" + `
 
