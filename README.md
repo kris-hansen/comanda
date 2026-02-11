@@ -4,6 +4,8 @@
 
 **Declarative AI pipelines for the command line.** Define LLM workflows in YAML, run them anywhere, version control everything.
 
+🌐 **Website:** [comanda.sh](https://comanda.sh) · 📖 **Docs:** [Examples](examples/README.md) · ⭐ **Star this repo** to support the project!
+
 ```bash
 # Pipe code through multiple AI agents
 cat main.go | comanda process code-review.yaml
