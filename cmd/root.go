@@ -110,7 +110,7 @@ overridden with --model.`,
   comanda generate summarize.yaml "Create a workflow that summarizes text input"
 
   # Generate with a specific model
-  comanda generate analyze.yaml "Analyze sentiment of text" -m claude-sonnet-4-20250514
+  comanda generate analyze.yaml "Analyze sentiment of text" -m claude-code
 
   # Generate a multi-step workflow
   comanda generate pipeline.yaml "Extract key points, translate to Spanish, format as bullets"`,
