@@ -468,6 +468,15 @@ func (p *Processor) processInlineAgenticLoop(step Step) (string, error) {
 	// If no steps defined in the loop config, use the step itself
 	if len(config.Steps) == 0 {
 		config.Steps = []Step{singleStep}
+	} else {
+		// Inherit model from parent step if sub-steps don't specify their own
+		parentModel := step.Config.Model
+		for i := range config.Steps {
+			if config.Steps[i].Config.Model == nil {
+				config.Steps[i].Config.Model = parentModel
+				p.debugf("Step '%s' inherited model from parent: %v", config.Steps[i].Name, parentModel)
+			}
+		}
 	}
 
 	return p.processAgenticLoop(step.Name, config, p.lastOutput)
