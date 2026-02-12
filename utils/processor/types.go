@@ -2,10 +2,35 @@ package processor
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
 )
+
+// resolvePathAtParseTime expands ~ and resolves relative paths to absolute
+// This is called during YAML parsing to ensure paths are resolved relative to
+// where comanda is invoked, not where claude-code might run later
+func resolvePathAtParseTime(path string) string {
+	// Expand ~ to home directory
+	if strings.HasPrefix(path, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			path = filepath.Join(home, path[2:])
+		}
+	} else if path == "~" {
+		if home, err := os.UserHomeDir(); err == nil {
+			path = home
+		}
+	}
+
+	// Resolve to absolute path (handles "." and relative paths)
+	if absPath, err := filepath.Abs(path); err == nil {
+		return absPath
+	}
+	return path
+}
 
 // AgenticLoopConfig represents the configuration for an agentic loop
 type AgenticLoopConfig struct {
@@ -257,6 +282,16 @@ func (c *AgenticLoopConfig) UnmarshalYAML(node *yaml.Node) error {
 		if stepsNode == nil {
 			return err
 		}
+	}
+
+	// Resolve allowed_paths to absolute paths at parse time
+	// This ensures paths like "." and "~" are resolved relative to where comanda is run
+	if len(c.AllowedPaths) > 0 {
+		resolvedPaths := make([]string, len(c.AllowedPaths))
+		for i, p := range c.AllowedPaths {
+			resolvedPaths[i] = resolvePathAtParseTime(p)
+		}
+		c.AllowedPaths = resolvedPaths
 	}
 
 	// Now handle steps specially
