@@ -9,7 +9,14 @@ import (
 func TestResolvePathAtParseTime(t *testing.T) {
 	homeDir, _ := os.UserHomeDir()
 
+	// Check if cwd is available - some CI environments have issues with this
+	cwd, cwdErr := os.Getwd()
+	cwdAvailable := cwdErr == nil && cwd != ""
+
 	t.Run("dot resolves to absolute path", func(t *testing.T) {
+		if !cwdAvailable {
+			t.Skip("skipping: cwd not available in this environment")
+		}
 		result := resolvePathAtParseTime(".")
 		if !filepath.IsAbs(result) {
 			t.Errorf("resolvePathAtParseTime(\".\") = %q, expected absolute path", result)
@@ -39,6 +46,9 @@ func TestResolvePathAtParseTime(t *testing.T) {
 	})
 
 	t.Run("relative path becomes absolute", func(t *testing.T) {
+		if !cwdAvailable {
+			t.Skip("skipping: cwd not available in this environment")
+		}
 		result := resolvePathAtParseTime("relative/path")
 		if !filepath.IsAbs(result) {
 			t.Errorf("resolvePathAtParseTime(\"relative/path\") = %q, expected absolute path", result)
