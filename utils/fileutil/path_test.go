@@ -12,6 +12,11 @@ func TestExpandPath(t *testing.T) {
 		t.Fatalf("Failed to get home dir: %v", err)
 	}
 
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get cwd: %v", err)
+	}
+
 	tests := []struct {
 		name     string
 		input    string
@@ -49,15 +54,15 @@ func TestExpandPath(t *testing.T) {
 			wantErr:  false,
 		},
 		{
-			name:     "relative path cleaned",
+			name:     "relative path resolved to absolute",
 			input:    "./src/../lib",
-			expected: "lib",
+			expected: filepath.Join(cwd, "lib"),
 			wantErr:  false,
 		},
 		{
-			name:     "dot path",
+			name:     "dot path resolved to cwd",
 			input:    ".",
-			expected: ".",
+			expected: cwd,
 			wantErr:  false,
 		},
 	}
@@ -99,11 +104,16 @@ func TestExpandPaths(t *testing.T) {
 		t.Fatalf("Failed to get home dir: %v", err)
 	}
 
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get cwd: %v", err)
+	}
+
 	input := []string{"~/foo", "~/bar", "."}
 	expected := []string{
 		filepath.Join(homeDir, "foo"),
 		filepath.Join(homeDir, "bar"),
-		".",
+		cwd,
 	}
 
 	got, err := ExpandPaths(input)
