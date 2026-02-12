@@ -876,7 +876,7 @@ index_codebase:
 
 analyze_codebase:
   input: $SRC_INDEX          # ✅ Use the variable!
-  model: claude-sonnet-4-20250514
+  model: claude-code
   action: "Analyze this codebase structure"
   output: STDOUT
 ` + "```" + `
@@ -892,7 +892,7 @@ index_codebase:
 
 analyze_codebase:
   input: .comanda/INDEX.md    # ❌ WRONG! Path may not resolve correctly
-  model: claude-sonnet-4-20250514
+  model: claude-code
   action: "Analyze this codebase structure"
   output: STDOUT
 ` + "```" + `
@@ -1022,7 +1022,7 @@ When the result should be saved to a file, use the ` + "`output:`" + ` field dir
 ` + "```yaml" + `
 summarize_document:
   input: report.txt
-  model: claude-sonnet-4-20250514
+  model: claude-code
   action: "Summarize this document"
   output: ./summary.md
 ` + "```" + `
@@ -1031,7 +1031,7 @@ summarize_document:
 ` + "```yaml" + `
 summarize_document:
   input: report.txt
-  model: claude-sonnet-4-20250514
+  model: claude-code
   action: "Summarize this document and write it to ./summary.md"
   output: STDOUT
 ` + "```" + `
@@ -1948,7 +1948,7 @@ index_codebase:
 
 analyze_codebase:
   input: $SRC_INDEX          # ✅ Use the variable!
-  model: claude-sonnet-4-20250514
+  model: claude-code
   action: "Analyze this codebase structure"
   output: STDOUT
 ` + "```" + `
@@ -1964,7 +1964,7 @@ index_codebase:
 
 analyze_codebase:
   input: .comanda/INDEX.md    # ❌ WRONG! Path may not resolve correctly
-  model: claude-sonnet-4-20250514
+  model: claude-code
   action: "Analyze this codebase structure"
   output: STDOUT
 ` + "```" + `
@@ -2162,7 +2162,7 @@ When the result should be saved to a file, use the ` + "`output:`" + ` field dir
 ` + "```yaml" + `
 summarize_document:
   input: report.txt
-  model: claude-sonnet-4-20250514
+  model: claude-code
   action: "Summarize this document"
   output: ./summary.md
 ` + "```" + `
@@ -2171,7 +2171,7 @@ summarize_document:
 ` + "```yaml" + `
 summarize_document:
   input: report.txt
-  model: claude-sonnet-4-20250514
+  model: claude-code
   action: "Summarize this document and write it to ./summary.md"
   output: STDOUT
 ` + "```" + `
