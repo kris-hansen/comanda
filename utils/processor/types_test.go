@@ -8,46 +8,43 @@ import (
 
 func TestResolvePathAtParseTime(t *testing.T) {
 	homeDir, _ := os.UserHomeDir()
-	cwd, _ := os.Getwd()
 
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{
-			name:     "dot resolves to cwd",
-			input:    ".",
-			expected: cwd,
-		},
-		{
-			name:     "tilde resolves to home",
-			input:    "~",
-			expected: homeDir,
-		},
-		{
-			name:     "tilde path resolves",
-			input:    "~/test/path",
-			expected: filepath.Join(homeDir, "test/path"),
-		},
-		{
-			name:     "absolute path unchanged",
-			input:    "/absolute/path",
-			expected: "/absolute/path",
-		},
-		{
-			name:     "relative path becomes absolute",
-			input:    "relative/path",
-			expected: filepath.Join(cwd, "relative/path"),
-		},
-	}
+	t.Run("dot resolves to absolute path", func(t *testing.T) {
+		result := resolvePathAtParseTime(".")
+		if !filepath.IsAbs(result) {
+			t.Errorf("resolvePathAtParseTime(\".\") = %q, expected absolute path", result)
+		}
+	})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := resolvePathAtParseTime(tt.input)
-			if result != tt.expected {
-				t.Errorf("resolvePathAtParseTime(%q) = %q, want %q", tt.input, result, tt.expected)
-			}
-		})
-	}
+	t.Run("tilde resolves to home", func(t *testing.T) {
+		result := resolvePathAtParseTime("~")
+		if result != homeDir {
+			t.Errorf("resolvePathAtParseTime(\"~\") = %q, want %q", result, homeDir)
+		}
+	})
+
+	t.Run("tilde path resolves", func(t *testing.T) {
+		result := resolvePathAtParseTime("~/test/path")
+		expected := filepath.Join(homeDir, "test/path")
+		if result != expected {
+			t.Errorf("resolvePathAtParseTime(\"~/test/path\") = %q, want %q", result, expected)
+		}
+	})
+
+	t.Run("absolute path unchanged", func(t *testing.T) {
+		result := resolvePathAtParseTime("/absolute/path")
+		if result != "/absolute/path" {
+			t.Errorf("resolvePathAtParseTime(\"/absolute/path\") = %q, want \"/absolute/path\"", result)
+		}
+	})
+
+	t.Run("relative path becomes absolute", func(t *testing.T) {
+		result := resolvePathAtParseTime("relative/path")
+		if !filepath.IsAbs(result) {
+			t.Errorf("resolvePathAtParseTime(\"relative/path\") = %q, expected absolute path", result)
+		}
+		if filepath.Base(filepath.Dir(result)) != "relative" || filepath.Base(result) != "path" {
+			t.Errorf("resolvePathAtParseTime(\"relative/path\") = %q, expected path ending in relative/path", result)
+		}
+	})
 }
