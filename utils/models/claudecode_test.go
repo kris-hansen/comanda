@@ -1,6 +1,7 @@
 package models
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -178,49 +179,59 @@ func TestClaudeCodeBuildArgsAgentic(t *testing.T) {
 	provider := NewClaudeCodeProvider()
 
 	tests := []struct {
-		name         string
-		model        string
-		prompt       string
-		allowedPaths []string
-		tools        []string
-		contains     []string
-		notContains  []string
+		name            string
+		model           string
+		prompt          string
+		allowedPaths    []string
+		tools           []string
+		contains        []string
+		notContains     []string
+		checkAbsPaths   bool // Check that paths are resolved to absolute
+		expectedPathCnt int  // Expected number of --add-dir flags
 	}{
 		{
-			name:         "basic agentic call",
-			model:        "claude-code-sonnet",
-			prompt:       "explore",
-			allowedPaths: []string{"./"},
-			tools:        nil,
-			contains:     []string{"--add-dir", "./", "--dangerously-skip-permissions", "--model", "claude-sonnet-4-5-20250929", "-p", "explore"},
-			notContains:  []string{"--print"},
+			name:            "basic agentic call",
+			model:           "claude-code-sonnet",
+			prompt:          "explore",
+			allowedPaths:    []string{"./"},
+			tools:           nil,
+			contains:        []string{"--add-dir", "--dangerously-skip-permissions", "--model", "claude-sonnet-4-5-20250929", "-p", "explore"},
+			notContains:     []string{"--print"},
+			checkAbsPaths:   true,
+			expectedPathCnt: 1,
 		},
 		{
-			name:         "with tool restrictions",
-			model:        "claude-code",
-			prompt:       "test",
-			allowedPaths: []string{"/tmp"},
-			tools:        []string{"Read", "Bash"},
-			contains:     []string{"--add-dir", "/tmp", "--dangerously-skip-permissions", "--tools", "Read,Bash", "-p", "test"},
-			notContains:  []string{"--print", "--model"},
+			name:            "with tool restrictions",
+			model:           "claude-code",
+			prompt:          "test",
+			allowedPaths:    []string{"/tmp"},
+			tools:           []string{"Read", "Bash"},
+			contains:        []string{"--add-dir", "/tmp", "--dangerously-skip-permissions", "--tools", "Read,Bash", "-p", "test"},
+			notContains:     []string{"--print", "--model"},
+			checkAbsPaths:   false, // /tmp is already absolute
+			expectedPathCnt: 1,
 		},
 		{
-			name:         "multiple paths",
-			model:        "claude-code-opus",
-			prompt:       "analyze",
-			allowedPaths: []string{"./src", "./tests"},
-			tools:        nil,
-			contains:     []string{"--add-dir", "./src", "--add-dir", "./tests", "--dangerously-skip-permissions", "-p", "analyze"},
-			notContains:  []string{"--print"},
+			name:            "multiple paths",
+			model:           "claude-code-opus",
+			prompt:          "analyze",
+			allowedPaths:    []string{"./src", "./tests"},
+			tools:           nil,
+			contains:        []string{"--add-dir", "--dangerously-skip-permissions", "-p", "analyze"},
+			notContains:     []string{"--print"},
+			checkAbsPaths:   true,
+			expectedPathCnt: 2,
 		},
 		{
-			name:         "no allowed paths skips permission mode",
-			model:        "claude-code",
-			prompt:       "query",
-			allowedPaths: []string{},
-			tools:        nil,
-			contains:     []string{"-p", "query"},
-			notContains:  []string{"--print", "--add-dir", "--dangerously-skip-permissions"},
+			name:            "no allowed paths skips permission mode",
+			model:           "claude-code",
+			prompt:          "query",
+			allowedPaths:    []string{},
+			tools:           nil,
+			contains:        []string{"-p", "query"},
+			notContains:     []string{"--print", "--add-dir", "--dangerously-skip-permissions"},
+			checkAbsPaths:   false,
+			expectedPathCnt: 0,
 		},
 	}
 
@@ -246,6 +257,23 @@ func TestClaudeCodeBuildArgsAgentic(t *testing.T) {
 					if arg == notExpected {
 						t.Errorf("buildArgsAgentic() should not contain %q, got: %v", notExpected, args)
 					}
+				}
+			}
+
+			// Check that paths are resolved to absolute paths
+			if tt.checkAbsPaths {
+				addDirCount := 0
+				for i, arg := range args {
+					if arg == "--add-dir" && i+1 < len(args) {
+						addDirCount++
+						path := args[i+1]
+						if !strings.HasPrefix(path, "/") {
+							t.Errorf("buildArgsAgentic() path should be absolute, got: %q", path)
+						}
+					}
+				}
+				if addDirCount != tt.expectedPathCnt {
+					t.Errorf("buildArgsAgentic() expected %d --add-dir flags, got %d", tt.expectedPathCnt, addDirCount)
 				}
 			}
 		})
@@ -291,6 +319,63 @@ func TestClaudeCodeSendPromptAgenticPathValidation(t *testing.T) {
 				}
 			}
 			// Note: valid paths may still fail if claude binary not found, that's ok
+		})
+	}
+}
+
+func TestResolvePath(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		wantAbs  bool
+		wantHome bool // Should start with home directory
+	}{
+		{
+			name:     "tilde expansion",
+			input:    "~/test",
+			wantAbs:  true,
+			wantHome: true,
+		},
+		{
+			name:     "tilde only",
+			input:    "~",
+			wantAbs:  true,
+			wantHome: true,
+		},
+		{
+			name:     "relative path",
+			input:    "./src",
+			wantAbs:  true,
+			wantHome: false,
+		},
+		{
+			name:     "dot only",
+			input:    ".",
+			wantAbs:  true,
+			wantHome: false,
+		},
+		{
+			name:     "absolute path",
+			input:    "/tmp/test",
+			wantAbs:  true,
+			wantHome: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := resolvePath(tt.input)
+
+			if tt.wantAbs && !strings.HasPrefix(result, "/") {
+				t.Errorf("resolvePath(%q) = %q, want absolute path", tt.input, result)
+			}
+
+			if tt.wantHome {
+				home, _ := os.UserHomeDir()
+				if !strings.HasPrefix(result, home) {
+					t.Errorf("resolvePath(%q) = %q, want path starting with %q", tt.input, result, home)
+				}
+			}
 		})
 	}
 }

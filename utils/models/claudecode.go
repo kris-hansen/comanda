@@ -280,6 +280,26 @@ func (c *ClaudeCodeProvider) buildArgs(modelName string, prompt string, workDir 
 	return args
 }
 
+// resolvePath expands ~ to home directory and resolves to absolute path
+func resolvePath(path string) string {
+	// Expand ~ to home directory
+	if strings.HasPrefix(path, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			path = filepath.Join(home, path[2:])
+		}
+	} else if path == "~" {
+		if home, err := os.UserHomeDir(); err == nil {
+			path = home
+		}
+	}
+
+	// Resolve to absolute path
+	if absPath, err := filepath.Abs(path); err == nil {
+		return absPath
+	}
+	return path
+}
+
 // buildArgsAgentic constructs command line arguments for agentic mode (no --print)
 func (c *ClaudeCodeProvider) buildArgsAgentic(modelName string, prompt string, allowedPaths []string, tools []string) []string {
 	args := []string{} // NO --print flag - enables tool use
@@ -293,8 +313,11 @@ func (c *ClaudeCodeProvider) buildArgsAgentic(modelName string, prompt string, a
 	}
 
 	// Add allowed paths for tool access scope
+	// Resolve paths to absolute (expands ~ and converts relative to absolute)
 	for _, path := range allowedPaths {
-		args = append(args, "--add-dir", path)
+		resolvedPath := resolvePath(path)
+		c.debugf("Resolved allowed path: %s -> %s", path, resolvedPath)
+		args = append(args, "--add-dir", resolvedPath)
 	}
 
 	// Enable bypass permissions for non-interactive agentic use
