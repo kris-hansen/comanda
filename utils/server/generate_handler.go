@@ -126,11 +126,12 @@ func (s *Server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 	// Generate workflow with validation and retry
 	var yamlContent string
 	var invalidModels []string
-	maxAttempts := 2
+	var structureErrors string
+	maxAttempts := 3 // Increased to allow for both model and structure fixes
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		// Build the prompt
-		prompt := buildServerGeneratePrompt(dslGuide, req.Prompt, invalidModels)
+		// Build the prompt with any previous validation errors
+		prompt := buildServerGeneratePrompt(dslGuide, req.Prompt, invalidModels, structureErrors)
 
 		// Call the LLM
 		config.DebugLog("Sending prompt to LLM (attempt %d): model=%s, prompt_length=%d", attempt, modelForGeneration, len(prompt))
@@ -148,16 +149,40 @@ func (s *Server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 		// Extract YAML content from the response
 		yamlContent = extractServerYAMLContent(generatedResponse)
 
+		// Reset validation state for this attempt
+		invalidModels = nil
+		structureErrors = ""
+
 		// Validate model names in the generated workflow
 		invalidModels = processor.ValidateWorkflowModels(yamlContent, availableModels)
-		if len(invalidModels) == 0 {
+
+		// Validate DSL structure
+		validationResult := processor.ValidateWorkflowStructure(yamlContent)
+		if !validationResult.Valid {
+			structureErrors = validationResult.ErrorSummary()
+		}
+
+		// Check if all validations passed
+		if len(invalidModels) == 0 && structureErrors == "" {
+			config.VerboseLog("Workflow passed all validations on attempt %d", attempt)
 			break
 		}
 
 		if attempt < maxAttempts {
-			config.VerboseLog("Retrying generation due to invalid model(s): %v", invalidModels)
+			if len(invalidModels) > 0 {
+				config.VerboseLog("Retrying generation due to invalid model(s): %v", invalidModels)
+			}
+			if structureErrors != "" {
+				config.VerboseLog("Retrying generation due to DSL structure errors")
+				config.DebugLog("Structure errors: %s", structureErrors)
+			}
 		} else {
-			config.VerboseLog("Warning: Generated workflow contains invalid model(s): %v", invalidModels)
+			if len(invalidModels) > 0 {
+				config.VerboseLog("Warning: Generated workflow contains invalid model(s): %v", invalidModels)
+			}
+			if structureErrors != "" {
+				config.VerboseLog("Warning: Generated workflow has DSL structure errors: %s", structureErrors)
+			}
 		}
 	}
 
@@ -174,7 +199,7 @@ func (s *Server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 }
 
 // buildServerGeneratePrompt creates the prompt for workflow generation
-func buildServerGeneratePrompt(dslGuide, userPrompt string, invalidModels []string) string {
+func buildServerGeneratePrompt(dslGuide, userPrompt string, invalidModels []string, structureErrors string) string {
 	basePrompt := fmt.Sprintf(`SYSTEM: You are a YAML generator. You MUST output ONLY valid YAML content. No explanations, no markdown, no code blocks, no commentary - just raw YAML.
 
 --- BEGIN COMANDA DSL SPECIFICATION ---
@@ -186,11 +211,27 @@ User's request: %s
 CRITICAL INSTRUCTION: Your entire response must be valid YAML syntax that can be directly saved to a .yaml file. Do not include ANY text before or after the YAML content. Start your response with the first line of YAML and end with the last line of YAML.`,
 		dslGuide, userPrompt)
 
-	if len(invalidModels) > 0 {
-		basePrompt += fmt.Sprintf(`
+	// Add feedback about previous validation errors
+	if len(invalidModels) > 0 || structureErrors != "" {
+		basePrompt += "\n\n--- VALIDATION ERRORS FROM PREVIOUS ATTEMPT (FIX THESE) ---"
 
-IMPORTANT CORRECTION: Your previous response used invalid model name(s): %v
-You MUST only use models from the "Supported Models" list in the specification above. Please regenerate the workflow using ONLY valid model names.`, invalidModels)
+		if len(invalidModels) > 0 {
+			basePrompt += fmt.Sprintf(`
+
+MODEL ERROR: Your previous response used invalid model name(s): %v
+You MUST only use models from the "Supported Models" list in the specification above.`, invalidModels)
+		}
+
+		if structureErrors != "" {
+			basePrompt += fmt.Sprintf(`
+
+STRUCTURE ERRORS:
+%s
+
+Please fix all the above errors and regenerate the workflow.`, structureErrors)
+		}
+
+		basePrompt += "\n--- END VALIDATION ERRORS ---"
 	}
 
 	return basePrompt

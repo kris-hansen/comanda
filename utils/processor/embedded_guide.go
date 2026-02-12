@@ -1257,6 +1257,34 @@ summarize_quarterly_report:
 - **object**: what is being acted on (emails, report, schema, data, logs)
 - **qualifier**: optional specifics (quarterly, customer, json, spanish)
 
+### Common YAML Mistakes (AVOID THESE)
+
+**❌ WRONG - Using hyphens for step fields:**
+` + "```yaml" + `
+step_name:
+  - input: file.txt     # WRONG! Hyphens make this a list
+  - model: gpt-4o-mini  # WRONG!
+  - action: "Do thing"  # WRONG!
+  - output: STDOUT      # WRONG!
+` + "```" + `
+
+**✅ CORRECT - Simple key-value pairs (no hyphens):**
+` + "```yaml" + `
+step_name:
+  input: file.txt
+  model: gpt-4o-mini
+  action: "Do thing"
+  output: STDOUT
+` + "```" + `
+
+**Rule:** Hyphens (` + "`-`" + `) are ONLY for list items (e.g., multiple input files: ` + "`input: [file1.txt, file2.txt]`" + `).
+Step fields like ` + "`input`" + `, ` + "`model`" + `, ` + "`action`" + `, ` + "`output`" + ` are key-value pairs, NOT list items.
+
+**Other common mistakes:**
+- Missing required fields (` + "`input`" + `, ` + "`model`" + `, ` + "`action`" + `, ` + "`output`" + ` for standard steps)
+- Putting ` + "`model`" + ` or ` + "`output`" + ` at step level for ` + "`generate`" + ` steps (they belong inside the ` + "`generate:`" + ` block)
+- Using tabs instead of spaces for indentation
+
 ## 1. Standard Processing Step Definition
 
 This is the most common step type.
