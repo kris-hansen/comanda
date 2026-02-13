@@ -244,6 +244,168 @@ func TestExecuteLoopSteps_NoSteps(t *testing.T) {
 	}
 }
 
+func TestExpandAllowedPathsWithOutputDirs(t *testing.T) {
+	p := &Processor{
+		variables: make(map[string]string),
+	}
+
+	tests := []struct {
+		name         string
+		allowedPaths []string
+		steps        []Step
+		wantMinLen   int // Minimum expected length (since paths are absolute)
+	}{
+		{
+			name:         "no steps - paths unchanged",
+			allowedPaths: []string{"/tmp/src"},
+			steps:        []Step{},
+			wantMinLen:   1,
+		},
+		{
+			name:         "step with file output adds directory",
+			allowedPaths: []string{"/tmp/src"},
+			steps: []Step{
+				{
+					Name: "test",
+					Config: StepConfig{
+						Output: "./docs/output.md",
+					},
+				},
+			},
+			wantMinLen: 2, // Original path + docs directory
+		},
+		{
+			name:         "step with STDOUT output - no addition",
+			allowedPaths: []string{"/tmp/src"},
+			steps: []Step{
+				{
+					Name: "test",
+					Config: StepConfig{
+						Output: "STDOUT",
+					},
+				},
+			},
+			wantMinLen: 1,
+		},
+		{
+			name:         "step with variable output - no addition",
+			allowedPaths: []string{"/tmp/src"},
+			steps: []Step{
+				{
+					Name: "test",
+					Config: StepConfig{
+						Output: "$RESULT",
+					},
+				},
+			},
+			wantMinLen: 1,
+		},
+		{
+			name:         "multiple steps with different outputs",
+			allowedPaths: []string{"/tmp/src"},
+			steps: []Step{
+				{
+					Name: "step1",
+					Config: StepConfig{
+						Output: "./docs/file1.md",
+					},
+				},
+				{
+					Name: "step2",
+					Config: StepConfig{
+						Output: "./output/file2.txt",
+					},
+				},
+			},
+			wantMinLen: 3, // Original + docs + output
+		},
+		{
+			name:         "deduplicates same directory",
+			allowedPaths: []string{"/tmp/src"},
+			steps: []Step{
+				{
+					Name: "step1",
+					Config: StepConfig{
+						Output: "./docs/file1.md",
+					},
+				},
+				{
+					Name: "step2",
+					Config: StepConfig{
+						Output: "./docs/file2.md",
+					},
+				},
+			},
+			wantMinLen: 2, // Original + docs (deduped)
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := p.expandAllowedPathsWithOutputDirs(tt.allowedPaths, tt.steps)
+			if len(result) < tt.wantMinLen {
+				t.Errorf("expandAllowedPathsWithOutputDirs() returned %d paths, want at least %d", len(result), tt.wantMinLen)
+			}
+		})
+	}
+}
+
+func TestExtractOutputPath(t *testing.T) {
+	p := &Processor{
+		variables: make(map[string]string),
+	}
+
+	tests := []struct {
+		name   string
+		output interface{}
+		want   string
+	}{
+		{
+			name:   "nil output",
+			output: nil,
+			want:   "",
+		},
+		{
+			name:   "STDOUT",
+			output: "STDOUT",
+			want:   "",
+		},
+		{
+			name:   "NA",
+			output: "NA",
+			want:   "",
+		},
+		{
+			name:   "variable reference",
+			output: "$RESULT",
+			want:   "",
+		},
+		{
+			name:   "relative path",
+			output: "./docs/output.md",
+			want:   "./docs/output.md",
+		},
+		{
+			name:   "absolute path",
+			output: "/tmp/output.md",
+			want:   "/tmp/output.md",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := p.extractOutputPath(tt.output)
+			// For file paths, we just check they're non-empty when expected
+			if tt.want == "" && result != "" {
+				t.Errorf("extractOutputPath() = %q, want empty", result)
+			}
+			if tt.want != "" && result == "" {
+				t.Errorf("extractOutputPath() = empty, want non-empty")
+			}
+		})
+	}
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
 }

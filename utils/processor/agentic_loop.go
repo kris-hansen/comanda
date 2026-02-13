@@ -37,6 +37,10 @@ func (p *Processor) processAgenticLoopWithFile(loopName string, config *AgenticL
 		}
 	}
 
+	// Auto-add output directories to allowed_paths so agents can write output files
+	// This prevents "permission denied" errors when output paths aren't explicitly in allowed_paths
+	config.AllowedPaths = p.expandAllowedPathsWithOutputDirs(config.AllowedPaths, config.Steps)
+
 	// Check if agentic tools are enabled and we have allowed paths
 	if len(config.AllowedPaths) > 0 {
 		if p.envConfig != nil && !p.envConfig.IsAgenticToolsAllowed() {
@@ -480,4 +484,80 @@ func (p *Processor) processInlineAgenticLoop(step Step) (string, error) {
 	}
 
 	return p.processAgenticLoop(step.Name, config, p.lastOutput)
+}
+
+// expandAllowedPathsWithOutputDirs adds parent directories of any output file paths
+// to the allowed_paths list. This ensures agents can write to output locations
+// without requiring explicit configuration of every output directory.
+func (p *Processor) expandAllowedPathsWithOutputDirs(allowedPaths []string, steps []Step) []string {
+	// Use a map to deduplicate paths
+	pathSet := make(map[string]bool)
+	for _, path := range allowedPaths {
+		pathSet[path] = true
+	}
+
+	// Extract output directories from steps
+	for _, step := range steps {
+		outputPath := p.extractOutputPath(step.Config.Output)
+		if outputPath != "" {
+			// Get the parent directory of the output file
+			dir := filepath.Dir(outputPath)
+
+			// Resolve to absolute path
+			absDir, err := filepath.Abs(dir)
+			if err != nil {
+				p.debugf("Warning: failed to resolve output directory %s: %v", dir, err)
+				continue
+			}
+
+			// Add to set if not already present
+			if !pathSet[absDir] {
+				pathSet[absDir] = true
+				p.debugf("Auto-added output directory to allowed_paths: %s (from output: %s)", absDir, outputPath)
+			}
+		}
+	}
+
+	// Convert set back to slice
+	result := make([]string, 0, len(pathSet))
+	for path := range pathSet {
+		result = append(result, path)
+	}
+
+	return result
+}
+
+// extractOutputPath extracts the file path from an output configuration
+func (p *Processor) extractOutputPath(output interface{}) string {
+	if output == nil {
+		return ""
+	}
+
+	outputStr, ok := output.(string)
+	if !ok {
+		return ""
+	}
+
+	outputStr = strings.TrimSpace(outputStr)
+
+	// Skip non-file outputs
+	if outputStr == "" ||
+		outputStr == "STDOUT" ||
+		outputStr == "NA" ||
+		strings.HasPrefix(outputStr, "$") { // Variable reference
+		return ""
+	}
+
+	// Expand ~ and resolve path
+	if strings.HasPrefix(outputStr, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			outputStr = filepath.Join(home, outputStr[2:])
+		}
+	} else if outputStr == "~" {
+		if home, err := os.UserHomeDir(); err == nil {
+			outputStr = home
+		}
+	}
+
+	return outputStr
 }
