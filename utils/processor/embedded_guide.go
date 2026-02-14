@@ -813,6 +813,92 @@ execute_loops:
 - **Infer ` + "`allowed_paths`" + ` from user prompt** (e.g., "/tmp/code" → ` + "`allowed_paths: [/tmp/code]`" + `)
 - **Default ` + "`checkpoint_interval: 5`" + `** for safety
 
+### Using Codebase Index with Multi-Loop Workflows
+
+**⚠️ CRITICAL:** When using ` + "`execute_loops:`" + `, **ONLY the loops are executed**. Top-level steps (outside the ` + "`loops:`" + ` block) are IGNORED.
+
+❌ **WRONG** - Top-level codebase-index step will NOT run:
+` + "```yaml" + `
+# This step is IGNORED when using execute_loops!
+index_core:
+  step_type: codebase-index
+  codebase_index:
+    root: ~/my-project
+
+loops:
+  analyze:
+    steps:
+      step1:
+        input: $MY_PROJECT_INDEX  # ❌ Variable never set!
+        model: claude-code
+        action: "Analyze the codebase"
+        output: STDOUT
+
+execute_loops:
+  - analyze
+` + "```" + `
+
+✅ **CORRECT** - Reference the output file path directly:
+` + "```yaml" + `
+loops:
+  analyze:
+    allowed_paths: [~/my-project, .]
+    steps:
+      # First step: Generate the index
+      index:
+        step_type: codebase-index
+        codebase_index:
+          root: ~/my-project
+          output:
+            path: .comanda/MY_PROJECT_INDEX.md
+            store: repo
+
+      # Subsequent steps: Read the index file directly
+      analyze:
+        input: .comanda/MY_PROJECT_INDEX.md
+        model: claude-code
+        action: "Analyze this codebase index"
+        output: STDOUT
+
+execute_loops:
+  - analyze
+` + "```" + `
+
+✅ **ALSO CORRECT** - Use input_state to pass index between loops:
+` + "```yaml" + `
+loops:
+  indexer:
+    max_iterations: 1
+    allowed_paths: [~/my-project]
+    output_state: $CODEBASE_INDEX
+    steps:
+      index:
+        step_type: codebase-index
+        codebase_index:
+          root: ~/my-project
+        output: STDOUT
+
+  analyzer:
+    depends_on: [indexer]
+    input_state: $CODEBASE_INDEX
+    allowed_paths: [~/my-project, .]
+    steps:
+      analyze:
+        input: STDIN
+        model: claude-code
+        action: |
+          Codebase index:
+          {{ loop.previous_output }}
+
+          Analyze the architecture.
+        output: STDOUT
+
+execute_loops:
+  - indexer
+  - analyzer
+` + "```" + `
+
+
 ## 6. Codebase Index Step Definition (` + "`codebase_index`" + `)
 
 This step scans a repository and generates a compact Markdown index optimized for LLM consumption. It supports multiple programming languages and exposes workflow variables for downstream steps.
@@ -1912,6 +1998,92 @@ execute_loops:
 - **Use meaningful variable names** (` + "`$RAW_DATA`" + `, not ` + "`$OUTPUT`" + `)
 - **Infer ` + "`allowed_paths`" + ` from user prompt** (e.g., "/tmp/code" → ` + "`allowed_paths: [/tmp/code]`" + `)
 - **Default ` + "`checkpoint_interval: 5`" + `** for safety
+
+### Using Codebase Index with Multi-Loop Workflows
+
+**⚠️ CRITICAL:** When using ` + "`execute_loops:`" + `, **ONLY the loops are executed**. Top-level steps (outside the ` + "`loops:`" + ` block) are IGNORED.
+
+❌ **WRONG** - Top-level codebase-index step will NOT run:
+` + "```yaml" + `
+# This step is IGNORED when using execute_loops!
+index_core:
+  step_type: codebase-index
+  codebase_index:
+    root: ~/my-project
+
+loops:
+  analyze:
+    steps:
+      step1:
+        input: $MY_PROJECT_INDEX  # ❌ Variable never set!
+        model: claude-code
+        action: "Analyze the codebase"
+        output: STDOUT
+
+execute_loops:
+  - analyze
+` + "```" + `
+
+✅ **CORRECT** - Reference the output file path directly:
+` + "```yaml" + `
+loops:
+  analyze:
+    allowed_paths: [~/my-project, .]
+    steps:
+      # First step: Generate the index
+      index:
+        step_type: codebase-index
+        codebase_index:
+          root: ~/my-project
+          output:
+            path: .comanda/MY_PROJECT_INDEX.md
+            store: repo
+
+      # Subsequent steps: Read the index file directly
+      analyze:
+        input: .comanda/MY_PROJECT_INDEX.md
+        model: claude-code
+        action: "Analyze this codebase index"
+        output: STDOUT
+
+execute_loops:
+  - analyze
+` + "```" + `
+
+✅ **ALSO CORRECT** - Use input_state to pass index between loops:
+` + "```yaml" + `
+loops:
+  indexer:
+    max_iterations: 1
+    allowed_paths: [~/my-project]
+    output_state: $CODEBASE_INDEX
+    steps:
+      index:
+        step_type: codebase-index
+        codebase_index:
+          root: ~/my-project
+        output: STDOUT
+
+  analyzer:
+    depends_on: [indexer]
+    input_state: $CODEBASE_INDEX
+    allowed_paths: [~/my-project, .]
+    steps:
+      analyze:
+        input: STDIN
+        model: claude-code
+        action: |
+          Codebase index:
+          {{ loop.previous_output }}
+
+          Analyze the architecture.
+        output: STDOUT
+
+execute_loops:
+  - indexer
+  - analyzer
+` + "```" + `
+
 
 ## 6. Codebase Index Step Definition (` + "`codebase_index`" + `)
 
