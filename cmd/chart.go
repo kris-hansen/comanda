@@ -453,30 +453,30 @@ func renderChart(chart *WorkflowChart, filename string) {
 
 // Unicode box-drawing characters
 const (
-	boxHoriz      = "─"
-	boxVert       = "│"
-	boxTopLeft    = "┌"
-	boxTopRight   = "┐"
-	boxBottomLeft = "└"
-	boxBottomRight = "┘"
-	boxVertRight  = "├"
-	boxVertLeft   = "┤"
-	boxHorizDown  = "┬"
-	boxHorizUp    = "┴"
-	boxCross      = "┼"
-	boxDoubleHoriz = "═"
-	boxDoubleVert  = "║"
-	boxDoubleTopLeft = "╔"
-	boxDoubleTopRight = "╗"
-	boxDoubleBottomLeft = "╚"
+	boxHoriz             = "─"
+	boxVert              = "│"
+	boxTopLeft           = "┌"
+	boxTopRight          = "┐"
+	boxBottomLeft        = "└"
+	boxBottomRight       = "┘"
+	boxVertRight         = "├"
+	boxVertLeft          = "┤"
+	boxHorizDown         = "┬"
+	boxHorizUp           = "┴"
+	boxCross             = "┼"
+	boxDoubleHoriz       = "═"
+	boxDoubleVert        = "║"
+	boxDoubleTopLeft     = "╔"
+	boxDoubleTopRight    = "╗"
+	boxDoubleBottomLeft  = "╚"
 	boxDoubleBottomRight = "╝"
-	arrowDown     = "▼"
-	arrowRight    = "▶"
-	loopIcon      = "🔄"
-	stepIcon      = "📋"
-	parallelIcon  = "⫸"
-	inputIcon     = "📥"
-	outputIcon    = "📤"
+	arrowDown            = "▼"
+	arrowRight           = "▶"
+	loopIcon             = "🔄"
+	stepIcon             = "📋"
+	parallelIcon         = "⫸"
+	inputIcon            = "📥"
+	outputIcon           = "📤"
 )
 
 // printBox prints a double-line box with centered text
@@ -517,22 +517,22 @@ func printStepBox(name, model, summary string, isValid bool, width int, node *Ch
 
 	// Build the content lines
 	line1 := fmt.Sprintf(" %s %s", status, name)
-	
+
 	// Truncate lines if needed
 	maxContent := width - 4
 
 	// Print the box
 	fmt.Println(boxTopLeft + strings.Repeat(boxHoriz, width-2) + boxTopRight)
-	
+
 	// Name line
 	if len(line1) > maxContent {
 		line1 = line1[:maxContent-3] + "..."
 	}
 	fmt.Printf("%s %-*s %s\n", boxVert, width-4, line1, boxVert)
-	
+
 	// Separator
 	fmt.Println(boxVertRight + strings.Repeat(boxHoriz, width-2) + boxVertLeft)
-	
+
 	// Model line
 	if model != "" && model != "N/A" && model != "[]" {
 		modelLine := fmt.Sprintf(" Model: %s", model)
@@ -541,7 +541,7 @@ func printStepBox(name, model, summary string, isValid bool, width int, node *Ch
 		}
 		fmt.Printf("%s %-*s %s\n", boxVert, width-4, modelLine, boxVert)
 	}
-	
+
 	// Action/prompt line
 	if summary != "" {
 		actionLine := fmt.Sprintf(" %s", summary)
@@ -550,7 +550,7 @@ func printStepBox(name, model, summary string, isValid bool, width int, node *Ch
 		}
 		fmt.Printf("%s %-*s %s\n", boxVert, width-4, actionLine, boxVert)
 	}
-	
+
 	// Show output if available
 	if node != nil && len(node.Output) > 0 {
 		outStr := strings.Join(node.Output, ", ")
@@ -562,7 +562,7 @@ func printStepBox(name, model, summary string, isValid bool, width int, node *Ch
 			fmt.Printf("%s %-*s %s\n", boxVert, width-4, outputLine, boxVert)
 		}
 	}
-	
+
 	fmt.Println(boxBottomLeft + strings.Repeat(boxHoriz, width-2) + boxBottomRight)
 }
 
@@ -811,7 +811,7 @@ func renderNodeInline(node ChartNode, width int) {
 
 	fmt.Println("  " + boxTopLeft + strings.Repeat(boxHoriz, width-4) + boxTopRight)
 	fmt.Printf("  %s %-*s %s\n", boxVert, width-6, line1, boxVert)
-	
+
 	// Model line
 	if node.Model != "" && node.Model != "N/A" && node.Model != "[]" {
 		line2 := fmt.Sprintf(" Model: %s", node.Model)
@@ -820,7 +820,7 @@ func renderNodeInline(node ChartNode, width int) {
 		}
 		fmt.Printf("  %s %-*s %s\n", boxVert, width-6, line2, boxVert)
 	}
-	
+
 	// Action line
 	if summary != "" {
 		line3 := fmt.Sprintf(" %s", summary)
@@ -829,7 +829,7 @@ func renderNodeInline(node ChartNode, width int) {
 		}
 		fmt.Printf("  %s %-*s %s\n", boxVert, width-6, line3, boxVert)
 	}
-	
+
 	// Output line
 	if len(node.Output) > 0 {
 		outStr := strings.Join(node.Output, ", ")
@@ -841,7 +841,7 @@ func renderNodeInline(node ChartNode, width int) {
 			fmt.Printf("  %s %-*s %s\n", boxVert, width-6, outputLine, boxVert)
 		}
 	}
-	
+
 	fmt.Println("  " + boxBottomLeft + strings.Repeat(boxHoriz, width-4) + boxBottomRight)
 }
 
@@ -1195,7 +1195,7 @@ func formatIOList(items []string) string {
 func renderMermaidChart(chart *WorkflowChart, filename string) {
 	fmt.Println("```mermaid")
 	fmt.Println("flowchart TD")
-	
+
 	// Create a safe ID from name (replace special chars)
 	safeID := func(name string) string {
 		id := strings.ReplaceAll(name, "-", "_")
@@ -1203,7 +1203,7 @@ func renderMermaidChart(chart *WorkflowChart, filename string) {
 		id = strings.ReplaceAll(id, ":", "_")
 		return id
 	}
-	
+
 	// Node label with details
 	nodeLabel := func(node ChartNode) string {
 		label := node.Name
@@ -1216,35 +1216,33 @@ func renderMermaidChart(chart *WorkflowChart, filename string) {
 		}
 		return label
 	}
-	
+
 	// Track node IDs for connections
 	nodeIDs := make(map[string]string)
 	var prevID string
-	
+
 	// Entry point
 	entryText := getEntryPointText(chart)
 	if entryText != "" {
 		fmt.Printf("    INPUT[[\"%s\"]]\n", entryText)
 		prevID = "INPUT"
 	}
-	
+
 	// Render nodes in order
 	for _, item := range chart.SequentialOrder {
 		if strings.HasPrefix(item, "parallel:") {
 			groupName := strings.TrimPrefix(item, "parallel:")
 			nodes := chart.ParallelGroups[groupName]
-			
+
 			// Create subgraph for parallel group
 			groupID := safeID("parallel_" + groupName)
 			fmt.Printf("    subgraph %s [\"%s Parallel: %s\"]\n", groupID, parallelIcon, groupName)
 			fmt.Println("    direction TB")
-			
-			var parallelIDs []string
+
 			for _, node := range nodes {
 				nodeID := safeID(node.Name)
 				nodeIDs[node.Name] = nodeID
-				parallelIDs = append(parallelIDs, nodeID)
-				
+
 				// Use different shapes based on step type
 				if node.StepType == "agentic-loop" {
 					fmt.Printf("        %s{{{\"%s\"}}}\n", nodeID, nodeLabel(node))
@@ -1253,28 +1251,28 @@ func renderMermaidChart(chart *WorkflowChart, filename string) {
 				}
 			}
 			fmt.Println("    end")
-			
+
 			// Connect previous to all parallel nodes
 			if prevID != "" {
 				fmt.Printf("    %s --> %s\n", prevID, groupID)
 			}
 			prevID = groupID
-			
+
 		} else if strings.HasPrefix(item, "agentic-loop:") {
 			loopKey := strings.TrimPrefix(item, "agentic-loop:")
 			loopCfg, ok := chart.AgenticLoopCfgs[loopKey]
 			if !ok {
 				continue
 			}
-			
+
 			displayName := loopKey
 			if loopCfg.Name != "" {
 				displayName = loopCfg.Name
 			}
-			
+
 			loopID := safeID("loop_" + loopKey)
 			nodeIDs[loopKey] = loopID
-			
+
 			// Create subgraph for agentic loop
 			maxIter := loopCfg.MaxIterations
 			if maxIter == 0 {
@@ -1282,7 +1280,7 @@ func renderMermaidChart(chart *WorkflowChart, filename string) {
 			}
 			fmt.Printf("    subgraph %s [\"%s %s (max %d iter)\"]\n", loopID, loopIcon, displayName, maxIter)
 			fmt.Println("    direction TB")
-			
+
 			var stepIDs []string
 			for i, step := range loopCfg.Steps {
 				node := stepToChartNode(step, false, "")
@@ -1290,32 +1288,32 @@ func renderMermaidChart(chart *WorkflowChart, filename string) {
 				stepIDs = append(stepIDs, stepID)
 				fmt.Printf("        %s[\"%s\"]\n", stepID, nodeLabel(node))
 			}
-			
+
 			// Connect steps within loop
 			for i := 0; i < len(stepIDs)-1; i++ {
 				fmt.Printf("        %s --> %s\n", stepIDs[i], stepIDs[i+1])
 			}
-			
+
 			// Loop back arrow
 			if len(stepIDs) > 0 {
 				fmt.Printf("        %s -.->|loop| %s\n", stepIDs[len(stepIDs)-1], stepIDs[0])
 			}
-			
+
 			fmt.Println("    end")
-			
+
 			// Connect to previous
 			if prevID != "" {
 				fmt.Printf("    %s --> %s\n", prevID, loopID)
 			}
 			prevID = loopID
-			
+
 		} else {
 			// Regular node
 			for _, node := range chart.Nodes {
 				if node.Name == item {
 					nodeID := safeID(node.Name)
 					nodeIDs[node.Name] = nodeID
-					
+
 					// Use different shapes based on step type
 					if node.StepType == "agentic-loop" {
 						fmt.Printf("    %s{{{\"%s\"}}}\n", nodeID, nodeLabel(node))
@@ -1324,7 +1322,7 @@ func renderMermaidChart(chart *WorkflowChart, filename string) {
 					} else {
 						fmt.Printf("    %s[\"%s\"]\n", nodeID, nodeLabel(node))
 					}
-					
+
 					// Connect to previous
 					if prevID != "" {
 						fmt.Printf("    %s --> %s\n", prevID, nodeID)
@@ -1335,20 +1333,20 @@ func renderMermaidChart(chart *WorkflowChart, filename string) {
 			}
 		}
 	}
-	
+
 	// Exit point
 	exitText := getExitPointText(chart)
 	if exitText != "" && prevID != "" {
 		fmt.Printf("    OUTPUT[[\"%s\"]]\n", exitText)
 		fmt.Printf("    %s --> OUTPUT\n", prevID)
 	}
-	
+
 	// Style definitions
 	fmt.Println()
 	fmt.Println("    %% Styling")
 	fmt.Println("    classDef loopStyle fill:#e1f5fe,stroke:#0277bd")
 	fmt.Println("    classDef parallelStyle fill:#f3e5f5,stroke:#7b1fa2")
 	fmt.Println("    classDef ioStyle fill:#fff3e0,stroke:#ef6c00")
-	
+
 	fmt.Println("```")
 }
