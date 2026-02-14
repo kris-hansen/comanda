@@ -42,17 +42,28 @@ type WorkflowChart struct {
 	Errors          []string
 }
 
+var (
+	chartFormat string
+)
+
 var chartCmd = &cobra.Command{
 	Use:   "chart <workflow.yaml>",
-	Short: "Display an ASCII chart visualization of a workflow",
+	Short: "Display a chart visualization of a workflow",
 	Long: `Display a visual representation of a workflow file showing:
   - Relationship between steps (sequential and parallel)
   - Step names, model names, and brief action summaries
   - Validity of each step
   - Input/output chains between steps
-  - Workflow statistics`,
-	Example: `  # Display workflow chart
+  - Workflow statistics
+
+Output formats:
+  - ascii (default): Unicode box-drawing chart for terminal
+  - mermaid: Mermaid flowchart syntax for docs/README`,
+	Example: `  # Display workflow chart (ASCII)
   comanda chart workflow.yaml
+
+  # Display as Mermaid flowchart
+  comanda chart workflow.yaml --format mermaid
 
   # Display chart with verbose output
   comanda chart workflow.yaml --verbose`,
@@ -75,14 +86,20 @@ var chartCmd = &cobra.Command{
 		// Build chart structure
 		chart := buildWorkflowChart(&dslConfig)
 
-		// Render and print the chart
-		renderChart(chart, workflowFile)
+		// Render based on format
+		switch chartFormat {
+		case "mermaid":
+			renderMermaidChart(chart, workflowFile)
+		default:
+			renderChart(chart, workflowFile)
+		}
 
 		return nil
 	},
 }
 
 func init() {
+	chartCmd.Flags().StringVarP(&chartFormat, "format", "f", "ascii", "Output format: ascii, mermaid")
 	rootCmd.AddCommand(chartCmd)
 }
 
@@ -372,8 +389,8 @@ func renderChart(chart *WorkflowChart, filename string) {
 	entryText := getEntryPointText(chart)
 	if entryText != "" {
 		printSmallBox(entryText, boxWidth)
-		fmt.Println(strings.Repeat(" ", (boxWidth-1)/2) + "|")
-		fmt.Println(strings.Repeat(" ", (boxWidth-1)/2) + "v")
+		fmt.Println(strings.Repeat(" ", (boxWidth-1)/2) + boxVert)
+		fmt.Println(strings.Repeat(" ", (boxWidth-1)/2) + arrowDown)
 	}
 
 	// Render steps in order
@@ -405,8 +422,8 @@ func renderChart(chart *WorkflowChart, filename string) {
 		}
 		// Arrow between steps
 		if !isLast {
-			fmt.Println(strings.Repeat(" ", (boxWidth-1)/2) + "|")
-			fmt.Println(strings.Repeat(" ", (boxWidth-1)/2) + "v")
+			fmt.Println(strings.Repeat(" ", (boxWidth-1)/2) + boxVert)
+			fmt.Println(strings.Repeat(" ", (boxWidth-1)/2) + arrowDown)
 		}
 	}
 
@@ -414,8 +431,8 @@ func renderChart(chart *WorkflowChart, filename string) {
 	fmt.Println()
 	exitText := getExitPointText(chart)
 	if exitText != "" {
-		fmt.Println(strings.Repeat(" ", (boxWidth-1)/2) + "|")
-		fmt.Println(strings.Repeat(" ", (boxWidth-1)/2) + "v")
+		fmt.Println(strings.Repeat(" ", (boxWidth-1)/2) + boxVert)
+		fmt.Println(strings.Repeat(" ", (boxWidth-1)/2) + arrowDown)
 		printSmallBox(exitText, boxWidth)
 	}
 
@@ -434,6 +451,34 @@ func renderChart(chart *WorkflowChart, filename string) {
 	printStatsBox(chart, boxWidth)
 }
 
+// Unicode box-drawing characters
+const (
+	boxHoriz             = "─"
+	boxVert              = "│"
+	boxTopLeft           = "┌"
+	boxTopRight          = "┐"
+	boxBottomLeft        = "└"
+	boxBottomRight       = "┘"
+	boxVertRight         = "├"
+	boxVertLeft          = "┤"
+	boxHorizDown         = "┬"
+	boxHorizUp           = "┴"
+	boxCross             = "┼"
+	boxDoubleHoriz       = "═"
+	boxDoubleVert        = "║"
+	boxDoubleTopLeft     = "╔"
+	boxDoubleTopRight    = "╗"
+	boxDoubleBottomLeft  = "╚"
+	boxDoubleBottomRight = "╝"
+	arrowDown            = "▼"
+	arrowRight           = "▶"
+	loopIcon             = "🔄"
+	stepIcon             = "📋"
+	parallelIcon         = "⫸"
+	inputIcon            = "📥"
+	outputIcon           = "📤"
+)
+
 // printBox prints a double-line box with centered text
 func printBox(text string, width int) {
 	// Truncate if needed
@@ -444,9 +489,9 @@ func printBox(text string, width int) {
 	leftPad := padding / 2
 	rightPad := padding - leftPad
 
-	fmt.Println("+" + strings.Repeat("=", width-2) + "+")
-	fmt.Printf("|%s%s%s|\n", strings.Repeat(" ", leftPad), text, strings.Repeat(" ", rightPad))
-	fmt.Println("+" + strings.Repeat("=", width-2) + "+")
+	fmt.Println(boxDoubleTopLeft + strings.Repeat(boxDoubleHoriz, width-2) + boxDoubleTopRight)
+	fmt.Printf("%s%s%s%s%s\n", boxDoubleVert, strings.Repeat(" ", leftPad), text, strings.Repeat(" ", rightPad), boxDoubleVert)
+	fmt.Println(boxDoubleBottomLeft + strings.Repeat(boxDoubleHoriz, width-2) + boxDoubleBottomRight)
 }
 
 // printSmallBox prints a single-line box
@@ -458,45 +503,67 @@ func printSmallBox(text string, width int) {
 	leftPad := padding / 2
 	rightPad := padding - leftPad
 
-	fmt.Println("+" + strings.Repeat("-", width-2) + "+")
-	fmt.Printf("|%s%s%s|\n", strings.Repeat(" ", leftPad), text, strings.Repeat(" ", rightPad))
-	fmt.Println("+" + strings.Repeat("-", width-2) + "+")
+	fmt.Println(boxTopLeft + strings.Repeat(boxHoriz, width-2) + boxTopRight)
+	fmt.Printf("%s%s%s%s%s\n", boxVert, strings.Repeat(" ", leftPad), text, strings.Repeat(" ", rightPad), boxVert)
+	fmt.Println(boxBottomLeft + strings.Repeat(boxHoriz, width-2) + boxBottomRight)
 }
 
 // printStepBox prints a step box with name, model, and summary
-func printStepBox(name, model, summary string, isValid bool, width int) {
-	status := "OK"
+func printStepBox(name, model, summary string, isValid bool, width int, node *ChartNode) {
+	status := "✓"
 	if !isValid {
-		status = "!!"
+		status = "✗"
 	}
 
 	// Build the content lines
-	line1 := fmt.Sprintf("[%s] %s", status, name)
-	line2 := fmt.Sprintf("Model:  %s", model)
-	line3 := fmt.Sprintf("Action: %s", summary)
+	line1 := fmt.Sprintf(" %s %s", status, name)
 
 	// Truncate lines if needed
 	maxContent := width - 4
+
+	// Print the box
+	fmt.Println(boxTopLeft + strings.Repeat(boxHoriz, width-2) + boxTopRight)
+
+	// Name line
 	if len(line1) > maxContent {
 		line1 = line1[:maxContent-3] + "..."
 	}
-	if len(line2) > maxContent {
-		line2 = line2[:maxContent-3] + "..."
-	}
-	if len(line3) > maxContent {
-		line3 = line3[:maxContent-3] + "..."
+	fmt.Printf("%s %-*s %s\n", boxVert, width-4, line1, boxVert)
+
+	// Separator
+	fmt.Println(boxVertRight + strings.Repeat(boxHoriz, width-2) + boxVertLeft)
+
+	// Model line
+	if model != "" && model != "N/A" && model != "[]" {
+		modelLine := fmt.Sprintf(" Model: %s", model)
+		if len(modelLine) > maxContent {
+			modelLine = modelLine[:maxContent-3] + "..."
+		}
+		fmt.Printf("%s %-*s %s\n", boxVert, width-4, modelLine, boxVert)
 	}
 
-	// Print the box
-	fmt.Println("+" + strings.Repeat("-", width-2) + "+")
-	fmt.Printf("| %-*s |\n", width-4, line1)
-	if model != "" && model != "N/A" && model != "[]" {
-		fmt.Printf("| %-*s |\n", width-4, line2)
-	}
+	// Action/prompt line
 	if summary != "" {
-		fmt.Printf("| %-*s |\n", width-4, line3)
+		actionLine := fmt.Sprintf(" %s", summary)
+		if len(actionLine) > maxContent {
+			actionLine = actionLine[:maxContent-3] + "..."
+		}
+		fmt.Printf("%s %-*s %s\n", boxVert, width-4, actionLine, boxVert)
 	}
-	fmt.Println("+" + strings.Repeat("-", width-2) + "+")
+
+	// Show output if available
+	if node != nil && len(node.Output) > 0 {
+		outStr := strings.Join(node.Output, ", ")
+		if outStr != "" && outStr != "STDOUT" && outStr != "[]" {
+			outputLine := fmt.Sprintf(" Output: %s", outStr)
+			if len(outputLine) > maxContent {
+				outputLine = outputLine[:maxContent-3] + "..."
+			}
+			fmt.Printf("%s %-*s %s\n", boxVert, width-4, outputLine, boxVert)
+		}
+	}
+
+	fmt.Println(boxBottomLeft + strings.Repeat(boxHoriz, width-2) + boxBottomRight)
 }
 
 // printStatsBox prints the statistics in a box
@@ -541,34 +608,34 @@ func printStatsBox(chart *WorkflowChart, width int) {
 		}
 	}
 
-	fmt.Println("+" + strings.Repeat("=", width-2) + "+")
-	fmt.Printf("| %-*s |\n", width-4, "STATISTICS")
-	fmt.Println("|" + strings.Repeat("-", width-2) + "|")
+	fmt.Println(boxDoubleTopLeft + strings.Repeat(boxDoubleHoriz, width-2) + boxDoubleTopRight)
+	fmt.Printf("%s %-*s %s\n", boxDoubleVert, width-4, "📊 STATISTICS", boxDoubleVert)
+	fmt.Println(boxVertRight + strings.Repeat(boxHoriz, width-2) + boxVertLeft)
 	if loopCount > 0 {
-		fmt.Printf("| %-*s |\n", width-4, fmt.Sprintf("Loops: %d agentic", loopCount))
+		fmt.Printf("%s %-*s %s\n", boxVert, width-4, fmt.Sprintf(" %s Loops: %d agentic", loopIcon, loopCount), boxVert)
 	} else {
-		fmt.Printf("| %-*s |\n", width-4, fmt.Sprintf("Steps: %d total, %d parallel", totalSteps, parallelSteps))
+		fmt.Printf("%s %-*s %s\n", boxVert, width-4, fmt.Sprintf(" Steps: %d total, %d parallel", totalSteps, parallelSteps), boxVert)
 	}
 	if len(chart.DeferredSteps) > 0 {
-		fmt.Printf("| %-*s |\n", width-4, fmt.Sprintf("Deferred: %d conditional", len(chart.DeferredSteps)))
+		fmt.Printf("%s %-*s %s\n", boxVert, width-4, fmt.Sprintf(" Deferred: %d conditional", len(chart.DeferredSteps)), boxVert)
 	}
 	if loopCount == 0 {
-		fmt.Printf("| %-*s |\n", width-4, fmt.Sprintf("Valid: %d/%d", validSteps, totalSteps))
+		fmt.Printf("%s %-*s %s\n", boxVert, width-4, fmt.Sprintf(" Valid: %d/%d", validSteps, totalSteps), boxVert)
 	}
 
 	if len(modelCounts) > 0 {
-		fmt.Println("|" + strings.Repeat("-", width-2) + "|")
+		fmt.Println(boxVertRight + strings.Repeat(boxHoriz, width-2) + boxVertLeft)
 		var models []string
 		for model := range modelCounts {
 			models = append(models, model)
 		}
 		sort.Strings(models)
 		for _, model := range models {
-			modelLine := fmt.Sprintf("%s (%d)", model, modelCounts[model])
-			fmt.Printf("| %-*s |\n", width-4, modelLine)
+			modelLine := fmt.Sprintf(" %s (%d)", model, modelCounts[model])
+			fmt.Printf("%s %-*s %s\n", boxVert, width-4, modelLine, boxVert)
 		}
 	}
-	fmt.Println("+" + strings.Repeat("=", width-2) + "+")
+	fmt.Println(boxDoubleBottomLeft + strings.Repeat(boxDoubleHoriz, width-2) + boxDoubleBottomRight)
 }
 
 // getEntryPointText returns a short description of entry points
@@ -634,7 +701,7 @@ func getExitPointText(chart *WorkflowChart) string {
 // renderNodeBox draws a step as an ASCII box
 func renderNodeBox(node ChartNode, stepNum int, boxWidth int) {
 	summary := summarizeAction(node.Action, node.StepType)
-	printStepBox(node.Name, node.Model, summary, node.IsValid, boxWidth)
+	printStepBox(node.Name, node.Model, summary, node.IsValid, boxWidth, &node)
 }
 
 // summarizeAction creates a brief summary of the action (up to 5 words)
@@ -728,59 +795,77 @@ func summarizeAction(action string, stepType string) string {
 
 // renderNodeInline draws a node inline for parallel display
 func renderNodeInline(node ChartNode, width int) {
-	status := "OK"
+	status := "✓"
 	if !node.IsValid {
-		status = "!!"
+		status = "✗"
 	}
 	summary := summarizeAction(node.Action, node.StepType)
 
-	line1 := fmt.Sprintf("[%s] %s", status, node.Name)
-	line2 := fmt.Sprintf("Model:  %s", node.Model)
-	line3 := fmt.Sprintf("Action: %s", summary)
-
 	maxContent := width - 6
+
+	// Name line
+	line1 := fmt.Sprintf(" %s %s", status, node.Name)
 	if len(line1) > maxContent {
 		line1 = line1[:maxContent-3] + "..."
 	}
-	if len(line2) > maxContent {
-		line2 = line2[:maxContent-3] + "..."
-	}
-	if len(line3) > maxContent {
-		line3 = line3[:maxContent-3] + "..."
+
+	fmt.Println("  " + boxTopLeft + strings.Repeat(boxHoriz, width-4) + boxTopRight)
+	fmt.Printf("  %s %-*s %s\n", boxVert, width-6, line1, boxVert)
+
+	// Model line
+	if node.Model != "" && node.Model != "N/A" && node.Model != "[]" {
+		line2 := fmt.Sprintf(" Model: %s", node.Model)
+		if len(line2) > maxContent {
+			line2 = line2[:maxContent-3] + "..."
+		}
+		fmt.Printf("  %s %-*s %s\n", boxVert, width-6, line2, boxVert)
 	}
 
-	fmt.Println("  +" + strings.Repeat("-", width-4) + "+")
-	fmt.Printf("  | %-*s |\n", width-6, line1)
-	if node.Model != "" && node.Model != "N/A" && node.Model != "[]" {
-		fmt.Printf("  | %-*s |\n", width-6, line2)
-	}
+	// Action line
 	if summary != "" {
-		fmt.Printf("  | %-*s |\n", width-6, line3)
+		line3 := fmt.Sprintf(" %s", summary)
+		if len(line3) > maxContent {
+			line3 = line3[:maxContent-3] + "..."
+		}
+		fmt.Printf("  %s %-*s %s\n", boxVert, width-6, line3, boxVert)
 	}
-	fmt.Println("  +" + strings.Repeat("-", width-4) + "+")
+
+	// Output line
+	if len(node.Output) > 0 {
+		outStr := strings.Join(node.Output, ", ")
+		if outStr != "" && outStr != "STDOUT" && outStr != "[]" {
+			outputLine := fmt.Sprintf(" Output: %s", outStr)
+			if len(outputLine) > maxContent {
+				outputLine = outputLine[:maxContent-3] + "..."
+			}
+			fmt.Printf("  %s %-*s %s\n", boxVert, width-6, outputLine, boxVert)
+		}
+	}
+
+	fmt.Println("  " + boxBottomLeft + strings.Repeat(boxHoriz, width-4) + boxBottomRight)
 }
 
 // renderParallelGroup draws a parallel execution group
 func renderParallelGroup(nodes []ChartNode, groupName string, stepNum int, boxWidth int) {
 	// Draw a box around the parallel group
-	fmt.Println("+" + strings.Repeat("=", boxWidth-2) + "+")
-	header := fmt.Sprintf("PARALLEL: %s (%d steps)", groupName, len(nodes))
+	fmt.Println(boxDoubleTopLeft + strings.Repeat(boxDoubleHoriz, boxWidth-2) + boxDoubleTopRight)
+	header := fmt.Sprintf(" %s PARALLEL: %s (%d steps)", parallelIcon, groupName, len(nodes))
 	if len(header) > boxWidth-4 {
 		header = header[:boxWidth-7] + "..."
 	}
-	fmt.Printf("| %-*s |\n", boxWidth-4, header)
-	fmt.Println("+" + strings.Repeat("-", boxWidth-2) + "+")
+	fmt.Printf("%s %-*s %s\n", boxDoubleVert, boxWidth-4, header, boxDoubleVert)
+	fmt.Println(boxVertRight + strings.Repeat(boxHoriz, boxWidth-2) + boxVertLeft)
 
 	// Render each parallel node as a smaller box inside
 	for i, node := range nodes {
 		renderNodeInline(node, boxWidth)
 		if i < len(nodes)-1 {
 			// Separator between parallel nodes
-			fmt.Println("  " + strings.Repeat("~", boxWidth-6))
+			fmt.Println("  " + strings.Repeat("┄", boxWidth-6))
 		}
 	}
 
-	fmt.Println("+" + strings.Repeat("=", boxWidth-2) + "+")
+	fmt.Println(boxDoubleBottomLeft + strings.Repeat(boxDoubleHoriz, boxWidth-2) + boxDoubleBottomRight)
 }
 
 // processAgenticLoopBlocks handles standalone agentic-loop blocks (config.AgenticLoops)
@@ -806,59 +891,69 @@ func renderAgenticLoopBox(config *processor.AgenticLoopConfig, boxWidth int) {
 	}
 
 	// Header
-	fmt.Println("+" + strings.Repeat("=", boxWidth-2) + "+")
-	header := fmt.Sprintf("AGENTIC LOOP: %s", displayName)
+	fmt.Println(boxDoubleTopLeft + strings.Repeat(boxDoubleHoriz, boxWidth-2) + boxDoubleTopRight)
+	header := fmt.Sprintf(" %s %s", loopIcon, displayName)
 	if len(header) > boxWidth-4 {
 		header = header[:boxWidth-7] + "..."
 	}
-	fmt.Printf("| %-*s |\n", boxWidth-4, header)
+	fmt.Printf("%s %-*s %s\n", boxDoubleVert, boxWidth-4, header, boxDoubleVert)
 
 	// Config line
 	exitInfo := config.ExitCondition
 	if exitInfo == "" {
 		exitInfo = "llm_decides"
 	}
-	configLine := fmt.Sprintf("Iterations: %d | Exit: %s", config.MaxIterations, exitInfo)
+	maxIter := config.MaxIterations
+	if maxIter == 0 {
+		maxIter = 10
+	}
+	configLine := fmt.Sprintf(" Iterations: %d │ Exit: %s", maxIter, exitInfo)
 	if config.TimeoutSeconds > 0 {
-		configLine += fmt.Sprintf(" | Timeout: %ds", config.TimeoutSeconds)
+		configLine += fmt.Sprintf(" │ Timeout: %ds", config.TimeoutSeconds)
 	}
 	if config.Stateful {
-		configLine += " | Stateful"
+		configLine += " │ Stateful"
 	}
 	if len(configLine) > boxWidth-4 {
 		configLine = configLine[:boxWidth-7] + "..."
 	}
-	fmt.Printf("| %-*s |\n", boxWidth-4, configLine)
+	fmt.Printf("%s %-*s %s\n", boxVert, boxWidth-4, configLine, boxVert)
 
 	if config.ContextWindow > 0 {
-		ctxLine := fmt.Sprintf("Context Window: %d iterations", config.ContextWindow)
-		fmt.Printf("| %-*s |\n", boxWidth-4, ctxLine)
+		ctxLine := fmt.Sprintf(" Context Window: %d iterations", config.ContextWindow)
+		fmt.Printf("%s %-*s %s\n", boxVert, boxWidth-4, ctxLine, boxVert)
 	}
 
-	fmt.Println("+" + strings.Repeat("-", boxWidth-2) + "+")
+	// Show allowed paths if any
+	if len(config.AllowedPaths) > 0 {
+		pathsPreview := strings.Join(config.AllowedPaths, ", ")
+		if len(pathsPreview) > boxWidth-14 {
+			pathsPreview = pathsPreview[:boxWidth-17] + "..."
+		}
+		pathsLine := fmt.Sprintf(" Paths: %s", pathsPreview)
+		fmt.Printf("%s %-*s %s\n", boxVert, boxWidth-4, pathsLine, boxVert)
+	}
+
+	fmt.Println(boxVertRight + strings.Repeat(boxHoriz, boxWidth-2) + boxVertLeft)
 
 	// Render each step
 	for i, step := range config.Steps {
 		node := stepToChartNode(step, false, "")
 		renderNodeInline(node, boxWidth)
 		if i < len(config.Steps)-1 {
-			fmt.Println("  " + strings.Repeat(" ", (boxWidth-6)/2) + "|")
-			fmt.Println("  " + strings.Repeat(" ", (boxWidth-6)/2) + "v")
+			fmt.Println("  " + strings.Repeat(" ", (boxWidth-6)/2) + boxVert)
+			fmt.Println("  " + strings.Repeat(" ", (boxWidth-6)/2) + arrowDown)
 		}
 	}
 
 	// Loop-back indicator
-	maxIter := config.MaxIterations
-	if maxIter == 0 {
-		maxIter = 10
-	}
-	fmt.Println("|" + strings.Repeat(" ", boxWidth-2) + "|")
-	loopBack := fmt.Sprintf("^--- loop back (up to %d iterations) ---", maxIter)
+	fmt.Println(boxVert + strings.Repeat(" ", boxWidth-2) + boxVert)
+	loopBack := fmt.Sprintf(" ↺ loop back (max %d iterations)", maxIter)
 	if len(loopBack) > boxWidth-4 {
 		loopBack = loopBack[:boxWidth-7] + "..."
 	}
-	fmt.Printf("| %-*s |\n", boxWidth-4, loopBack)
-	fmt.Println("+" + strings.Repeat("=", boxWidth-2) + "+")
+	fmt.Printf("%s %-*s %s\n", boxVert, boxWidth-4, loopBack, boxVert)
+	fmt.Println(boxDoubleBottomLeft + strings.Repeat(boxDoubleHoriz, boxWidth-2) + boxDoubleBottomRight)
 }
 
 // processMultiLoopWorkflow handles multi-loop orchestration syntax
@@ -1094,4 +1189,164 @@ func formatIOList(items []string) string {
 		return strings.Join(items, ", ")
 	}
 	return fmt.Sprintf("%s, %s, ... (+%d more)", items[0], items[1], len(items)-2)
+}
+
+// renderMermaidChart outputs a Mermaid flowchart representation
+func renderMermaidChart(chart *WorkflowChart, filename string) {
+	fmt.Println("```mermaid")
+	fmt.Println("flowchart TD")
+
+	// Create a safe ID from name (replace special chars)
+	safeID := func(name string) string {
+		id := strings.ReplaceAll(name, "-", "_")
+		id = strings.ReplaceAll(id, " ", "_")
+		id = strings.ReplaceAll(id, ":", "_")
+		return id
+	}
+
+	// Node label with details
+	nodeLabel := func(node ChartNode) string {
+		label := node.Name
+		if node.Model != "" && node.Model != "N/A" && node.Model != "[]" {
+			label += "<br/><i>" + node.Model + "</i>"
+		}
+		summary := summarizeAction(node.Action, node.StepType)
+		if summary != "" && len(summary) < 40 {
+			label += "<br/><small>" + summary + "</small>"
+		}
+		return label
+	}
+
+	// Track node IDs for connections
+	nodeIDs := make(map[string]string)
+	var prevID string
+
+	// Entry point
+	entryText := getEntryPointText(chart)
+	if entryText != "" {
+		fmt.Printf("    INPUT[[\"%s\"]]\n", entryText)
+		prevID = "INPUT"
+	}
+
+	// Render nodes in order
+	for _, item := range chart.SequentialOrder {
+		if strings.HasPrefix(item, "parallel:") {
+			groupName := strings.TrimPrefix(item, "parallel:")
+			nodes := chart.ParallelGroups[groupName]
+
+			// Create subgraph for parallel group
+			groupID := safeID("parallel_" + groupName)
+			fmt.Printf("    subgraph %s [\"%s Parallel: %s\"]\n", groupID, parallelIcon, groupName)
+			fmt.Println("    direction TB")
+
+			for _, node := range nodes {
+				nodeID := safeID(node.Name)
+				nodeIDs[node.Name] = nodeID
+
+				// Use different shapes based on step type
+				if node.StepType == "agentic-loop" {
+					fmt.Printf("        %s{{{\"%s\"}}}\n", nodeID, nodeLabel(node))
+				} else {
+					fmt.Printf("        %s[\"%s\"]\n", nodeID, nodeLabel(node))
+				}
+			}
+			fmt.Println("    end")
+
+			// Connect previous to all parallel nodes
+			if prevID != "" {
+				fmt.Printf("    %s --> %s\n", prevID, groupID)
+			}
+			prevID = groupID
+
+		} else if strings.HasPrefix(item, "agentic-loop:") {
+			loopKey := strings.TrimPrefix(item, "agentic-loop:")
+			loopCfg, ok := chart.AgenticLoopCfgs[loopKey]
+			if !ok {
+				continue
+			}
+
+			displayName := loopKey
+			if loopCfg.Name != "" {
+				displayName = loopCfg.Name
+			}
+
+			loopID := safeID("loop_" + loopKey)
+			nodeIDs[loopKey] = loopID
+
+			// Create subgraph for agentic loop
+			maxIter := loopCfg.MaxIterations
+			if maxIter == 0 {
+				maxIter = 10
+			}
+			fmt.Printf("    subgraph %s [\"%s %s (max %d iter)\"]\n", loopID, loopIcon, displayName, maxIter)
+			fmt.Println("    direction TB")
+
+			var stepIDs []string
+			for i, step := range loopCfg.Steps {
+				node := stepToChartNode(step, false, "")
+				stepID := safeID(fmt.Sprintf("%s_step_%d", loopKey, i))
+				stepIDs = append(stepIDs, stepID)
+				fmt.Printf("        %s[\"%s\"]\n", stepID, nodeLabel(node))
+			}
+
+			// Connect steps within loop
+			for i := 0; i < len(stepIDs)-1; i++ {
+				fmt.Printf("        %s --> %s\n", stepIDs[i], stepIDs[i+1])
+			}
+
+			// Loop back arrow
+			if len(stepIDs) > 0 {
+				fmt.Printf("        %s -.->|loop| %s\n", stepIDs[len(stepIDs)-1], stepIDs[0])
+			}
+
+			fmt.Println("    end")
+
+			// Connect to previous
+			if prevID != "" {
+				fmt.Printf("    %s --> %s\n", prevID, loopID)
+			}
+			prevID = loopID
+
+		} else {
+			// Regular node
+			for _, node := range chart.Nodes {
+				if node.Name == item {
+					nodeID := safeID(node.Name)
+					nodeIDs[node.Name] = nodeID
+
+					// Use different shapes based on step type
+					if node.StepType == "agentic-loop" {
+						fmt.Printf("    %s{{{\"%s\"}}}\n", nodeID, nodeLabel(node))
+					} else if node.StepType == "generate" {
+						fmt.Printf("    %s>[\"%s\"]]\n", nodeID, nodeLabel(node))
+					} else {
+						fmt.Printf("    %s[\"%s\"]\n", nodeID, nodeLabel(node))
+					}
+
+					// Connect to previous
+					if prevID != "" {
+						fmt.Printf("    %s --> %s\n", prevID, nodeID)
+					}
+					prevID = nodeID
+					break
+				}
+			}
+		}
+	}
+
+	// Exit point
+	exitText := getExitPointText(chart)
+	if exitText != "" && prevID != "" {
+		fmt.Printf("    OUTPUT[[\"%s\"]]\n", exitText)
+		fmt.Printf("    %s --> OUTPUT\n", prevID)
+	}
+
+	// Style definitions
+	fmt.Println()
+	fmt.Println("    %% Styling")
+	fmt.Println("    classDef loopStyle fill:#e1f5fe,stroke:#0277bd")
+	fmt.Println("    classDef parallelStyle fill:#f3e5f5,stroke:#7b1fa2")
+	fmt.Println("    classDef ioStyle fill:#fff3e0,stroke:#ef6c00")
+
+	fmt.Println("```")
 }
