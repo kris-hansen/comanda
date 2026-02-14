@@ -1,43 +1,33 @@
-name: Build, Release, and Bottle
+name: Create Release
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
     inputs:
-      test_latest_tag:
-        description: 'Simulate LATEST_TAG (e.g., v0.0.99) for testing version bumping'
-        required: false
-        type: string
-      dry_run:
-        description: 'Enable dry-run mode (no actual tags, releases, or commits)'
-        required: false
-        type: boolean
-        default: true
-      test_tap_branch:
-        description: 'Branch in tap repo to push formula changes to (e.g., test-workflow)'
-        required: false
-        type: string
+      version_bump:
+        description: "Version bump type"
+        required: true
+        default: "patch"
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
 
 permissions:
-  contents: write # Needed for creating releases, tags, and uploading assets to this repo
+  contents: write
 
 jobs:
-  test-and-release:
+  test:
     runs-on: ubuntu-latest
-    outputs: # Define job outputs to be used by the next job
-      new_version_val: ${{ steps.tag_version.outputs.new_version_val }}
-      upload_url: ${{ github.event.inputs.dry_run == 'true' && steps.dry_run_release.outputs.upload_url || steps.create_release.outputs.upload_url }}
-      is_dry_run: ${{ github.event.inputs.dry_run }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: "1.24"
 
       - name: Install golangci-lint
         run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
@@ -48,414 +38,92 @@ jobs:
       - name: Run Tests
         run: make test
 
-      - name: Get current version
-        id: get_current_version
-        run: |
-          # Use test_latest_tag input if provided, otherwise read from VERSION file
-          if [ -n "${{ github.event.inputs.test_latest_tag }}" ]; then
-            current_version="${{ github.event.inputs.test_latest_tag }}"
-            echo "Using test version: $current_version"
-          else
-            # Read from VERSION file
-            if [ -f "VERSION" ]; then
-              current_version="v$(cat VERSION)"
-              echo "Using version from VERSION file: $current_version"
-            else
-              # Fallback to git tags if VERSION file doesn't exist
-              git fetch --tags
-              current_version=$(git describe --tags $(git rev-list --tags --max-count=1) 2>/dev/null || echo "v0.0.0")
-              echo "VERSION file not found, using latest git tag: $current_version"
-            fi
-          fi
-          echo "CURRENT_VERSION=$current_version" >> $GITHUB_ENV
-
-      - name: Bump version and push tag
-        id: tag_version # Step ID for output
-        run: |
-          # Check if we're in dry-run mode
-          if [ "${{ github.event.inputs.dry_run }}" == "true" ]; then
-            version=${CURRENT_VERSION#v}
-            IFS='.' read -ra ADDR <<< "$version"
-            major="${ADDR[0]:-0}"
-            minor="${ADDR[1]:-0}"
-            patch="${ADDR[2]:-0}"
-            patch=$((patch + 1))
-            new_version="v$major.$minor.$patch"
-            new_version_no_v="$major.$minor.$patch"
-
-            echo "DRY RUN: Would update VERSION file to: $new_version_no_v"
-            echo "DRY RUN: Would create tag: $new_version"
-            echo "DRY RUN: Would push tag to origin"
-            echo "NEW_VERSION=$new_version" >> $GITHUB_ENV
-            echo "new_version_val=$new_version" >> $GITHUB_OUTPUT
-          else
-            git config --global user.name "GitHub Actions Bot"
-            git config --global user.email "actions@github.com"
-            
-            # Pull the latest changes to get the most up-to-date state
-            git pull origin main
-            
-            # Now, read the version from the file
-            current_version="v$(cat VERSION)"
-            version=${current_version#v}
-            IFS='.' read -ra ADDR <<< "$version"
-            major="${ADDR[0]:-0}"
-            minor="${ADDR[1]:-0}"
-            patch="${ADDR[2]:-0}"
-            
-            # Start with patch + 1
-            patch=$((patch + 1))
-            
-            # Keep incrementing patch until we find a tag that doesn't exist
-            while true; do
-              new_version="v$major.$minor.$patch"
-              new_version_no_v="$major.$minor.$patch"
-              
-              # Check if tag exists
-              if git rev-parse "$new_version" >/dev/null 2>&1; then
-                echo "Tag $new_version already exists, incrementing patch version..."
-                patch=$((patch + 1))
-              else
-                # Tag doesn't exist, we can use this version
-                break
-              fi
-            done
-            
-            echo "NEW_VERSION=$new_version" >> $GITHUB_ENV
-            echo "new_version_val=$new_version" >> $GITHUB_OUTPUT
-            
-            # Update VERSION file
-            echo "$new_version_no_v" > VERSION
-            
-            # Stage, commit, and push
-            git add VERSION
-            git commit -m "Bump version to $new_version"
-            git push origin HEAD:main
-            
-            echo "Creating new tag: $new_version"
-            git tag $new_version
-            git push origin $new_version
-          fi
-
-      - name: Build Release Binaries
-        run: |
-          platforms=("windows/amd64" "windows/386" "darwin/amd64" "darwin/arm64" "linux/amd64" "linux/386" "linux/arm64")
-          mkdir -p dist # Ensure dist directory exists
-          
-          # Copy VERSION file to dist directory
-          cp VERSION dist/
-          
-          for platform in "${platforms[@]}"
-          do
-            platform_split=(${platform//\// })
-            GOOS=${platform_split[0]}
-            GOARCH=${platform_split[1]}
-            output_name="comanda-$GOOS-$GOARCH"
-            if [ $GOOS = "windows" ]; then
-              output_name+=".exe"
-            fi
-            
-            echo "Building for $GOOS/$GOARCH..."
-            echo "Injecting version: ${{ env.NEW_VERSION }}"
-            # Still inject version via ldflags as a fallback mechanism
-            GOOS=$GOOS GOARCH=$GOARCH go build -ldflags="-X 'github.com/kris-hansen/comanda/cmd.version=${{ env.NEW_VERSION }}'" -o "dist/$output_name" .
-            if [ $? -ne 0 ]; then
-              echo "Error building for $GOOS/$GOARCH"
-              exit 1
-            fi
-          done
-
-      - name: Create Release
-        id: create_release # Step ID for output (upload_url)
-        if: ${{ github.event.inputs.dry_run != 'true' }}
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ env.NEW_VERSION }}
-          name: Release ${{ env.NEW_VERSION }}
-          draft: false
-          prerelease: false
-          files: |
-            dist/comanda-windows-amd64.exe
-            dist/comanda-windows-386.exe
-            dist/comanda-darwin-amd64
-            dist/comanda-darwin-arm64
-            dist/comanda-linux-amd64
-            dist/comanda-linux-386
-            dist/comanda-linux-arm64
-      
-      # Dummy step to provide upload_url output when in dry-run mode
-      - name: Dry Run - Skip Release Creation
-        id: dry_run_release
-        if: ${{ github.event.inputs.dry_run == 'true' }}
-        run: |
-          echo "DRY RUN: Would create release for ${{ env.NEW_VERSION }}"
-          echo "DRY RUN: Would upload binaries to the release"
-          # Provide a dummy upload_url for the next job
-          echo "upload_url=dry-run-no-upload-url" >> $GITHUB_OUTPUT
-
-  bottle-and-publish-tap:
-    name: Bottle and Publish Tap (darwin/arm64)
-    needs: test-and-release
-    runs-on: macos-14 # ARM-based runner for arm64 bottles
-    env:
-      NEW_VERSION: ${{ needs.test-and-release.outputs.new_version_val }}
-      TAP_OWNER: kris-hansen
-      TAP_REPO_NAME: homebrew-comanda
-      FORMULA_NAME: comanda.rb
-      COMMA_REPO_OWNER: kris-hansen
-      COMMA_REPO_NAME: comanda
-      HOMEBREW_NO_AUTO_UPDATE: 1 # Speed up brew commands
-      HOMEBREW_NO_INSTALL_CLEANUP: 1 # Speed up brew commands
+  release:
+    needs: test
+    runs-on: ubuntu-latest
     steps:
-      - name: Set up Go
-        uses: actions/setup-go@v4
+      - uses: actions/checkout@v4
         with:
-          go-version: '1.24'
+          fetch-depth: 0
 
-      - name: Install jq (if not present)
-        run: brew install jq
-
-      - name: Checkout Homebrew Tap Repository
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.TAP_OWNER }}/${{ env.TAP_REPO_NAME }}
-          path: homebrew-tap # Checkout to a specific subdirectory
-          token: ${{ secrets.TAP_GITHUB_TOKEN }} # PAT with repo scope for the tap
-
-      - name: Download Source Tarball and Calculate SHA256
-        run: |
-          SOURCE_TARBALL_URL="https://github.com/${{ env.COMMA_REPO_OWNER }}/${{ env.COMMA_REPO_NAME }}/archive/refs/tags/${{ env.NEW_VERSION }}.tar.gz"
-          echo "Downloading source tarball from $SOURCE_TARBALL_URL"
-          curl -L -o comanda-src.tar.gz "$SOURCE_TARBALL_URL"
-          SOURCE_SHA256=$(shasum -a 256 comanda-src.tar.gz | awk '{ print $1 }')
-          echo "SOURCE_SHA256=$SOURCE_SHA256" >> $GITHUB_ENV
-          echo "Calculated SHA256 for source: $SOURCE_SHA256"
-
-      - name: Update Formula File
-        working-directory: ./homebrew-tap
-        run: |
-          FORMULA_FILE="${{ env.FORMULA_NAME }}"
-          # Remove 'v' prefix for version number
-          VERSION_NO_V=$(echo "${{ env.NEW_VERSION }}" | sed 's/^v//')
-
-          echo "Updating $FORMULA_FILE for version $VERSION_NO_V"
-          # Update version
-          sed -i.bak "s/^  version .*/  version \"${VERSION_NO_V}\"/" "$FORMULA_FILE"
-          # Update URL
-          sed -i.bak "s|^  url .*|  url \"https://github.com/${{ env.COMMA_REPO_OWNER }}/${{ env.COMMA_REPO_NAME }}/archive/refs/tags/${{ env.NEW_VERSION }}.tar.gz\"|" "$FORMULA_FILE"
-          # Update sha256 for the source tarball
-          sed -i.bak "s/^  sha256 .*/  sha256 \"${{ env.SOURCE_SHA256 }}\"/" "$FORMULA_FILE"
-          # Update install method with version ldflags
-          sed -i.bak 's|system "go", "build", \*std_go_args(ldflags: "-s -w")|system "go", "build", *std_go_args(ldflags: "-s -w -X github.com/kris-hansen/comanda/cmd.version=v#{version}")|' "$FORMULA_FILE"
-          # Remove existing bottle block
-          sed -i.bak '/^[[:space:]]*bottle do/,/^[[:space:]]*end/d' "$FORMULA_FILE"
-          rm -f "${FORMULA_FILE}.bak"
-
-          echo "--- Updated $FORMULA_FILE (Initial) ---"
-          cat "$FORMULA_FILE"
-          echo "---------------------------------------"
-
-      - name: Build and Bottle comanda
-        working-directory: ./homebrew-tap
-        run: |
-          # Correct uninstall command: use formula name 'comanda' (not the filename)
-          brew uninstall comanda || true 
-
-          # Determine the conventional tap name (e.g., kris-hansen/comanda from homebrew-comanda)
-          LOCAL_TAP_NAME="${{ env.TAP_OWNER }}/$(echo ${{ env.TAP_REPO_NAME }} | sed 's/^homebrew-//')"
-          
-          echo "Tapping local repository at $(pwd) as $LOCAL_TAP_NAME"
-          # Tap the current directory (which is ./homebrew-tap) using the conventional tap name
-          brew tap "$LOCAL_TAP_NAME" .
-          
-          # Define the fully qualified name of the formula
-          # Assumes the formula file comanda.rb provides the 'comanda' formula
-          FORMULA_FQN="$LOCAL_TAP_NAME/comanda"
-
-          echo "Installing $FORMULA_FQN with --build-bottle..."
-          brew install --build-bottle "$FORMULA_FQN"
-          
-          # Get the actual version from the installed formula
-          INSTALLED_VERSION=$(brew info --json "$FORMULA_FQN" | jq -r '.[0].versions.stable')
-          echo "Installed formula version: $INSTALLED_VERSION"
-          
-          # Store the installed version for later use
-          echo "INSTALLED_VERSION=$INSTALLED_VERSION" >> $GITHUB_ENV
-          
-          echo "Generating bottle and JSON manifest for $FORMULA_FQN..."
-          brew bottle --json --root-url "https://github.com/${{ env.COMMA_REPO_OWNER }}/${{ env.COMMA_REPO_NAME }}/releases/download/${{ env.NEW_VERSION }}" "$FORMULA_FQN"
-          
-          echo "Bottling complete. Listing generated files:"
-          # The output files might have different naming patterns
-          ls -la
-          # Find all bottle files (they might have different naming patterns)
-          BOTTLE_FILES=$(find . -name "comanda--*.bottle*.tar.gz")
-          if [ -z "$BOTTLE_FILES" ]; then
-            echo "Warning: No bottle files found with standard pattern. Looking for alternative patterns..."
-            BOTTLE_FILES=$(find . -name "*.bottle*.tar.gz")
-            if [ -z "$BOTTLE_FILES" ]; then
-              echo "Error: No bottle files found at all."
-              exit 1
-            fi
-          fi
-          echo "Found bottle files:"
-          echo "$BOTTLE_FILES"
-          # Find all JSON files
-          JSON_FILES=$(find . -name "comanda--*.json")
-          echo "Found JSON files:"
-          echo "$JSON_FILES"
-
-      - name: Extract Bottle Information
-        working-directory: ./homebrew-tap
-        id: bottle_info
-        run: |
-          FORMULA_BASENAME="comanda" # Base name of the formula for JSON parsing
-          FORMULA_FQN="kris-hansen/comanda/comanda" # Fully qualified name as it appears in the JSON
-          
-          # Find the JSON file - it might not match the expected pattern exactly
-          BOTTLE_JSON_FILES=$(find . -name "${FORMULA_BASENAME}--*.json")
-          if [ -z "$BOTTLE_JSON_FILES" ]; then
-            echo "Error: No bottle JSON files found."
-            ls -la # List files for debugging
-            exit 1
-          fi
-          
-          # Use the first JSON file found (there should only be one)
-          BOTTLE_JSON_FILE=$(echo "$BOTTLE_JSON_FILES" | head -n 1)
-          BOTTLE_JSON_FILE="${BOTTLE_JSON_FILE#./}" # Remove leading ./
-          
-          echo "Found bottle JSON: $BOTTLE_JSON_FILE. Contents:"
-          cat "$BOTTLE_JSON_FILE"
-
-          # Extract the bottle tag directly from the JSON structure
-          # The JSON structure has changed, so we need to adapt our jq query
-          # We're looking for the arm64_sonoma key under tags
-          BOTTLE_TAG_KEY=$(jq -r ".\"${FORMULA_FQN}\".bottle.tags | keys[] | select(startswith(\"arm64_\"))" "$BOTTLE_JSON_FILE")
-
-          if [ -z "$BOTTLE_TAG_KEY" ]; then
-            echo "Error: Could not find an arm64 bottle tag in $BOTTLE_JSON_FILE"
-            # Try a more generic approach to find any tag
-            BOTTLE_TAG_KEY=$(jq -r ".\"${FORMULA_FQN}\".bottle.tags | keys[0]" "$BOTTLE_JSON_FILE")
-            if [ -z "$BOTTLE_TAG_KEY" ] || [ "$BOTTLE_TAG_KEY" = "null" ]; then
-              echo "Error: Could not find any bottle tag in $BOTTLE_JSON_FILE"
-              exit 1
-            fi
-          fi
-          echo "Using bottle tag: $BOTTLE_TAG_KEY"
-
-          # Get the local_filename directly from the JSON
-          LOCAL_BOTTLE_FILENAME=$(jq -r ".\"${FORMULA_FQN}\".bottle.tags.\"${BOTTLE_TAG_KEY}\".local_filename" "$BOTTLE_JSON_FILE")
-          
-          if [ -z "$LOCAL_BOTTLE_FILENAME" ] || [ "$LOCAL_BOTTLE_FILENAME" = "null" ]; then
-            echo "Error: Could not extract local_filename from JSON. Falling back to file search."
-            # If not found in JSON, look for any bottle file with the right tag
-            BOTTLE_FILES=$(find . -name "*${BOTTLE_TAG_KEY}*.bottle*.tar.gz")
-            if [ -z "$BOTTLE_FILES" ]; then
-              echo "Error: No bottle files found matching tag $BOTTLE_TAG_KEY."
-              ls -la
-              exit 1
-            fi
-            # Use the first matching file
-            LOCAL_BOTTLE_FILENAME=$(echo "$BOTTLE_FILES" | head -n 1)
-            LOCAL_BOTTLE_FILENAME="${LOCAL_BOTTLE_FILENAME#./}" # Remove leading ./
-          fi
-          
-          echo "Using bottle file: $LOCAL_BOTTLE_FILENAME"
-          echo "LOCAL_BOTTLE_FILENAME=$LOCAL_BOTTLE_FILENAME" >> $GITHUB_OUTPUT
-
-      - name: Upload Bottle to GitHub Release
-        if: ${{ needs.test-and-release.outputs.is_dry_run != 'true' }}
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Uses the default GITHUB_TOKEN for this repo
-        with:
-          upload_url: ${{ needs.test-and-release.outputs.upload_url }}
-          asset_path: ./homebrew-tap/${{ steps.bottle_info.outputs.LOCAL_BOTTLE_FILENAME }}
-          asset_name: ${{ steps.bottle_info.outputs.LOCAL_BOTTLE_FILENAME }}
-          asset_content_type: application/gzip
-      
-      - name: Dry Run - Skip Upload
-        if: ${{ needs.test-and-release.outputs.is_dry_run == 'true' }}
-        run: |
-          echo "DRY RUN: Would upload bottle file ${{ steps.bottle_info.outputs.LOCAL_BOTTLE_FILENAME }} to release"
-
-      - name: Update Formula File with New Bottle Block
-        working-directory: ./homebrew-tap
-        run: |
-          FORMULA_BASENAME="comanda"
-          FORMULA_FQN="kris-hansen/comanda/comanda" # Fully qualified name as it appears in the JSON
-          
-          # Find the JSON file - it might not match the expected pattern exactly
-          BOTTLE_JSON_FILES=$(find . -name "${FORMULA_BASENAME}--*.json")
-          if [ -z "$BOTTLE_JSON_FILES" ]; then
-            echo "Error: No bottle JSON files found for merge."
-            ls -la # List files for debugging
-            exit 1
-          fi
-          
-          # Use the first JSON file found (there should only be one)
-          BOTTLE_JSON_FILE=$(echo "$BOTTLE_JSON_FILES" | head -n 1)
-          BOTTLE_JSON_FILE="${BOTTLE_JSON_FILE#./}" # Remove leading ./
-          
-          echo "Using bottle JSON file for merge: $BOTTLE_JSON_FILE"
-          
-          # Create a temporary modified JSON file with the correct root_url
-          TEMP_JSON_FILE="temp_${BOTTLE_JSON_FILE}"
-          jq --arg new_root_url "https://github.com/${{ env.COMMA_REPO_OWNER }}/${{ env.COMMA_REPO_NAME }}/releases/download/${{ env.NEW_VERSION }}" \
-             "(.\"${FORMULA_FQN}\".bottle.root_url) = \$new_root_url" \
-             "$BOTTLE_JSON_FILE" > "$TEMP_JSON_FILE"
-          
-          echo "Modified JSON file contents:"
-          cat "$TEMP_JSON_FILE"
-          
-          # The --write flag tells brew bottle --merge to modify the formula file in place.
-          echo "Merging bottle information into ${{ env.FORMULA_NAME }} using modified JSON..."
-          brew bottle --merge --write "$TEMP_JSON_FILE"
-          
-          echo "--- Updated ${{ env.FORMULA_NAME }} (with bottle block) ---"
-          cat "${{ env.FORMULA_NAME }}"
-          echo "---------------------------------------------------------"
-
-      - name: Commit and Push Updated Formula to Tap
-        working-directory: ./homebrew-tap
+      - name: Configure Git
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump version and create tag
+        run: |
+          # Read current version
+          current_version=$(cat VERSION)
+          echo "Current version: $current_version"
           
-          git add "${{ env.FORMULA_NAME }}"
+          # Parse version
+          IFS='.' read -ra ADDR <<< "$current_version"
+          major="${ADDR[0]:-0}"
+          minor="${ADDR[1]:-0}"
+          patch="${ADDR[2]:-0}"
           
-          # Check if there are changes to commit
-          if git diff --staged --quiet; then
-            echo "No changes to commit to the formula file."
-          else
-            # Determine which branch to push to
-            TARGET_BRANCH="main"
-            if [ -n "${{ github.event.inputs.test_tap_branch }}" ]; then
-              TARGET_BRANCH="${{ github.event.inputs.test_tap_branch }}"
-              
-              # Check if the branch exists, create it if it doesn't
-              if ! git ls-remote --heads origin $TARGET_BRANCH | grep -q $TARGET_BRANCH; then
-                echo "Test branch $TARGET_BRANCH doesn't exist, creating it from current HEAD"
-                git checkout -b $TARGET_BRANCH
-              else
-                echo "Test branch $TARGET_BRANCH exists, checking it out"
-                git fetch origin $TARGET_BRANCH
-                git checkout $TARGET_BRANCH
-                git reset --hard origin/$TARGET_BRANCH
-                git add "${{ env.FORMULA_NAME }}"
-              fi
-            fi
-            
-            # Check if we're in dry-run mode
-            if [ "${{ needs.test-and-release.outputs.is_dry_run }}" == "true" ]; then
-              echo "DRY RUN: Would commit changes with message: Add bottle for comanda ${{ env.NEW_VERSION }} (arm64)"
-              echo "DRY RUN: Would push to branch: $TARGET_BRANCH"
-              echo "DRY RUN: Formula changes that would be committed:"
-              git diff --staged
-            else
-              echo "Committing and pushing changes to tap repository..."
-              git commit -m "Add bottle for comanda ${{ env.NEW_VERSION }} (arm64)"
-              git push origin HEAD:$TARGET_BRANCH
-              echo "Pushed updated formula to ${{ env.TAP_OWNER }}/${{ env.TAP_REPO_NAME }} branch: $TARGET_BRANCH"
-            fi
+          # Determine bump type
+          BUMP_TYPE="${{ github.event.inputs.version_bump }}"
+          if [ -z "$BUMP_TYPE" ]; then
+            BUMP_TYPE="patch"
           fi
+          
+          # Bump version
+          case $BUMP_TYPE in
+            major)
+              major=$((major + 1))
+              minor=0
+              patch=0
+              ;;
+            minor)
+              minor=$((minor + 1))
+              patch=0
+              ;;
+            patch)
+              patch=$((patch + 1))
+              ;;
+          esac
+          
+          new_version="$major.$minor.$patch"
+          new_tag="v$new_version"
+          
+          # Check if tag already exists
+          while git rev-parse "$new_tag" >/dev/null 2>&1; do
+            echo "Tag $new_tag already exists, incrementing patch..."
+            patch=$((patch + 1))
+            new_version="$major.$minor.$patch"
+            new_tag="v$new_version"
+          done
+          
+          echo "New version: $new_version"
+          echo "New tag: $new_tag"
+          
+          # Update VERSION file
+          echo "$new_version" > VERSION
+          
+          # Commit and push
+          git add VERSION
+          git commit -m "Bump version to $new_tag"
+          git push origin HEAD:main
+          
+          # Create and push tag
+          git tag "$new_tag"
+          git push origin "$new_tag"
+          
+          echo "NEW_TAG=$new_tag" >> $GITHUB_ENV
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
