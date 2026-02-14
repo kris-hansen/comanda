@@ -1,0 +1,85 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+project_name: comanda
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: comanda
+    main: .
+    binary: comanda
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+      - "386"
+    ignore:
+      - goos: darwin
+        goarch: "386"
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X github.com/kris-hansen/comanda/cmd.version=v{{.Version}}
+
+archives:
+  - id: default
+    formats:
+      - tar.gz
+      - zip
+    name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+      - Merge pull request
+      - Merge branch
+
+release:
+  github:
+    owner: kris-hansen
+    name: comanda
+  draft: false
+  prerelease: auto
+  name_template: "v{{.Version}}"
+
+# Note: brews is deprecated but still works for CLI tools.
+# Will migrate to homebrew_casks in goreleaser v3.
+brews:
+  - name: comanda
+    repository:
+      owner: kris-hansen
+      name: homebrew-comanda
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    directory: .
+    homepage: "https://github.com/kris-hansen/comanda"
+    description: "Chain of Models and Actions - declarative LLM workflow orchestration"
+    license: "MIT"
+    install: |
+      bin.install "comanda"
+    test: |
+      system "#{bin}/comanda", "version"
+      system "#{bin}/comanda", "help", "configure"
