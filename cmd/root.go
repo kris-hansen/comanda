@@ -267,6 +267,10 @@ overridden with --model.`,
 			}
 		}
 
+		// Expand ~ paths in the generated YAML before saving
+		// This ensures agents don't see unexpanded ~ paths which they can't resolve
+		yamlContent = expandPathsInYAML(yamlContent)
+
 		// Save the generated YAML to the output file
 		if err := os.WriteFile(outputFilename, []byte(yamlContent), 0644); err != nil {
 			return fmt.Errorf("failed to write generated workflow to '%s': %w", outputFilename, err)
@@ -346,6 +350,55 @@ func extractYAMLContent(response string) string {
 	}
 
 	return yamlContent
+}
+
+// expandPathsInYAML expands ~ paths in common YAML path fields
+// This ensures agents don't see unexpanded ~ paths which they can't resolve
+func expandPathsInYAML(yamlContent string) string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return yamlContent // Can't expand without home dir
+	}
+
+	lines := strings.Split(yamlContent, "\n")
+	result := make([]string, len(lines))
+
+	// Path fields that commonly contain file paths
+	pathKeys := []string{
+		"root:",
+		"allowed_paths:",
+		"path:",
+		"output:",
+		"input:",
+		"workflow_file:",
+	}
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// Check if this line contains a path field
+		isPathLine := false
+		for _, key := range pathKeys {
+			if strings.Contains(trimmed, key) {
+				isPathLine = true
+				break
+			}
+		}
+
+		// Also check for lines that are list items (- ~/path)
+		if strings.HasPrefix(trimmed, "- ~/") || strings.HasPrefix(trimmed, "- \"~/") || strings.HasPrefix(trimmed, "- '~/") {
+			isPathLine = true
+		}
+
+		if isPathLine && strings.Contains(line, "~/") {
+			// Replace ~/ with actual home directory
+			line = strings.ReplaceAll(line, "~/", homeDir+"/")
+		}
+
+		result[i] = line
+	}
+
+	return strings.Join(result, "\n")
 }
 
 func init() {
