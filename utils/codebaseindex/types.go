@@ -49,6 +49,9 @@ type Config struct {
 	Incremental   bool
 	Verbose       bool
 
+	// qmd integration (optional)
+	Qmd *QmdConfig
+
 	// Derived values (computed at runtime)
 	RepoFileSlug string // lowercase slug for filenames
 	RepoVarSlug  string // uppercase slug for variables
