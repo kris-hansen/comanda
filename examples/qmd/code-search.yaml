@@ -1,0 +1,41 @@
+# Code search and analysis workflow
+#
+# Prerequisites:
+#   1. Install qmd: bun install -g @tobilu/qmd
+#   2. Index your codebase:
+#      comanda process examples/qmd/index-with-qmd.yaml
+#      OR manually: qmd collection add ./src --name code
+#
+# Usage:
+#   echo "error handling" | comanda process examples/qmd/code-search.yaml
+#   comanda process examples/qmd/code-search.yaml -v QUERY="authentication flow"
+
+# Step 1: Search for relevant code
+search:
+  type: qmd-search
+  qmd_search:
+    query: "${QUERY:-STDIN}"
+    collection: myproject    # Change to your collection name
+    mode: search
+    limit: 10
+    min_score: 0.25
+  output: CODE_RESULTS
+
+# Step 2: Analyze the found code
+analyze:
+  input: |
+    ## Code Search Results
+    
+    Query: "${QUERY:-STDIN}"
+    
+    ${CODE_RESULTS}
+  model: gpt-4o
+  action: |
+    Analyze the code search results and provide:
+    1. A summary of what you found
+    2. Key patterns or approaches used
+    3. Any potential issues or improvements
+    4. How the different files relate to each other
+    
+    Be specific and reference the actual code shown.
+  output: STDOUT

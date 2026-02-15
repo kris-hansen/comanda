@@ -526,7 +526,8 @@ func (p *Processor) validateStepConfig(stepName string, config StepConfig) error
 	isGenerateStep := config.Generate != nil
 	isProcessStep := config.Process != nil
 	isCodebaseIndexStep := config.Type == "codebase-index" || config.CodebaseIndex != nil
-	isStandardStep := !isGenerateStep && !isProcessStep && !isCodebaseIndexStep && config.Type != "openai-responses" // Standard steps are not generate, process, codebase-index, or openai-responses
+	isQmdSearchStep := config.Type == "qmd-search" || config.QmdSearch != nil
+	isStandardStep := !isGenerateStep && !isProcessStep && !isCodebaseIndexStep && !isQmdSearchStep && config.Type != "openai-responses" // Standard steps are not generate, process, codebase-index, qmd-search, or openai-responses
 	isOpenAIResponsesStep := config.Type == "openai-responses"
 
 	// Ensure a step is of one type only
@@ -753,9 +754,10 @@ func (p *Processor) Process() error {
 			return fmt.Errorf("validation error: %w", err)
 		}
 
-		// Validate model names only for standard steps (not generate, process, openai-responses, or codebase-index)
+		// Validate model names only for standard steps (not generate, process, openai-responses, codebase-index, or qmd-search)
 		isCodebaseIndex := step.Config.Type == "codebase-index" || step.Config.CodebaseIndex != nil
-		if step.Config.Generate == nil && step.Config.Process == nil && step.Config.Type != "openai-responses" && !isCodebaseIndex {
+		isQmdSearch := step.Config.Type == "qmd-search" || step.Config.QmdSearch != nil
+		if step.Config.Generate == nil && step.Config.Process == nil && step.Config.Type != "openai-responses" && !isCodebaseIndex && !isQmdSearch {
 			modelNames := p.NormalizeStringSlice(step.Config.Model)
 			p.debugf("Normalized model names for step %s: %v", step.Name, modelNames)
 			if err := p.validateModel(modelNames, []string{"STDIN"}); err != nil { // STDIN is a placeholder here
@@ -786,9 +788,10 @@ func (p *Processor) Process() error {
 				return fmt.Errorf("validation error: %w", err)
 			}
 
-			// Validate model names only for standard steps (not generate, process, openai-responses, or codebase-index)
+			// Validate model names only for standard steps (not generate, process, openai-responses, codebase-index, or qmd-search)
 			isCodebaseIndex := step.Config.Type == "codebase-index" || step.Config.CodebaseIndex != nil
-			if step.Config.Generate == nil && step.Config.Process == nil && step.Config.Type != "openai-responses" && !isCodebaseIndex {
+			isQmdSearch := step.Config.Type == "qmd-search" || step.Config.QmdSearch != nil
+			if step.Config.Generate == nil && step.Config.Process == nil && step.Config.Type != "openai-responses" && !isCodebaseIndex && !isQmdSearch {
 				modelNames := p.NormalizeStringSlice(step.Config.Model)
 				p.debugf("Normalized model names for parallel step %s: %v", step.Name, modelNames)
 				if err := p.validateModel(modelNames, []string{"STDIN"}); err != nil { // STDIN is a placeholder
@@ -993,6 +996,12 @@ func (p *Processor) tryDispatchSpecialStep(step Step, isParallel bool, parallelI
 	// Handle codebase-index step
 	if step.Config.Type == "codebase-index" || step.Config.CodebaseIndex != nil {
 		result, err := p.processCodebaseIndexStep(step, isParallel, parallelID)
+		return result, true, err
+	}
+
+	// Handle qmd-search step
+	if step.Config.Type == "qmd-search" || step.Config.QmdSearch != nil {
+		result, err := p.processQmdSearchStep(step, isParallel, parallelID)
 		return result, true, err
 	}
 

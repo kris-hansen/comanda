@@ -235,6 +235,7 @@ curl -X POST "http://localhost:8080/process?filename=review.yaml" \
 | **Agentic loops** | Iterative refinement until exit condition met |
 | **Memory** | Persistent context via COMANDA.md |
 | **Branching** | Conditional workflows with `defer:` |
+| **qmd integration** | Local search for knowledge bases with [qmd](https://github.com/tobi/qmd) |
 | **Visualization** | ASCII workflow charts with `comanda chart` |
 
 ## Visualize Workflows
