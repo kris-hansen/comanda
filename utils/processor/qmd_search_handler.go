@@ -2,10 +2,19 @@ package processor
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
+)
+
+// qmd search timeouts based on mode
+const (
+	qmdSearchTimeout  = 30 * time.Second  // BM25 is fast
+	qmdVsearchTimeout = 2 * time.Minute   // Vector search can be slow (model loading)
+	qmdQueryTimeout   = 5 * time.Minute   // Hybrid + reranking is slowest
 )
 
 // processQmdSearchStep handles the qmd-search step type
@@ -29,10 +38,21 @@ func (p *Processor) processQmdSearchStep(step Step, isParallel bool, parallelID 
 		return "", fmt.Errorf("qmd search query cannot be empty")
 	}
 
-	// Determine search mode
+	// Determine search mode and timeout
 	mode := config.Mode
 	if mode == "" {
 		mode = "search" // Default to BM25 (fastest)
+	}
+
+	// Set timeout based on mode
+	var timeout time.Duration
+	switch mode {
+	case "vsearch":
+		timeout = qmdVsearchTimeout
+	case "query":
+		timeout = qmdQueryTimeout
+	default:
+		timeout = qmdSearchTimeout
 	}
 
 	// Build command arguments
@@ -68,15 +88,21 @@ func (p *Processor) processQmdSearchStep(step Step, isParallel bool, parallelID 
 		args = append(args, "--full")
 	}
 
-	p.debugf("Executing: qmd %s", strings.Join(args, " "))
+	p.debugf("Executing: qmd %s (timeout: %v)", strings.Join(args, " "), timeout)
 
-	// Execute qmd
-	cmd := exec.Command(qmdPath, args...)
+	// Execute qmd with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, qmdPath, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return "", fmt.Errorf("qmd %s timed out after %v", mode, timeout)
+		}
 		return "", fmt.Errorf("qmd search failed: %s: %w", stderr.String(), err)
 	}
 
