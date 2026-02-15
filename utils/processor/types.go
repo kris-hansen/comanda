@@ -114,6 +114,7 @@ type StepConfig struct {
 	Process       *ProcessStepConfig   `yaml:"process,omitempty"`        // Configuration for processing a sub-workflow
 	AgenticLoop   *AgenticLoopConfig   `yaml:"agentic_loop,omitempty"`   // Inline agentic loop configuration
 	CodebaseIndex *CodebaseIndexConfig `yaml:"codebase_index,omitempty"` // Codebase indexing configuration
+	QmdSearch     *QmdSearchConfig     `yaml:"qmd_search,omitempty"`     // qmd search configuration
 }
 
 // Step represents a named step in the DSL
@@ -162,6 +163,26 @@ type CodebaseIndexConfig struct {
 	Expose      *CodebaseIndexExposeConfig  `yaml:"expose,omitempty"`        // Variable/memory exposure configuration
 	Adapters    map[string]*AdapterOverride `yaml:"adapters,omitempty"`      // Per-adapter overrides
 	MaxOutputKB int                         `yaml:"max_output_kb,omitempty"` // Maximum output size in KB
+	Qmd         *QmdIntegrationConfig       `yaml:"qmd,omitempty"`           // qmd integration configuration
+}
+
+// QmdIntegrationConfig configures qmd integration for codebase indexing
+type QmdIntegrationConfig struct {
+	Collection string `yaml:"collection"`        // Collection name to register with qmd
+	Embed      bool   `yaml:"embed,omitempty"`   // Run qmd embed after registration
+	Context    string `yaml:"context,omitempty"` // Context description for the collection
+	Mask       string `yaml:"mask,omitempty"`    // File mask for indexing (default: index file)
+}
+
+// QmdSearchConfig configures qmd search step
+type QmdSearchConfig struct {
+	Query      string  `yaml:"query"`                // Search query (supports variable substitution)
+	Collection string  `yaml:"collection,omitempty"` // Restrict to a specific collection
+	Mode       string  `yaml:"mode,omitempty"`       // Search mode: search (BM25), vsearch (vector), query (hybrid)
+	Limit      int     `yaml:"limit,omitempty"`      // Number of results (default: 5)
+	MinScore   float64 `yaml:"min_score,omitempty"`  // Minimum score threshold (0.0-1.0)
+	Format     string  `yaml:"format,omitempty"`     // Output format: text (default), json, files
+	Full       bool    `yaml:"full,omitempty"`       // Return full document content
 }
 
 // CodebaseIndexOutputConfig configures index output

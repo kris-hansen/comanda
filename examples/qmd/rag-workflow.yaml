@@ -1,0 +1,42 @@
+# RAG (Retrieval-Augmented Generation) workflow using qmd
+#
+# Prerequisites:
+#   1. Install qmd: bun install -g @tobilu/qmd
+#   2. Create a collection: qmd collection add ./docs --name docs --mask "**/*.md"
+#   3. (Optional) Generate embeddings: qmd embed
+#
+# Usage:
+#   echo "How do I configure the database?" | comanda process examples/qmd/rag-workflow.yaml
+#
+#   Or with a variable:
+#   comanda process examples/qmd/rag-workflow.yaml -v QUESTION="How do I deploy?"
+
+# Step 1: Retrieve relevant documents
+retrieve:
+  type: qmd-search
+  qmd_search:
+    query: "${QUESTION:-STDIN}"
+    collection: docs
+    mode: search          # Fast BM25 keyword search
+    limit: 5
+    min_score: 0.3
+  output: CONTEXT
+
+# Step 2: Generate answer with retrieved context
+answer:
+  input: |
+    You are a helpful assistant. Answer the user's question using ONLY the provided context.
+    If the context doesn't contain enough information, say so.
+    Cite the source documents when possible.
+    
+    ## Context from documentation:
+    ${CONTEXT}
+    
+    ## User Question:
+    ${QUESTION:-STDIN}
+  model: claude-sonnet
+  action: |
+    Answer the question based on the provided context.
+    Be concise but thorough.
+    If citing sources, reference the document paths shown in the context.
+  output: STDOUT

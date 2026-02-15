@@ -1,0 +1,37 @@
+# Index a codebase and register with qmd
+#
+# Usage:
+#   comanda process examples/qmd/index-with-qmd.yaml
+#
+# This workflow:
+# 1. Indexes the current directory's code
+# 2. Registers the index as a qmd collection named "myproject"
+# 3. Adds context to help with search relevance
+#
+# After running, you can search with:
+#   qmd search "your query" -c myproject
+
+index-codebase:
+  type: codebase-index
+  config:
+    root: .
+    output:
+      store: repo
+    qmd:
+      collection: myproject
+      context: "Source code and documentation for my project"
+      embed: false  # Set to true if you want semantic search (slow first run)
+
+summary:
+  input: |
+    Codebase indexed successfully!
+    
+    Index location: ${MYPROJECT_INDEX_PATH}
+    
+    You can now search with:
+      qmd search "your query" -c myproject
+    
+    Or use qmd-search in your workflows.
+  model: echo
+  action: Display summary
+  output: STDOUT

@@ -97,6 +97,13 @@ func (m *Manager) Generate() (*Result, error) {
 	}
 	m.logf("Index written to: %s", outputPath)
 
+	// Step 7: Register with qmd (if configured)
+	if m.config.Qmd != nil && m.config.Qmd.Collection != "" {
+		if err := m.registerWithQmd(outputPath); err != nil {
+			m.logf("Warning: qmd registration failed: %v", err)
+		}
+	}
+
 	duration := time.Since(startTime)
 	m.logf("Index generation completed in %v", duration)
 

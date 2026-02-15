@@ -129,6 +129,16 @@ func (p *Processor) buildCodebaseIndexConfig(stepConfig StepConfig) *codebaseind
 				}
 			}
 		}
+
+		// Convert qmd integration config
+		if ci.Qmd != nil {
+			config.Qmd = &codebaseindex.QmdConfig{
+				Collection: ci.Qmd.Collection,
+				Embed:      ci.Qmd.Embed,
+				Context:    ci.Qmd.Context,
+				Mask:       ci.Qmd.Mask,
+			}
+		}
 	}
 
 	config.Verbose = p.verbose
