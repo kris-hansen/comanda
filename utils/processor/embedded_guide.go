@@ -165,13 +165,14 @@ This guide specifies the YAML-based Domain Specific Language (DSL) for Comanda w
 
 ## Overview
 
-Comanda workflows consist of one or more named steps. Each step performs an operation. There are six main types of steps:
+Comanda workflows consist of one or more named steps. Each step performs an operation. There are seven main types of steps:
 1.  **Standard Processing Step:** Involves LLMs, file processing, data operations.
 2.  **Generate Step:** Uses an LLM to dynamically create a new Comanda workflow YAML file.
 3.  **Process Step:** Executes another Comanda workflow file (static or dynamically generated).
 4.  **Agentic Loop Step:** Iteratively processes until an exit condition is met (for refinement, planning, autonomous tasks).
 5.  **Multi-Loop Orchestration:** Coordinates multiple interdependent agentic loops with variable passing and creator/checker patterns.
 6.  **Codebase Index Step:** Scans a repository and generates a compact Markdown index for LLM consumption.
+7.  **qmd Search Step:** Searches local knowledge bases using qmd (BM25, vector, or hybrid search).
 
 ## Core Workflow Structure
 
@@ -928,6 +929,10 @@ step_name:
         ignore_dirs: [vendor, testdata]
         priority_files: ["cmd/**/*.go"]
     max_output_kb: 100        # Maximum output size in KB
+    qmd:                      # qmd integration (optional)
+      collection: myproject   # Register index as qmd collection
+      context: "Project source code"  # Description for search relevance
+      embed: false            # Run qmd embed after (slow, enables semantic search)
 ` + "```" + `
 
 **` + "`codebase_index`" + ` Block Attributes:**
@@ -940,6 +945,9 @@ step_name:
 - ` + "`expose.memory.key`" + `: (string) Key name for memory access.
 - ` + "`adapters`" + `: (map, optional) Per-language configuration overrides.
 - ` + "`max_output_kb`" + `: (int, default: 100) Maximum size of generated index.
+- ` + "`qmd.collection`" + `: (string, optional) Register index as a qmd collection with this name.
+- ` + "`qmd.context`" + `: (string, optional) Description for the collection (improves search relevance).
+- ` + "`qmd.embed`" + `: (bool, default: false) Run ` + "`qmd embed`" + ` after indexing (enables semantic search, slow).
 
 **Workflow Variables Exported:**
 
@@ -1019,6 +1027,101 @@ index_repo:
   step_type: codebase-index
   codebase_index:
     root: .
+` + "```" + `
+
+
+## 7. qmd Search Step Definition (` + "`qmd_search`" + `)
+
+This step searches local knowledge bases using qmd, providing BM25, vector, or hybrid search capabilities.
+
+**When to use qmd-search:**
+- Retrieval-Augmented Generation (RAG) workflows
+- Searching indexed codebases or documentation
+- Finding relevant context before LLM processing
+
+**Prerequisites:**
+- Install qmd: ` + "`bun install -g @tobilu/qmd`" + `
+- Create a collection: ` + "`qmd collection add ./docs --name docs`" + `
+
+**Structure:**
+` + "```yaml" + `
+step_name:
+  type: qmd-search
+  qmd_search:
+    query: "${QUESTION}"      # Search query (supports variable substitution)
+    collection: docs          # Optional: restrict to specific collection
+    mode: search              # search (BM25), vsearch (vector), query (hybrid)
+    limit: 5                  # Number of results (default: 5)
+    min_score: 0.3            # Minimum relevance score (0.0-1.0)
+    format: text              # Output format: text (default), json, files
+  output: CONTEXT             # Store results in variable
+` + "```" + `
+
+**` + "`qmd_search`" + ` Block Attributes:**
+- ` + "`query`" + `: (string, required) Search query. Supports variable substitution (e.g., ` + "`${QUESTION}`" + `).
+- ` + "`collection`" + `: (string, optional) Restrict search to a specific qmd collection.
+- ` + "`mode`" + `: (string, default: ` + "`search`" + `) Search mode:
+  - ` + "`search`" + `: BM25 keyword search (fastest, recommended default)
+  - ` + "`vsearch`" + `: Vector/semantic search (slower, requires embeddings)
+  - ` + "`query`" + `: Hybrid search with LLM reranking (slowest, best quality)
+- ` + "`limit`" + `: (int, default: 5) Maximum number of results to return.
+- ` + "`min_score`" + `: (float, optional) Minimum relevance score threshold (0.0-1.0).
+- ` + "`format`" + `: (string, default: ` + "`text`" + `) Output format:
+  - ` + "`text`" + `: Human-readable text output
+  - ` + "`json`" + `: Structured JSON output
+  - ` + "`files`" + `: List of matching file paths only
+- ` + "`full`" + `: (bool, default: false) Return full document content instead of snippets.
+
+**Example: RAG Workflow**
+` + "```yaml" + `
+# Search for relevant context
+retrieve_context:
+  type: qmd-search
+  qmd_search:
+    query: "${USER_QUESTION}"
+    collection: docs
+    mode: search
+    limit: 5
+  output: CONTEXT
+
+# Generate answer with context
+generate_answer:
+  input: |
+    Context:
+    ${CONTEXT}
+    
+    Question: ${USER_QUESTION}
+  model: claude-sonnet
+  action: "Answer the question using only the provided context."
+  output: STDOUT
+` + "```" + `
+
+**Example: Code Search with codebase-index**
+` + "```yaml" + `
+# Index codebase with qmd registration
+index_code:
+  type: codebase-index
+  codebase_index:
+    root: ./src
+    qmd:
+      collection: mycode
+      context: "Application source code"
+
+# Search the indexed code
+find_relevant_code:
+  type: qmd-search
+  qmd_search:
+    query: "authentication middleware"
+    collection: mycode
+    limit: 10
+  output: RELEVANT_CODE
+
+# Analyze with LLM
+analyze_code:
+  input: ${RELEVANT_CODE}
+  model: claude-code
+  action: "Analyze these code snippets and suggest improvements."
+  output: STDOUT
 ` + "```" + `
 
 ## Common Elements (for Standard Steps)
@@ -1160,6 +1263,11 @@ summarize_document:
     *   Exports workflow variables: ` + "`<REPO>_INDEX`" + `, ` + "`<REPO>_INDEX_PATH`" + `, ` + "`<REPO>_INDEX_SHA`" + `, ` + "`<REPO>_INDEX_UPDATED`" + `.
     *   Does not require ` + "`input`" + `, ` + "`model`" + `, ` + "`action`" + `, or ` + "`output`" + ` fields.
 
+8.  **qmd Search Step:**
+    *   Must have ` + "`type: qmd-search`" + ` OR contain a ` + "`qmd_search`" + ` block.
+    *   ` + "`qmd_search.query`" + ` is required.
+    *   ` + "`qmd_search.mode`" + ` defaults to ` + "`search`" + ` (BM25).
+    *   Does not require ` + "`input`" + `, ` + "`model`" + `, or ` + "`action`" + ` fields.
 ## Chaining and Examples
 
 Steps can be "chained together" by either passing STDOUT from one step to STDIN of the next step or by writing to a file and then having subsequent steps take this file as input.
@@ -1300,13 +1408,14 @@ Before generating any workflow, you MUST follow these rules:
 
 ## Overview
 
-Comanda workflows consist of one or more named steps. Each step performs an operation. There are six main types of steps:
+Comanda workflows consist of one or more named steps. Each step performs an operation. There are seven main types of steps:
 1.  **Standard Processing Step:** Involves LLMs, file processing, data operations.
 2.  **Generate Step:** Uses an LLM to dynamically create a new Comanda workflow YAML file.
 3.  **Process Step:** Executes another Comanda workflow file (static or dynamically generated).
 4.  **Agentic Loop Step:** Iteratively processes until an exit condition is met (for refinement, planning, autonomous tasks).
 5.  **Multi-Loop Orchestration:** Coordinates multiple interdependent agentic loops with variable passing and creator/checker patterns.
 6.  **Codebase Index Step:** Scans a repository and generates a compact Markdown index for LLM consumption.
+7.  **qmd Search Step:** Searches local knowledge bases using qmd (BM25, vector, or hybrid search).
 
 ## Core Workflow Structure
 
@@ -2114,6 +2223,10 @@ step_name:
         ignore_dirs: [vendor, testdata]
         priority_files: ["cmd/**/*.go"]
     max_output_kb: 100        # Maximum output size in KB
+    qmd:                      # qmd integration (optional)
+      collection: myproject   # Register index as qmd collection
+      context: "Project source code"  # Description for search relevance
+      embed: false            # Run qmd embed after (slow, enables semantic search)
 ` + "```" + `
 
 **` + "`codebase_index`" + ` Block Attributes:**
@@ -2126,6 +2239,9 @@ step_name:
 - ` + "`expose.memory.key`" + `: (string) Key name for memory access.
 - ` + "`adapters`" + `: (map, optional) Per-language configuration overrides.
 - ` + "`max_output_kb`" + `: (int, default: 100) Maximum size of generated index.
+- ` + "`qmd.collection`" + `: (string, optional) Register index as a qmd collection with this name.
+- ` + "`qmd.context`" + `: (string, optional) Description for the collection (improves search relevance).
+- ` + "`qmd.embed`" + `: (bool, default: false) Run ` + "`qmd embed`" + ` after indexing (enables semantic search, slow).
 
 **Workflow Variables Exported:**
 
@@ -2205,6 +2321,101 @@ index_repo:
   step_type: codebase-index
   codebase_index:
     root: .
+` + "```" + `
+
+
+## 7. qmd Search Step Definition (` + "`qmd_search`" + `)
+
+This step searches local knowledge bases using qmd, providing BM25, vector, or hybrid search capabilities.
+
+**When to use qmd-search:**
+- Retrieval-Augmented Generation (RAG) workflows
+- Searching indexed codebases or documentation
+- Finding relevant context before LLM processing
+
+**Prerequisites:**
+- Install qmd: ` + "`bun install -g @tobilu/qmd`" + `
+- Create a collection: ` + "`qmd collection add ./docs --name docs`" + `
+
+**Structure:**
+` + "```yaml" + `
+step_name:
+  type: qmd-search
+  qmd_search:
+    query: "${QUESTION}"      # Search query (supports variable substitution)
+    collection: docs          # Optional: restrict to specific collection
+    mode: search              # search (BM25), vsearch (vector), query (hybrid)
+    limit: 5                  # Number of results (default: 5)
+    min_score: 0.3            # Minimum relevance score (0.0-1.0)
+    format: text              # Output format: text (default), json, files
+  output: CONTEXT             # Store results in variable
+` + "```" + `
+
+**` + "`qmd_search`" + ` Block Attributes:**
+- ` + "`query`" + `: (string, required) Search query. Supports variable substitution (e.g., ` + "`${QUESTION}`" + `).
+- ` + "`collection`" + `: (string, optional) Restrict search to a specific qmd collection.
+- ` + "`mode`" + `: (string, default: ` + "`search`" + `) Search mode:
+  - ` + "`search`" + `: BM25 keyword search (fastest, recommended default)
+  - ` + "`vsearch`" + `: Vector/semantic search (slower, requires embeddings)
+  - ` + "`query`" + `: Hybrid search with LLM reranking (slowest, best quality)
+- ` + "`limit`" + `: (int, default: 5) Maximum number of results to return.
+- ` + "`min_score`" + `: (float, optional) Minimum relevance score threshold (0.0-1.0).
+- ` + "`format`" + `: (string, default: ` + "`text`" + `) Output format:
+  - ` + "`text`" + `: Human-readable text output
+  - ` + "`json`" + `: Structured JSON output
+  - ` + "`files`" + `: List of matching file paths only
+- ` + "`full`" + `: (bool, default: false) Return full document content instead of snippets.
+
+**Example: RAG Workflow**
+` + "```yaml" + `
+# Search for relevant context
+retrieve_context:
+  type: qmd-search
+  qmd_search:
+    query: "${USER_QUESTION}"
+    collection: docs
+    mode: search
+    limit: 5
+  output: CONTEXT
+
+# Generate answer with context
+generate_answer:
+  input: |
+    Context:
+    ${CONTEXT}
+    
+    Question: ${USER_QUESTION}
+  model: claude-sonnet
+  action: "Answer the question using only the provided context."
+  output: STDOUT
+` + "```" + `
+
+**Example: Code Search with codebase-index**
+` + "```yaml" + `
+# Index codebase with qmd registration
+index_code:
+  type: codebase-index
+  codebase_index:
+    root: ./src
+    qmd:
+      collection: mycode
+      context: "Application source code"
+
+# Search the indexed code
+find_relevant_code:
+  type: qmd-search
+  qmd_search:
+    query: "authentication middleware"
+    collection: mycode
+    limit: 10
+  output: RELEVANT_CODE
+
+# Analyze with LLM
+analyze_code:
+  input: ${RELEVANT_CODE}
+  model: claude-code
+  action: "Analyze these code snippets and suggest improvements."
+  output: STDOUT
 ` + "```" + `
 
 ## Common Elements (for Standard Steps)
@@ -2566,6 +2777,11 @@ step_name:
     *   ` + "`codebase_index.root`" + ` defaults to ` + "`.`" + ` (current directory).
     *   Exports workflow variables: ` + "`<REPO>_INDEX`" + `, ` + "`<REPO>_INDEX_PATH`" + `, ` + "`<REPO>_INDEX_SHA`" + `, ` + "`<REPO>_INDEX_UPDATED`" + `.
     *   Does not require ` + "`input`" + `, ` + "`model`" + `, ` + "`action`" + `, or ` + "`output`" + ` fields.
+8.  **qmd Search Step:**
+    *   Must have ` + "`type: qmd-search`" + ` OR contain a ` + "`qmd_search`" + ` block.
+    *   ` + "`qmd_search.query`" + ` is required.
+    *   ` + "`qmd_search.mode`" + ` defaults to ` + "`search`" + ` (BM25).
+    *   Does not require ` + "`input`" + `, ` + "`model`" + `, or ` + "`action`" + ` fields.
 
 ## Chaining and Examples
 
