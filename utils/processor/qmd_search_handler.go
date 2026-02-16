@@ -12,9 +12,9 @@ import (
 
 // qmd search timeouts based on mode
 const (
-	qmdSearchTimeout  = 30 * time.Second  // BM25 is fast
-	qmdVsearchTimeout = 2 * time.Minute   // Vector search can be slow (model loading)
-	qmdQueryTimeout   = 5 * time.Minute   // Hybrid + reranking is slowest
+	qmdSearchTimeout  = 30 * time.Second // BM25 is fast
+	qmdVsearchTimeout = 2 * time.Minute  // Vector search can be slow (model loading)
+	qmdQueryTimeout   = 5 * time.Minute  // Hybrid + reranking is slowest
 )
 
 // processQmdSearchStep handles the qmd-search step type
