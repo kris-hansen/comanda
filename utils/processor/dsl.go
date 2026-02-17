@@ -1115,7 +1115,11 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 	modelNames := p.NormalizeStringSlice(step.Config.Model)
 	actions := p.NormalizeStringSlice(step.Config.Action)
 
-	// Apply CLI variable substitution to inputs and actions
+	// Apply variable substitution to inputs and actions
+	// First substitute $VAR style variables, then {{var}} CLI variables
+	for i, input := range inputs {
+		inputs[i] = p.substituteVariables(input)
+	}
 	p.substituteCLIVariablesInSlice(inputs)
 	p.substituteCLIVariablesInSlice(actions)
 
@@ -2091,24 +2095,23 @@ func (p *Processor) getProviderForModel(modelName string) (models.Provider, erro
 // processPreLoopSteps processes all steps (sequential, parallel, agentic loops) before multi-loop orchestration.
 // This allows hybrid workflows where steps set up prerequisites (e.g., codebase-index) that loops depend on.
 func (p *Processor) processPreLoopSteps() error {
+	totalSteps := len(p.config.Steps) + len(p.config.ParallelSteps) + len(p.config.AgenticLoops)
 	p.debugf("Processing pre-loop steps: %d sequential, %d parallel groups, %d agentic loops",
 		len(p.config.Steps), len(p.config.ParallelSteps), len(p.config.AgenticLoops))
 
-	// Validate steps first
-	p.spinner.Start("Validating pre-loop steps")
+	// Show pre-loop steps header
+	p.progressDisplay.StartPreLoopSteps(totalSteps)
+	startTime := time.Now()
 
+	// Validate steps first
 	for _, step := range p.config.Steps {
 		if err := p.validateStepConfig(step.Name, step.Config); err != nil {
-			p.spinner.Stop()
 			return fmt.Errorf("validation failed for pre-loop step '%s': %w", step.Name, err)
 		}
 	}
 
-	p.spinner.Stop()
-
 	// Process parallel steps first if any
 	for groupName, steps := range p.config.ParallelSteps {
-		p.spinner.Start(fmt.Sprintf("Processing parallel step group: %s", groupName))
 		p.debugf("Starting parallel processing for group '%s' with %d steps", groupName, len(steps))
 
 		type stepResult struct {
@@ -2141,43 +2144,38 @@ func (p *Processor) processPreLoopSteps() error {
 		}()
 
 		for err := range errorChan {
-			p.spinner.Stop()
 			return err
 		}
 
 		for result := range resultChan {
 			p.debugf("Collected result from parallel step: %s", result.name)
 		}
-
-		p.spinner.Stop()
 	}
 
 	// Process agentic loops (legacy top-level loops, not the new multi-loop orchestration)
 	for loopName, loopConfig := range p.config.AgenticLoops {
-		p.spinner.Start(fmt.Sprintf("Processing agentic loop: %s", loopName))
 		output, err := p.processAgenticLoop(loopName, loopConfig, p.lastOutput)
 		if err != nil {
-			p.spinner.Stop()
 			return fmt.Errorf("agentic loop error: %w", err)
 		}
 		p.lastOutput = output
-		p.spinner.Stop()
 	}
 
-	// Process sequential steps
+	// Process sequential steps with progress display
 	for stepIndex, step := range p.config.Steps {
-		stepMsg := fmt.Sprintf("Processing pre-loop step %d/%d: %s", stepIndex+1, len(p.config.Steps), step.Name)
-		p.spinner.Start(stepMsg)
-		p.debugf("%s", stepMsg)
+		stepStart := time.Now()
+		model := fmt.Sprintf("%v", step.Config.Model)
+		p.progressDisplay.StartStep(step.Name, model)
+		p.debugf("Processing pre-loop step %d/%d: %s", stepIndex+1, len(p.config.Steps), step.Name)
 
 		response, err := p.processStep(step, false, "")
 		if err != nil {
-			p.spinner.Stop()
+			p.progressDisplay.FailStep(step.Name, err)
 			return fmt.Errorf("error processing pre-loop step '%s': %w", step.Name, err)
 		}
 
 		p.lastOutput = response
-		p.spinner.Stop()
+		p.progressDisplay.CompleteStep(step.Name, time.Since(stepStart))
 		p.debugf("Successfully processed pre-loop step: %s", step.Name)
 
 		// Handle deferred step if any
@@ -2188,6 +2186,8 @@ func (p *Processor) processPreLoopSteps() error {
 		p.handler = input.NewHandler()
 	}
 
+	// Show pre-loop completion
+	p.progressDisplay.CompletePreLoopSteps(time.Since(startTime))
 	p.debugf("All pre-loop steps completed successfully")
 	return nil
 }
