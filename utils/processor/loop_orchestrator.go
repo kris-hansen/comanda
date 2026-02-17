@@ -7,11 +7,12 @@ import (
 
 // LoopOrchestrator manages execution of multiple interdependent loops
 type LoopOrchestrator struct {
-	processor      *Processor
-	loops          map[string]*AgenticLoopConfig
-	loopOutputs    map[string]*LoopOutput
-	executionGraph *DependencyGraph
-	workflowFile   string
+	processor       *Processor
+	loops           map[string]*AgenticLoopConfig
+	loopOutputs     map[string]*LoopOutput
+	executionGraph  *DependencyGraph
+	workflowFile    string
+	progressDisplay *ProgressDisplay
 }
 
 // DependencyGraph represents a directed acyclic graph of loop dependencies
@@ -287,4 +288,78 @@ func (o *LoopOrchestrator) GetLoopOutput(loopName string) (*LoopOutput, error) {
 // GetAllOutputs returns outputs of all completed loops
 func (o *LoopOrchestrator) GetAllOutputs() map[string]*LoopOutput {
 	return o.loopOutputs
+}
+
+// SetProgressDisplay sets the progress display for visual output
+func (o *LoopOrchestrator) SetProgressDisplay(pd *ProgressDisplay) {
+	o.progressDisplay = pd
+}
+
+// ExecuteWithOrder runs loops in the specified order with progress display
+func (o *LoopOrchestrator) ExecuteWithOrder(executionOrder []string) error {
+	totalLoops := len(executionOrder)
+
+	for i, loopName := range executionOrder {
+		config := o.loops[loopName]
+		if config == nil {
+			return fmt.Errorf("loop '%s' not found in configuration", loopName)
+		}
+
+		// Show loop start in progress display
+		if o.progressDisplay != nil {
+			o.progressDisplay.StartLoop(loopName, i+1, totalLoops, config.MaxIterations)
+		}
+
+		// Prepare input for this loop
+		input, err := o.prepareLoopInput(config)
+		if err != nil {
+			if o.progressDisplay != nil {
+				o.progressDisplay.FailLoop(loopName, 0, err)
+			}
+			return fmt.Errorf("failed to prepare input for loop '%s': %w", loopName, err)
+		}
+
+		// Execute the loop
+		startTime := time.Now()
+		result, err := o.processor.processAgenticLoopWithFile(loopName, config, input, o.workflowFile)
+		endTime := time.Now()
+		duration := endTime.Sub(startTime)
+
+		// Record output
+		output := &LoopOutput{
+			LoopName:  loopName,
+			StartTime: startTime,
+			EndTime:   endTime,
+			Result:    result,
+			Variables: make(map[string]string),
+		}
+
+		if err != nil {
+			output.Status = "failed"
+			o.loopOutputs[loopName] = output
+			if o.progressDisplay != nil {
+				o.progressDisplay.FailLoop(loopName, 0, err)
+			}
+			return fmt.Errorf("loop '%s' failed: %w", loopName, err)
+		}
+
+		output.Status = "completed"
+
+		// Export variables if output_state is specified
+		if config.OutputState != "" {
+			o.processor.variables[config.OutputState] = result
+			output.Variables[config.OutputState] = result
+		}
+
+		o.loopOutputs[loopName] = output
+
+		// Show loop completion in progress display
+		if o.progressDisplay != nil {
+			// Count iterations from the result (simplified - could be enhanced)
+			iterations := 1 // Default, could be tracked in processAgenticLoopWithFile
+			o.progressDisplay.CompleteLoop(loopName, iterations, duration)
+		}
+	}
+
+	return nil
 }

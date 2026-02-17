@@ -46,6 +46,7 @@ type Processor struct {
 	variables            map[string]string  // Store variables from STDIN
 	cliVariables         map[string]string  // CLI-provided variables for {{var}} substitution
 	progress             ProgressWriter     // Progress writer for streaming updates
+	progressDisplay      *ProgressDisplay   // Visual progress display for terminal output
 	runtimeDir           string             // Runtime directory for file operations
 	memory               *MemoryManager     // Memory manager for COMANDA.md file
 	externalMemory       string             // External memory context (e.g., from OpenAI messages)
@@ -270,17 +271,18 @@ func NewProcessor(dslConfig *DSLConfig, envConfig *config.EnvConfig, serverConfi
 	}
 
 	p := &Processor{
-		config:       dslConfig,
-		envConfig:    envConfig,
-		serverConfig: serverConfig, // Store server config
-		handler:      input.NewHandler(),
-		validator:    input.NewValidator(nil),
-		providers:    make(map[string]models.Provider),
-		verbose:      verbose,
-		spinner:      NewSpinner(),
-		variables:    make(map[string]string),
-		cliVariables: cliVars,
-		runtimeDir:   runtimeDir, // Store runtime directory
+		config:          dslConfig,
+		envConfig:       envConfig,
+		serverConfig:    serverConfig, // Store server config
+		handler:         input.NewHandler(),
+		validator:       input.NewValidator(nil),
+		providers:       make(map[string]models.Provider),
+		verbose:         verbose,
+		spinner:         NewSpinner(),
+		progressDisplay: NewProgressDisplay(true), // Enable visual progress
+		variables:       make(map[string]string),
+		cliVariables:    cliVars,
+		runtimeDir:      runtimeDir, // Store runtime directory
 	}
 
 	// Store runtime directory as-is (relative or empty)
@@ -2192,14 +2194,11 @@ func (p *Processor) processPreLoopSteps() error {
 
 // processMultiLoopOrchestration handles multi-loop workflows
 func (p *Processor) processMultiLoopOrchestration() error {
-	p.spinner.Start("Initializing multi-loop orchestration")
-
 	// Determine which loops to execute
 	loopsToExecute := p.config.Loops
 
 	// If workflow is specified, process it (creator/checker pattern)
 	if len(p.config.Workflow) > 0 {
-		p.spinner.Stop()
 		return p.processWorkflow()
 	}
 
@@ -2210,55 +2209,49 @@ func (p *Processor) processMultiLoopOrchestration() error {
 			if config, exists := p.config.Loops[loopName]; exists {
 				filtered[loopName] = config
 			} else {
-				p.spinner.Stop()
 				return fmt.Errorf("loop '%s' specified in execute_loops not found in loops", loopName)
 			}
 		}
 		loopsToExecute = filtered
 	}
 
+	// Show workflow header with progress display
+	workflowName := "Multi-Loop Orchestration"
+	if p.runtimeDir != "" {
+		workflowName = p.runtimeDir
+	}
+	p.progressDisplay.StartWorkflow(workflowName, len(loopsToExecute))
+
 	// Create orchestrator
 	orchestrator := NewLoopOrchestrator(p, loopsToExecute, p.runtimeDir)
+	orchestrator.SetProgressDisplay(p.progressDisplay)
 
-	p.spinner.Stop()
-	p.spinner.Start("Building dependency graph")
+	// Build dependency graph and show execution order
+	graph, err := orchestrator.buildDependencyGraph()
+	if err != nil {
+		p.progressDisplay.FailWorkflow(err)
+		return fmt.Errorf("failed to build dependency graph: %w", err)
+	}
+	orchestrator.executionGraph = graph
+
+	executionOrder, err := graph.TopologicalSort()
+	if err != nil {
+		p.progressDisplay.FailWorkflow(err)
+		return fmt.Errorf("failed to determine execution order: %w", err)
+	}
+
+	// Show dependency graph
+	p.progressDisplay.ShowDependencyGraph(executionOrder)
 
 	// Execute loops
-	p.spinner.Stop()
-	p.spinner.Start("Executing loops in dependency order")
-	if err := orchestrator.Execute(); err != nil {
-		p.spinner.Stop()
+	if err := orchestrator.ExecuteWithOrder(executionOrder); err != nil {
+		p.progressDisplay.FailWorkflow(err)
 		return fmt.Errorf("orchestration failed: %w", err)
 	}
 
-	p.spinner.Stop()
-
-	// Output results
-	log.Println("\n=== Multi-Loop Orchestration Results ===")
+	// Show completion summary
 	outputs := orchestrator.GetAllOutputs()
-	for loopName, output := range outputs {
-		duration := output.EndTime.Sub(output.StartTime)
-		log.Printf("\nLoop: %s", loopName)
-		log.Printf("  Status: %s", output.Status)
-		log.Printf("  Duration: %s", duration)
-		if len(output.Variables) > 0 {
-			log.Printf("  Exported Variables:")
-			for varName, varValue := range output.Variables {
-				preview := varValue
-				if len(preview) > 100 {
-					preview = preview[:97] + "..."
-				}
-				log.Printf("    %s = %s", varName, preview)
-			}
-		}
-		if len(output.Result) > 0 {
-			preview := output.Result
-			if len(preview) > 200 {
-				preview = preview[:197] + "..."
-			}
-			log.Printf("  Result: %s", preview)
-		}
-	}
+	p.progressDisplay.CompleteWorkflow(outputs)
 
 	log.Println("\n=== Orchestration Complete ===")
 	return nil
