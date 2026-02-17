@@ -31,15 +31,17 @@ builds:
       - -X github.com/kris-hansen/comanda/cmd.version=v{{.Version}}
 
 archives:
-  - id: default
-    formats:
-      - tar.gz
-      - zip
+  # tar.gz archives (used by homebrew)
+  - id: targz
+    format: tar.gz
     name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
-    format_overrides:
-      - goos: windows
-        formats:
-          - zip
+    files:
+      - LICENSE
+      - README.md
+  # zip archives (alternative format, especially for Windows)
+  - id: zip
+    format: zip
+    name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
     files:
       - LICENSE
       - README.md
@@ -66,10 +68,10 @@ release:
   prerelease: auto
   name_template: "v{{.Version}}"
 
-# Note: brews is deprecated but still works for CLI tools.
-# Will migrate to homebrew_casks in goreleaser v3.
 brews:
   - name: comanda
+    ids:
+      - targz  # Use only tar.gz archives for homebrew
     repository:
       owner: kris-hansen
       name: homebrew-comanda
