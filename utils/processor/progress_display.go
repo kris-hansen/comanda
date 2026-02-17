@@ -44,19 +44,19 @@ func (p *ProgressDisplay) SetEnabled(enabled bool) {
 func (p *ProgressDisplay) StartWorkflow(name string, loopCount int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	if !p.enabled {
 		return
 	}
-	
+
 	p.startTime = time.Now()
 	p.totalLoops = loopCount
 	p.loopCount = 0
-	
+
 	fmt.Println()
 	fmt.Println(p.styler.Box(fmt.Sprintf("🔀 %s", name), 50))
 	fmt.Println()
-	
+
 	if loopCount > 0 {
 		fmt.Printf("  %s %d loops to execute\n", p.styler.Muted(iconBullet), loopCount)
 		fmt.Println()
@@ -67,12 +67,12 @@ func (p *ProgressDisplay) StartWorkflow(name string, loopCount int) {
 func (p *ProgressDisplay) StartPreLoopSteps(stepCount int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	if !p.enabled {
 		return
 	}
-	
-	fmt.Printf("  %s Running %s pre-loop steps\n", 
+
+	fmt.Printf("  %s Running %s pre-loop steps\n",
 		p.styler.RunningIcon(),
 		p.styler.Bold(fmt.Sprintf("%d", stepCount)))
 	fmt.Println()
@@ -82,11 +82,11 @@ func (p *ProgressDisplay) StartPreLoopSteps(stepCount int) {
 func (p *ProgressDisplay) CompletePreLoopSteps(duration time.Duration) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	if !p.enabled {
 		return
 	}
-	
+
 	fmt.Printf("  %s Pre-loop steps completed %s\n",
 		p.styler.SuccessIcon(),
 		p.styler.Duration(formatDuration(duration)))
@@ -97,21 +97,21 @@ func (p *ProgressDisplay) CompletePreLoopSteps(duration time.Duration) {
 func (p *ProgressDisplay) StartLoop(name string, loopIndex, totalLoops, maxIterations int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	if !p.enabled {
 		return
 	}
-	
+
 	p.currentLoop = name
 	p.loopCount = loopIndex
 	p.maxIter = maxIterations
 	p.iteration = 0
-	
+
 	progress := ""
 	if totalLoops > 1 {
 		progress = fmt.Sprintf(" [%d/%d]", loopIndex, totalLoops)
 	}
-	
+
 	fmt.Printf("  %s %s%s\n",
 		p.styler.LoopIcon(),
 		p.styler.LoopName(name),
@@ -122,18 +122,18 @@ func (p *ProgressDisplay) StartLoop(name string, loopIndex, totalLoops, maxItera
 func (p *ProgressDisplay) UpdateIteration(iteration, maxIterations int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	if !p.enabled {
 		return
 	}
-	
+
 	p.iteration = iteration
 	p.maxIter = maxIterations
-	
+
 	// Clear previous line and write new status
 	iterStr := p.styler.Iteration(iteration, maxIterations)
 	elapsed := time.Since(p.startTime)
-	
+
 	fmt.Printf("     %s Iteration %s %s\n",
 		p.styler.StepIcon(),
 		iterStr,
@@ -144,18 +144,18 @@ func (p *ProgressDisplay) UpdateIteration(iteration, maxIterations int) {
 func (p *ProgressDisplay) StartStep(name string, model string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	if !p.enabled {
 		return
 	}
-	
+
 	p.currentStep = name
-	
+
 	modelStr := ""
 	if model != "" && model != "<nil>" {
 		modelStr = p.styler.Muted(fmt.Sprintf(" [%s]", model))
 	}
-	
+
 	fmt.Printf("       %s %s%s\n",
 		p.styler.RunningIcon(),
 		p.styler.StepName(name),
@@ -166,13 +166,13 @@ func (p *ProgressDisplay) StartStep(name string, model string) {
 func (p *ProgressDisplay) CompleteStep(name string, duration time.Duration) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	if !p.enabled {
 		return
 	}
-	
+
 	// Move cursor up and overwrite the running line
-	fmt.Printf("\033[1A\033[2K")  // Move up, clear line
+	fmt.Printf("\033[1A\033[2K") // Move up, clear line
 	fmt.Printf("       %s %s %s\n",
 		p.styler.SuccessIcon(),
 		p.styler.StepName(name),
@@ -183,12 +183,12 @@ func (p *ProgressDisplay) CompleteStep(name string, duration time.Duration) {
 func (p *ProgressDisplay) FailStep(name string, err error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	if !p.enabled {
 		return
 	}
-	
-	fmt.Printf("\033[1A\033[2K")  // Move up, clear line
+
+	fmt.Printf("\033[1A\033[2K") // Move up, clear line
 	fmt.Printf("       %s %s\n",
 		p.styler.ErrorIcon(),
 		p.styler.Error(name))
@@ -199,11 +199,11 @@ func (p *ProgressDisplay) FailStep(name string, err error) {
 func (p *ProgressDisplay) CompleteLoop(name string, iterations int, duration time.Duration) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	if !p.enabled {
 		return
 	}
-	
+
 	fmt.Printf("     %s Completed after %d iterations %s\n",
 		p.styler.SuccessIcon(),
 		iterations,
@@ -215,11 +215,11 @@ func (p *ProgressDisplay) CompleteLoop(name string, iterations int, duration tim
 func (p *ProgressDisplay) FailLoop(name string, iteration int, err error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	if !p.enabled {
 		return
 	}
-	
+
 	fmt.Printf("     %s Failed at iteration %d\n",
 		p.styler.ErrorIcon(),
 		iteration)
@@ -231,20 +231,20 @@ func (p *ProgressDisplay) FailLoop(name string, iteration int, err error) {
 func (p *ProgressDisplay) CompleteWorkflow(loopResults map[string]*LoopOutput) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	if !p.enabled {
 		return
 	}
-	
+
 	totalDuration := time.Since(p.startTime)
-	
+
 	fmt.Println(p.styler.Divider(50))
 	fmt.Println()
 	fmt.Printf("  %s Workflow completed %s\n",
 		p.styler.SuccessIcon(),
 		p.styler.Duration(formatDuration(totalDuration)))
 	fmt.Println()
-	
+
 	// Summary table
 	if len(loopResults) > 0 {
 		fmt.Printf("  %s\n", p.styler.Bold("Summary:"))
@@ -253,7 +253,7 @@ func (p *ProgressDisplay) CompleteWorkflow(loopResults map[string]*LoopOutput) {
 			if output.Status != "completed" {
 				statusIcon = p.styler.ErrorIcon()
 			}
-			
+
 			duration := output.EndTime.Sub(output.StartTime)
 			fmt.Printf("    %s %s %s\n",
 				statusIcon,
@@ -268,11 +268,11 @@ func (p *ProgressDisplay) CompleteWorkflow(loopResults map[string]*LoopOutput) {
 func (p *ProgressDisplay) FailWorkflow(err error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	if !p.enabled {
 		return
 	}
-	
+
 	fmt.Println()
 	fmt.Println(p.styler.Divider(50))
 	fmt.Printf("  %s %s\n",
@@ -286,11 +286,11 @@ func (p *ProgressDisplay) FailWorkflow(err error) {
 func (p *ProgressDisplay) ShowDependencyGraph(order []string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	if !p.enabled || len(order) == 0 {
 		return
 	}
-	
+
 	fmt.Printf("  %s Execution order:\n", p.styler.Muted("│"))
 	for i, name := range order {
 		isLast := i == len(order)-1
@@ -322,19 +322,19 @@ func formatDuration(d time.Duration) string {
 func (p *ProgressDisplay) LoopProgress(name string, iteration, maxIter int, step string, elapsed time.Duration) string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	parts := []string{
 		p.styler.LoopIcon(),
 		p.styler.LoopName(name),
 		p.styler.Muted("│"),
 		p.styler.Iteration(iteration, maxIter),
 	}
-	
+
 	if step != "" {
 		parts = append(parts, p.styler.Muted("│"), p.styler.StepName(step))
 	}
-	
+
 	parts = append(parts, p.styler.Muted("│"), p.styler.Duration(formatDuration(elapsed)))
-	
+
 	return strings.Join(parts, " ")
 }

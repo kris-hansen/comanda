@@ -36,17 +36,17 @@ const (
 
 // Unicode box drawing characters
 const (
-	boxHorizontal      = "─"
-	boxVertical        = "│"
-	boxTopLeft         = "╭"
-	boxTopRight        = "╮"
-	boxBottomLeft      = "╰"
-	boxBottomRight     = "╯"
-	boxVerticalRight   = "├"
-	boxVerticalLeft    = "┤"
-	boxHorizontalDown  = "┬"
-	boxHorizontalUp    = "┴"
-	boxCross           = "┼"
+	boxHorizontal       = "─"
+	boxVertical         = "│"
+	boxTopLeft          = "╭"
+	boxTopRight         = "╮"
+	boxBottomLeft       = "╰"
+	boxBottomRight      = "╯"
+	boxVerticalRight    = "├"
+	boxVerticalLeft     = "┤"
+	boxHorizontalDown   = "┬"
+	boxHorizontalUp     = "┴"
+	boxCross            = "┼"
 	boxDoubleHorizontal = "═"
 	boxDoubleVertical   = "║"
 )
@@ -71,9 +71,9 @@ const (
 
 // StyleConfig controls output styling behavior
 type StyleConfig struct {
-	UseColors    bool
-	UseUnicode   bool
-	CompactMode  bool
+	UseColors   bool
+	UseUnicode  bool
+	CompactMode bool
 }
 
 // DefaultStyleConfig returns the default style configuration
@@ -83,7 +83,7 @@ func DefaultStyleConfig() *StyleConfig {
 	if os.Getenv("NO_COLOR") != "" || os.Getenv("TERM") == "dumb" {
 		useColors = false
 	}
-	
+
 	return &StyleConfig{
 		UseColors:   useColors,
 		UseUnicode:  true,
@@ -222,19 +222,19 @@ func (s *Styler) Box(title string, width int) string {
 	if !s.config.UseUnicode {
 		return s.asciiBox(title, width)
 	}
-	
+
 	if width < len(title)+4 {
 		width = len(title) + 4
 	}
-	
+
 	padding := width - len(title) - 2
 	leftPad := padding / 2
 	rightPad := padding - leftPad
-	
+
 	top := boxTopLeft + strings.Repeat(boxHorizontal, width) + boxTopRight
 	middle := boxVertical + strings.Repeat(" ", leftPad) + s.Bold(title) + strings.Repeat(" ", rightPad) + boxVertical
 	bottom := boxBottomLeft + strings.Repeat(boxHorizontal, width) + boxBottomRight
-	
+
 	return top + "\n" + middle + "\n" + bottom
 }
 
@@ -242,13 +242,13 @@ func (s *Styler) asciiBox(title string, width int) string {
 	if width < len(title)+4 {
 		width = len(title) + 4
 	}
-	
+
 	border := "+" + strings.Repeat("-", width) + "+"
 	padding := width - len(title)
 	leftPad := padding / 2
 	rightPad := padding - leftPad
 	middle := "|" + strings.Repeat(" ", leftPad) + title + strings.Repeat(" ", rightPad) + "|"
-	
+
 	return border + "\n" + middle + "\n" + border
 }
 
@@ -287,15 +287,15 @@ func (s *Styler) ProgressBar(current, total, width int) string {
 	if total <= 0 {
 		return ""
 	}
-	
+
 	percent := float64(current) / float64(total)
 	filled := int(percent * float64(width))
 	if filled > width {
 		filled = width
 	}
-	
+
 	bar := strings.Repeat("█", filled) + strings.Repeat("░", width-filled)
 	percentStr := fmt.Sprintf("%3d%%", int(percent*100))
-	
+
 	return s.Info(bar) + " " + s.Muted(percentStr)
 }
