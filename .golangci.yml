@@ -1,3 +1,5 @@
+version: "2"
+
 run:
   timeout: 5m
   tests: true
@@ -8,23 +10,16 @@ linters:
   enable:
     # Bugs and correctness
     - errcheck       # Check for unchecked errors
-    - gosimple       # Simplify code
     - govet          # Go vet
     - ineffassign    # Detect ineffectual assignments
-    - staticcheck    # Advanced Go linting
+    - staticcheck    # Advanced Go linting (includes gosimple, stylecheck)
     - unused         # Check for unused constants, variables, functions and types
 
     # Code quality
     - gocyclo        # Cyclomatic complexity
     - goconst        # Repeated strings that could be constants
-    - gofmt          # Format code
-    # - goimports    # Fix imports - disabled for now
     - misspell       # Spell checker
     - unconvert      # Remove unnecessary type conversions
-
-    # Style
-    - stylecheck     # Stylecheck
-    - revive         # Replacement for golint
 
     # Error handling
     - errname        # Check error naming
@@ -42,6 +37,10 @@ linters:
     - funlen         # Too strict for existing codebase
     - gocognit       # Too strict for existing codebase
     - nolintlint     # Can be added later
+
+formatters:
+  enable:
+    - gofmt
 
 linters-settings:
   errcheck:
@@ -81,6 +80,7 @@ linters-settings:
       - G306  # File permissions - tool needs to write files
 
 issues:
+  uniq-by-line: true
   exclude-rules:
     # Exclude some linters from running on tests files
     - path: _test\.go
@@ -156,8 +156,7 @@ issues:
 
 output:
   formats:
-    - format: colored-line-number
+    colored-line-number: {}
   print-issued-lines: true
   print-linter-name: true
-  uniq-by-line: true
   sort-results: true
