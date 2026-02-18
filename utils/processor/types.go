@@ -262,47 +262,41 @@ type LoopOutput struct {
 // UnmarshalYAML implements custom unmarshaling for AgenticLoopConfig
 // to support both map and list syntax for steps
 func (c *AgenticLoopConfig) UnmarshalYAML(node *yaml.Node) error {
-	// Create a temporary struct without the Steps field for initial unmarshal
-
-	// First, try to decode everything except steps
-	// We need to handle steps specially
 	if node.Kind != yaml.MappingNode {
 		return fmt.Errorf("expected mapping node for AgenticLoopConfig")
 	}
 
+	// Find and extract the steps node for special handling
 	var stepsNode *yaml.Node
+	var stepsKeyIdx int = -1
 
 	for i := 0; i < len(node.Content); i += 2 {
 		keyNode := node.Content[i]
-		valueNode := node.Content[i+1]
-		key := keyNode.Value
-
-		if key == "steps" {
-			stepsNode = valueNode
+		if keyNode.Value == "steps" {
+			stepsNode = node.Content[i+1]
+			stepsKeyIdx = i
+			break
 		}
 	}
 
-	// Decode the main config (this will fail on steps but that's OK)
-	// We use a workaround: decode to a map first, then manually set fields
-	var configMap map[string]interface{}
-	if err := node.Decode(&configMap); err != nil {
-		// Ignore steps-related errors for now
+	// Create a copy of the node without the steps field for clean decoding
+	// This avoids the decode error when steps contains map syntax
+	cleanNode := &yaml.Node{
+		Kind:    yaml.MappingNode,
+		Tag:     node.Tag,
+		Content: make([]*yaml.Node, 0, len(node.Content)),
+	}
+	for i := 0; i < len(node.Content); i += 2 {
+		if i != stepsKeyIdx {
+			cleanNode.Content = append(cleanNode.Content, node.Content[i], node.Content[i+1])
+		}
 	}
 
-	// Decode non-steps fields using standard approach with alias type
+	// Decode non-steps fields using alias type to avoid recursion
 	type Alias AgenticLoopConfig
-	aux := &struct {
-		*Alias
-		Steps yaml.Node `yaml:"steps,omitempty"`
-	}{
-		Alias: (*Alias)(c),
-	}
-
-	if err := node.Decode(aux); err != nil {
-		// Check if error is only about steps
-		if stepsNode == nil {
-			return err
-		}
+	aux := (*Alias)(c)
+	if err := cleanNode.Decode(aux); err != nil {
+		return fmt.Errorf("failed to decode loop config: %w", err)
 	}
 
 	// Resolve allowed_paths to absolute paths at parse time
