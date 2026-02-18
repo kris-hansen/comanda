@@ -137,6 +137,20 @@ func (p *Processor) fetchURL(urlStr string) (string, error) {
 	return tmpPath, nil
 }
 
+// isInlineContent checks if the input appears to be inline content rather than a file path
+// This happens when a variable like $CORE_INDEX is substituted with actual content
+func (p *Processor) isInlineContent(input string) bool {
+	// If it contains newlines, it's likely content
+	if strings.Contains(input, "\n") {
+		return true
+	}
+	// If it's very long (> 500 chars) and doesn't look like a path, it's likely content
+	if len(input) > 500 && !strings.HasPrefix(input, "/") && !strings.HasPrefix(input, ".") && !strings.HasPrefix(input, "~") {
+		return true
+	}
+	return false
+}
+
 // processInputs handles the input section of the DSL
 func (p *Processor) processInputs(inputs []string) error {
 	p.debugf("Processing %d input(s)", len(inputs))
@@ -148,6 +162,31 @@ func (p *Processor) processInputs(inputs []string) error {
 		}
 
 		p.debugf("Processing input path: %s", inputPath)
+
+		// Check if this is inline content (e.g., from $VARNAME substitution)
+		// This happens when a step uses input: $CORE_INDEX and it gets substituted
+		// with the actual index content rather than a file path
+		if p.isInlineContent(inputPath) {
+			p.debugf("Input detected as inline content (%d bytes), writing to temp file", len(inputPath))
+			tmpFile, err := os.CreateTemp("", "comanda-inline-*.txt")
+			if err != nil {
+				return fmt.Errorf("failed to create temp file for inline content: %w", err)
+			}
+			if _, err := tmpFile.WriteString(inputPath); err != nil {
+				tmpFile.Close()
+				os.Remove(tmpFile.Name())
+				return fmt.Errorf("failed to write inline content to temp file: %w", err)
+			}
+			tmpFile.Close()
+			// Process the temp file as input
+			if err := p.handler.ProcessPath(tmpFile.Name()); err != nil {
+				os.Remove(tmpFile.Name())
+				return fmt.Errorf("error processing inline content: %w", err)
+			}
+			// Note: temp file cleanup should happen after step completes
+			// For now, we'll leave it (OS will clean up on reboot)
+			continue
+		}
 
 		// Handle special inputs first
 		if p.isSpecialInput(inputPath) {
