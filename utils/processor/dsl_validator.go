@@ -99,6 +99,16 @@ func ValidateWorkflowStructure(yamlContent string) ValidationResult {
 		result.Errors = append(result.Errors, loopsErrors...)
 	}
 
+	// Check for ignored top-level steps when execute_loops is present
+	if _, hasExecuteLoops := workflow["execute_loops"]; hasExecuteLoops {
+		ignoredStepsErrors := validateExecuteLoopsIgnoredSteps(workflow)
+		result.Errors = append(result.Errors, ignoredStepsErrors...)
+	}
+
+	// Validate step chaining (variables and file dependencies)
+	chainingErrors := validateStepChaining(workflow)
+	result.Errors = append(result.Errors, chainingErrors...)
+
 	if len(result.Errors) > 0 {
 		result.Valid = false
 	}
@@ -548,6 +558,206 @@ func validateOutputField(stepName string, output interface{}) []ValidationError 
 			Message: "output has invalid type",
 			Fix:     "Output should be a string (STDOUT, filename) or map (for database outputs).",
 		})
+	}
+
+	return errors
+}
+
+// validateExecuteLoopsIgnoredSteps checks for top-level steps that will be ignored when execute_loops is present
+func validateExecuteLoopsIgnoredSteps(workflow map[string]interface{}) []ValidationError {
+	var errors []ValidationError
+
+	reservedKeys := map[string]bool{
+		"loops":         true,
+		"execute_loops": true,
+		"workflow":      true,
+		"agentic-loop":  true,
+	}
+
+	var ignoredSteps []string
+	for stepName := range workflow {
+		if !reservedKeys[stepName] {
+			ignoredSteps = append(ignoredSteps, stepName)
+		}
+	}
+
+	if len(ignoredSteps) > 0 {
+		errors = append(errors, ValidationError{
+			Field:   "execute_loops",
+			Message: fmt.Sprintf("Top-level steps will be IGNORED when execute_loops is present: %v", ignoredSteps),
+			Fix:     "Move these steps inside the 'loops:' block, or remove 'execute_loops:' if you want sequential step execution.",
+		})
+	}
+
+	return errors
+}
+
+// validateStepChaining validates that step inputs reference outputs from prior steps
+func validateStepChaining(workflow map[string]interface{}) []ValidationError {
+	var errors []ValidationError
+
+	// Collect all exported variables and output files
+	exportedVars := make(map[string]string) // variable name -> step that exports it
+	outputFiles := make(map[string]string)  // file path -> step that writes it
+
+	// Check loops block for output_state and codebase_index exports
+	if loops, ok := workflow["loops"].(map[string]interface{}); ok {
+		for loopName, loopDef := range loops {
+			loopMap, ok := loopDef.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			// Check output_state
+			if outputState, ok := loopMap["output_state"].(string); ok {
+				varName := strings.TrimPrefix(outputState, "$")
+				exportedVars[varName] = loopName
+			}
+
+			// Check steps within loop for codebase_index and file outputs
+			if steps, ok := loopMap["steps"].(map[string]interface{}); ok {
+				for stepName, stepDef := range steps {
+					stepMap, ok := stepDef.(map[string]interface{})
+					if !ok {
+						continue
+					}
+
+					// Check for codebase_index exports
+					if ci, ok := stepMap["codebase_index"].(map[string]interface{}); ok {
+						if output, ok := ci["output"].(map[string]interface{}); ok {
+							if path, ok := output["path"].(string); ok {
+								outputFiles[path] = stepName
+							}
+						}
+						// Infer variable name from root path
+						if root, ok := ci["root"].(string); ok {
+							// Extract repo name from path and uppercase it
+							parts := strings.Split(strings.TrimSuffix(root, "/"), "/")
+							if len(parts) > 0 {
+								repoName := strings.ToUpper(parts[len(parts)-1])
+								repoName = strings.ReplaceAll(repoName, "-", "_")
+								exportedVars[repoName+"_INDEX"] = stepName
+							}
+						}
+					}
+
+					// Check for file outputs
+					if output, ok := stepMap["output"].(string); ok {
+						if output != "STDOUT" && output != "STDIN" && !strings.HasPrefix(output, "$") {
+							outputFiles[output] = stepName
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Check top-level steps (when no execute_loops)
+	if _, hasExecuteLoops := workflow["execute_loops"]; !hasExecuteLoops {
+		for stepName, stepDef := range workflow {
+			if stepName == "loops" || stepName == "execute_loops" || stepName == "workflow" || stepName == "agentic-loop" {
+				continue
+			}
+			stepMap, ok := stepDef.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			// Check for codebase_index exports
+			if ci, ok := stepMap["codebase_index"].(map[string]interface{}); ok {
+				if output, ok := ci["output"].(map[string]interface{}); ok {
+					if path, ok := output["path"].(string); ok {
+						outputFiles[path] = stepName
+					}
+				}
+				if root, ok := ci["root"].(string); ok {
+					parts := strings.Split(strings.TrimSuffix(root, "/"), "/")
+					if len(parts) > 0 {
+						repoName := strings.ToUpper(parts[len(parts)-1])
+						repoName = strings.ReplaceAll(repoName, "-", "_")
+						exportedVars[repoName+"_INDEX"] = stepName
+					}
+				}
+			}
+
+			// Check for file outputs
+			if output, ok := stepMap["output"].(string); ok {
+				if output != "STDOUT" && output != "STDIN" && !strings.HasPrefix(output, "$") {
+					outputFiles[output] = stepName
+				}
+			}
+		}
+	}
+
+	// Now validate that inputs reference valid exports
+	varRefRegex := regexp.MustCompile(`\$([A-Z_][A-Z0-9_]*)`)
+
+	validateInputRefs := func(stepName string, stepMap map[string]interface{}) {
+		// Check input field for variable references
+		if input, ok := stepMap["input"].(string); ok {
+			matches := varRefRegex.FindAllStringSubmatch(input, -1)
+			for _, match := range matches {
+				varName := match[1]
+				if _, exists := exportedVars[varName]; !exists {
+					errors = append(errors, ValidationError{
+						Field:   stepName,
+						Message: fmt.Sprintf("References variable $%s but no prior step exports it", varName),
+						Fix:     fmt.Sprintf("Ensure a prior step or loop sets 'output_state: $%s', or use a codebase-index step that exports this variable.", varName),
+					})
+				}
+			}
+		}
+
+		// Check action field for variable references
+		if action, ok := stepMap["action"].(string); ok {
+			matches := varRefRegex.FindAllStringSubmatch(action, -1)
+			for _, match := range matches {
+				varName := match[1]
+				// Skip loop template variables
+				if strings.HasPrefix(varName, "LOOP") || varName == "STDIN" || varName == "STDOUT" {
+					continue
+				}
+				if _, exists := exportedVars[varName]; !exists {
+					// Only warn if it looks like a workflow variable (not env var)
+					if !strings.Contains(varName, "_") || strings.HasSuffix(varName, "_INDEX") {
+						errors = append(errors, ValidationError{
+							Field:   stepName,
+							Message: fmt.Sprintf("Action references variable $%s but no prior step exports it", varName),
+							Fix:     fmt.Sprintf("Ensure a prior step or loop sets 'output_state: $%s', or this variable comes from a codebase-index step.", varName),
+						})
+					}
+				}
+			}
+		}
+	}
+
+	// Validate loops
+	if loops, ok := workflow["loops"].(map[string]interface{}); ok {
+		for loopName, loopDef := range loops {
+			loopMap, ok := loopDef.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if steps, ok := loopMap["steps"].(map[string]interface{}); ok {
+				for stepName, stepDef := range steps {
+					if stepMap, ok := stepDef.(map[string]interface{}); ok {
+						validateInputRefs(fmt.Sprintf("%s.%s", loopName, stepName), stepMap)
+					}
+				}
+			}
+		}
+	}
+
+	// Validate top-level steps
+	if _, hasExecuteLoops := workflow["execute_loops"]; !hasExecuteLoops {
+		for stepName, stepDef := range workflow {
+			if stepName == "loops" || stepName == "execute_loops" || stepName == "workflow" || stepName == "agentic-loop" {
+				continue
+			}
+			if stepMap, ok := stepDef.(map[string]interface{}); ok {
+				validateInputRefs(stepName, stepMap)
+			}
+		}
 	}
 
 	return errors
