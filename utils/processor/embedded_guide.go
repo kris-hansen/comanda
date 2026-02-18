@@ -163,6 +163,60 @@ const EmbeddedLLMGuide = `# Comanda YAML DSL Guide (for LLM Consumption)
 
 This guide specifies the YAML-based Domain Specific Language (DSL) for Comanda workflows, enabling LLMs to generate valid workflow files.
 
+## ⚠️ CRITICAL RULES - READ BEFORE GENERATING ⚠️
+
+**RULE 1 - execute_loops IGNORES top-level steps:**
+When a workflow has ` + "`execute_loops:`" + `, ONLY the loops in the ` + "`loops:`" + ` block run. Any steps defined outside ` + "`loops:`" + ` are COMPLETELY IGNORED.
+
+**RULE 2 - codebase-index with multi-loop workflows:**
+If you need codebase-index AND multiple loops, the codebase-index MUST be inside a loop:
+` + "```yaml" + `
+loops:
+  indexer:
+    max_iterations: 1
+    allowed_paths: [~/myproject, .]
+    steps:
+      index:
+        step_type: codebase-index
+        codebase_index:
+          root: ~/myproject
+          output:
+            path: .comanda/INDEX.md
+            store: repo
+
+  analyzer:
+    depends_on: [indexer]
+    steps:
+      analyze:
+        input: .comanda/INDEX.md
+        model: claude-code
+        action: "Analyze the codebase"
+        output: STDOUT
+
+execute_loops:
+  - indexer
+  - analyzer
+` + "```" + `
+
+**RULE 3 - Never put codebase-index as a top-level step with execute_loops:**
+` + "```yaml" + `
+# ❌ WRONG - index_step is IGNORED, $PROJECT_INDEX is never set!
+index_step:
+  step_type: codebase-index
+  codebase_index:
+    root: ~/myproject
+
+loops:
+  analyze:
+    steps:
+      step1:
+        input: $PROJECT_INDEX  # ❌ This variable doesn't exist!
+        ...
+
+execute_loops:
+  - analyze
+` + "```" + `
+
 ## Overview
 
 Comanda workflows consist of one or more named steps. Each step performs an operation. There are seven main types of steps:
@@ -1407,6 +1461,31 @@ Before generating any workflow, you MUST follow these rules:
 1. **MODEL RESTRICTION**: You may ONLY use models from the "Supported Models" list in this guide. DO NOT invent model names.
 2. **STEP NAMING**: Every step name must be descriptive (e.g., ` + "`extract_customer_emails`" + `, NOT ` + "`step_1`" + `).
 3. **SIMPLICITY**: Use the minimum number of steps needed. Most tasks need 1-2 steps.
+4. **execute_loops IGNORES top-level steps**: When using ` + "`execute_loops:`" + `, ONLY loops run. Steps outside ` + "`loops:`" + ` are IGNORED.
+5. **codebase-index + loops**: If you need codebase-index with multiple loops, put codebase-index INSIDE a loop:
+` + "```yaml" + `
+loops:
+  indexer:
+    max_iterations: 1
+    steps:
+      index:
+        step_type: codebase-index
+        codebase_index:
+          root: ~/myproject
+          output:
+            path: .comanda/INDEX.md
+  analyzer:
+    depends_on: [indexer]
+    steps:
+      analyze:
+        input: .comanda/INDEX.md
+        model: claude-code
+        action: "Analyze"
+        output: STDOUT
+execute_loops:
+  - indexer
+  - analyzer
+` + "```" + `
 
 ## Overview
 
