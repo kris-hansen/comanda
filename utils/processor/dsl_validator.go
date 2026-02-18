@@ -8,6 +8,13 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Common I/O constants
+const (
+	OutputSTDOUT = "STDOUT"
+	InputSTDIN   = "STDIN"
+	InputNA      = "NA"
+)
+
 // ValidationError represents a single validation error with actionable feedback
 type ValidationError struct {
 	Line    int    // Line number (0 if unknown)
@@ -503,7 +510,7 @@ func validateInputField(stepName string, input interface{}) []ValidationError {
 
 	switch v := input.(type) {
 	case string:
-		// Valid: "file.txt", "STDIN", "NA", "tool: command", etc.
+		// Valid: "file.txt", InputSTDIN, "NA", "tool: command", etc.
 		// Just basic sanity checks
 		if v == "" {
 			errors = append(errors, ValidationError{
@@ -643,7 +650,7 @@ func validateStepChaining(workflow map[string]interface{}) []ValidationError {
 
 					// Check for file outputs
 					if output, ok := stepMap["output"].(string); ok {
-						if output != "STDOUT" && output != "STDIN" && !strings.HasPrefix(output, "$") {
+						if output != OutputSTDOUT && output != InputSTDIN && !strings.HasPrefix(output, "$") {
 							outputFiles[output] = stepName
 						}
 					}
@@ -682,7 +689,7 @@ func validateStepChaining(workflow map[string]interface{}) []ValidationError {
 
 			// Check for file outputs
 			if output, ok := stepMap["output"].(string); ok {
-				if output != "STDOUT" && output != "STDIN" && !strings.HasPrefix(output, "$") {
+				if output != OutputSTDOUT && output != InputSTDIN && !strings.HasPrefix(output, "$") {
 					outputFiles[output] = stepName
 				}
 			}
@@ -714,7 +721,7 @@ func validateStepChaining(workflow map[string]interface{}) []ValidationError {
 			for _, match := range matches {
 				varName := match[1]
 				// Skip loop template variables
-				if strings.HasPrefix(varName, "LOOP") || varName == "STDIN" || varName == "STDOUT" {
+				if strings.HasPrefix(varName, "LOOP") || varName == InputSTDIN || varName == OutputSTDOUT {
 					continue
 				}
 				if _, exists := exportedVars[varName]; !exists {
