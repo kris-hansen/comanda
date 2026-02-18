@@ -85,6 +85,18 @@ func (p *Processor) buildCodebaseIndexConfig(stepConfig StepConfig) *codebaseind
 					config.OutputPath = expandedOutput
 				}
 			}
+			if ci.Output.Format != "" {
+				switch ci.Output.Format {
+				case "summary":
+					config.OutputFormat = codebaseindex.FormatSummary
+				case "structured":
+					config.OutputFormat = codebaseindex.FormatStructured
+				case "full":
+					config.OutputFormat = codebaseindex.FormatFull
+				default:
+					config.OutputFormat = codebaseindex.FormatStructured
+				}
+			}
 			if ci.Output.Store != "" {
 				switch ci.Output.Store {
 				case "repo":

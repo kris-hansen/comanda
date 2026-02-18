@@ -18,8 +18,188 @@ const (
 	maxSymbolsPerFile = 8
 )
 
-// synthesize generates the markdown index from scan results
+// synthesize generates the markdown index from scan results based on output format
 func (m *Manager) synthesize(scan *ScanResult) (string, error) {
+	format := m.config.OutputFormat
+	if format == "" {
+		format = DefaultFormat
+	}
+
+	switch format {
+	case FormatSummary:
+		return m.synthesizeSummary(scan)
+	case FormatStructured:
+		return m.synthesizeStructured(scan)
+	case FormatFull:
+		return m.synthesizeFull(scan)
+	default:
+		return m.synthesizeStructured(scan)
+	}
+}
+
+// synthesizeSummary generates a compact overview (1-2KB) for agent system prompts
+func (m *Manager) synthesizeSummary(scan *ScanResult) (string, error) {
+	var sb strings.Builder
+
+	// Header
+	sb.WriteString("# ")
+	sb.WriteString(m.config.RepoFileSlug)
+	sb.WriteString(" - Quick Reference\n\n")
+
+	// Languages and stats
+	languages := make([]string, 0, len(m.adapters))
+	for _, a := range m.adapters {
+		languages = append(languages, a.Name())
+	}
+	sb.WriteString("**Stack:** ")
+	sb.WriteString(strings.Join(languages, ", "))
+	sb.WriteString(" | **Files:** ")
+	sb.WriteString(fmt.Sprintf("%d", scan.TotalFiles))
+	sb.WriteString("\n\n")
+
+	// Purpose
+	purpose := m.inferPurpose(scan)
+	if purpose != "" {
+		sb.WriteString(purpose)
+		sb.WriteString("\n\n")
+	}
+
+	// Main areas (capabilities)
+	capabilities := m.inferCapabilities(scan)
+	if len(capabilities) > 0 {
+		sb.WriteString("## Key Areas\n\n")
+		for dir, caps := range capabilities {
+			sb.WriteString("- **")
+			sb.WriteString(dir)
+			sb.WriteString("/** — ")
+			sb.WriteString(strings.Join(caps, ", "))
+			sb.WriteString("\n")
+		}
+		sb.WriteString("\n")
+	}
+
+	// Entry points (max 5)
+	var entrypoints []*FileEntry
+	for _, f := range scan.Candidates {
+		if f.IsEntrypoint && len(entrypoints) < 5 {
+			entrypoints = append(entrypoints, f)
+		}
+	}
+	if len(entrypoints) > 0 {
+		sb.WriteString("## Entry Points\n\n")
+		for _, f := range entrypoints {
+			sb.WriteString("- `")
+			sb.WriteString(f.Path)
+			sb.WriteString("`\n")
+		}
+		sb.WriteString("\n")
+	}
+
+	// Quick tips
+	hints := m.detectConventions(scan)
+	if len(hints) > 0 && len(hints) <= 3 {
+		sb.WriteString("## Notes\n\n")
+		for _, hint := range hints {
+			sb.WriteString("- ")
+			sb.WriteString(hint)
+			sb.WriteString("\n")
+		}
+		sb.WriteString("\n")
+	}
+
+	// Footer
+	sb.WriteString("---\n*Use `qmd search` or full index for detailed exploration.*\n")
+
+	return sb.String(), nil
+}
+
+// synthesizeStructured generates a categorized index (10-50KB) for agentic loops
+func (m *Manager) synthesizeStructured(scan *ScanResult) (string, error) {
+	var sb strings.Builder
+
+	// Header with quick stats
+	sb.WriteString("# ")
+	sb.WriteString(m.config.RepoFileSlug)
+	sb.WriteString(" - Codebase Index\n\n")
+
+	languages := make([]string, 0, len(m.adapters))
+	for _, a := range m.adapters {
+		languages = append(languages, a.Name())
+	}
+	sb.WriteString("**Languages:** ")
+	sb.WriteString(strings.Join(languages, ", "))
+	sb.WriteString(" | **Files:** ")
+	sb.WriteString(fmt.Sprintf("%d indexed / %d total", len(scan.Candidates), scan.TotalFiles))
+	sb.WriteString("\n\n")
+
+	purpose := m.inferPurpose(scan)
+	if purpose != "" {
+		sb.WriteString(purpose)
+		sb.WriteString("\n\n")
+	}
+
+	// Categorize files by domain/purpose
+	categories := m.categorizeFiles(scan)
+
+	// Write categories
+	sb.WriteString("## File Categories\n\n")
+	sb.WriteString("Files organized by domain for targeted exploration.\n\n")
+
+	// Sort categories for deterministic output
+	sortedCategories := make([]string, 0, len(categories))
+	for cat := range categories {
+		sortedCategories = append(sortedCategories, cat)
+	}
+	sort.Strings(sortedCategories)
+
+	for _, category := range sortedCategories {
+		files := categories[category]
+		sb.WriteString("### ")
+		sb.WriteString(category)
+		sb.WriteString("\n\n")
+
+		// Limit files per category
+		maxFiles := 20
+		if len(files) > maxFiles {
+			for i := 0; i < maxFiles; i++ {
+				sb.WriteString("- `")
+				sb.WriteString(files[i])
+				sb.WriteString("`\n")
+			}
+			sb.WriteString(fmt.Sprintf("- *... and %d more files*\n", len(files)-maxFiles))
+		} else {
+			for _, f := range files {
+				sb.WriteString("- `")
+				sb.WriteString(f)
+				sb.WriteString("`\n")
+			}
+		}
+		sb.WriteString("\n")
+	}
+
+	// Repository layout (condensed)
+	sb.WriteString("## Repository Layout\n\n")
+	sb.WriteString("```\n")
+	m.writeTreeNode(&sb, scan.DirTree, "", 0)
+	sb.WriteString("```\n\n")
+
+	// Entry points
+	m.writeEntryPoints(&sb, scan)
+
+	// Token budget warnings
+	m.writeTokenBudget(&sb, scan)
+
+	// Risk areas
+	m.writeRiskAreas(&sb, scan)
+
+	// Footer
+	m.writeFooter(&sb, scan)
+
+	return sb.String(), nil
+}
+
+// synthesizeFull generates the complete index (50-200KB) for comprehensive analysis
+func (m *Manager) synthesizeFull(scan *ScanResult) (string, error) {
 	var sb strings.Builder
 
 	// 1. Purpose (always include)
@@ -56,6 +236,87 @@ func (m *Manager) synthesize(scan *ScanResult) (string, error) {
 	m.writeFooter(&sb, scan)
 
 	return sb.String(), nil
+}
+
+// categorizeFiles organizes files into semantic categories
+func (m *Manager) categorizeFiles(scan *ScanResult) map[string][]string {
+	categories := make(map[string][]string)
+
+	// Category patterns
+	categoryPatterns := map[string][]string{
+		"Backend / API": {
+			"api/", "handlers/", "controllers/", "routes/",
+			"internal/api/", "internal/service/", "internal/handler/",
+			"server/", "service/",
+		},
+		"Frontend / UI": {
+			"web/", "frontend/", "client/", "ui/",
+			"components/", "pages/", "views/", "hooks/",
+			"src/components/", "src/pages/", "src/views/",
+		},
+		"Database / Storage": {
+			"db/", "database/", "storage/", "repository/",
+			"internal/db/", "migrations/", "queries/", "sqlc/",
+		},
+		"Domain / Models": {
+			"models/", "entities/", "domain/", "types/",
+			"internal/domain/", "internal/model/",
+		},
+		"Business Logic": {
+			"services/", "usecases/", "core/", "logic/",
+			"internal/service/", "internal/usecase/",
+		},
+		"Infrastructure": {
+			"infra/", "infrastructure/", "deploy/", "k8s/",
+			".github/", "scripts/", "docker/", "terraform/",
+		},
+		"Configuration": {
+			"config/", "configs/", "settings/",
+		},
+		"Testing": {
+			"test/", "tests/", "__tests__/", "testdata/",
+			"integration/", "e2e/",
+		},
+		"CLI / Commands": {
+			"cmd/", "commands/", "cli/",
+		},
+		"Utilities / Helpers": {
+			"utils/", "util/", "helpers/", "lib/", "pkg/",
+			"common/", "shared/",
+		},
+		"Documentation": {
+			"docs/", "doc/", "documentation/",
+		},
+	}
+
+	// Categorize each file
+	for _, f := range scan.Candidates {
+		categorized := false
+		for category, patterns := range categoryPatterns {
+			for _, pattern := range patterns {
+				if strings.Contains(f.Path, pattern) {
+					categories[category] = append(categories[category], f.Path)
+					categorized = true
+					break
+				}
+			}
+			if categorized {
+				break
+			}
+		}
+
+		// Uncategorized files go to "Other"
+		if !categorized {
+			categories["Other"] = append(categories["Other"], f.Path)
+		}
+	}
+
+	// Sort files within each category
+	for cat := range categories {
+		sort.Strings(categories[cat])
+	}
+
+	return categories
 }
 
 // writePurpose writes the purpose section

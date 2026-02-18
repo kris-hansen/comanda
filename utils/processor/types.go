@@ -188,6 +188,7 @@ type QmdSearchConfig struct {
 // CodebaseIndexOutputConfig configures index output
 type CodebaseIndexOutputConfig struct {
 	Path    string `yaml:"path,omitempty"`    // Custom output path
+	Format  string `yaml:"format,omitempty"`  // Output format: summary, structured, full (default: structured)
 	Store   string `yaml:"store,omitempty"`   // Where to store: repo, config, both
 	Encrypt bool   `yaml:"encrypt,omitempty"` // Whether to encrypt the output
 }
