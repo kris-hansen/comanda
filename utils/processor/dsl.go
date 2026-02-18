@@ -521,6 +521,13 @@ func (p *Processor) substituteCLIVariablesInSlice(items []string) {
 	}
 }
 
+// substituteVariablesInSlice applies step output variable substitution ($VARNAME) to all elements in a slice
+func (p *Processor) substituteVariablesInSlice(items []string) {
+	for i, item := range items {
+		items[i] = p.substituteVariables(item)
+	}
+}
+
 // validateStepConfig checks if all required fields are present in a step
 func (p *Processor) validateStepConfig(stepName string, config StepConfig) error {
 	var errors []string
@@ -1118,6 +1125,10 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 	// Apply CLI variable substitution to inputs and actions
 	p.substituteCLIVariablesInSlice(inputs)
 	p.substituteCLIVariablesInSlice(actions)
+
+	// Apply step output variable substitution ($VARNAME) to inputs
+	// This allows steps to reference outputs from previous steps as file paths
+	p.substituteVariablesInSlice(inputs)
 
 	p.debugf("Step configuration:")
 	p.debugf("- Inputs: %v", inputs)
