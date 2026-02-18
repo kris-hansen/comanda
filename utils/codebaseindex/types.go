@@ -24,6 +24,29 @@ const (
 	StoreBoth   StoreLocation = "both"
 )
 
+// OutputFormat specifies the format/verbosity of the generated index
+type OutputFormat string
+
+const (
+	// FormatSummary generates a compact overview (1-2KB)
+	// Contains: repo purpose, main areas, key entry points
+	// Best for: quick context, agent system prompts
+	FormatSummary OutputFormat = "summary"
+
+	// FormatStructured generates a categorized index (10-50KB)
+	// Contains: files grouped by domain/purpose, semantic sections
+	// Best for: agentic loops that need to understand codebase areas
+	FormatStructured OutputFormat = "structured"
+
+	// FormatFull generates the complete index (50-200KB)
+	// Contains: all files, symbols, detailed tree structure
+	// Best for: comprehensive analysis, initial exploration
+	FormatFull OutputFormat = "full"
+
+	// DefaultFormat is the default output format
+	DefaultFormat OutputFormat = FormatStructured
+)
+
 // Config represents the parsed configuration for codebase indexing
 type Config struct {
 	// Root path to scan (defaults to current directory)
@@ -31,6 +54,7 @@ type Config struct {
 
 	// Output configuration
 	OutputPath    string
+	OutputFormat  OutputFormat // summary, structured, or full
 	Store         StoreLocation
 	Encrypt       bool
 	EncryptionKey string
@@ -67,8 +91,13 @@ type AdapterOverride struct {
 
 // Result represents the output of index generation
 type Result struct {
-	// The generated markdown content
+	// The generated markdown content (primary format)
 	Content string
+
+	// Additional format outputs (generated on demand)
+	Summary    string // Always generated - compact overview for agents
+	Structured string // Categorized index if format != summary
+	Full       string // Complete index if format == full
 
 	// Path where the index was written
 	OutputPath string
@@ -79,12 +108,18 @@ type Result struct {
 	// Whether the index was updated (for incremental mode)
 	Updated bool
 
+	// Format used for Content
+	Format OutputFormat
+
 	// Metadata
 	GeneratedAt time.Time
 	RepoName    string
 	Languages   []string
 	FileCount   int
 	Duration    time.Duration
+
+	// Categorization (populated during structured/full generation)
+	Categories map[string][]string // category -> file paths
 }
 
 // ScanResult holds the results of repository scanning
@@ -210,6 +245,7 @@ type ChangeSet struct {
 func DefaultConfig() *Config {
 	return &Config{
 		Root:           ".",
+		OutputFormat:   DefaultFormat,
 		Store:          StoreRepo,
 		Encrypt:        false,
 		ExposeVariable: true,
