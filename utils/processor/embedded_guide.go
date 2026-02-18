@@ -917,6 +917,7 @@ step_name:
     root: .                   # Repository path (default: current directory)
     output:
       path: .comanda/INDEX.md # Custom output path (optional)
+      format: structured      # Output format: summary, structured, full
       store: repo             # Where to store: repo, config, or both
       encrypt: false          # Enable AES-256 encryption
     expose:
@@ -938,6 +939,7 @@ step_name:
 **` + "`codebase_index`" + ` Block Attributes:**
 - ` + "`root`" + `: (string, default: ` + "`.`" + `) Repository path to scan.
 - ` + "`output.path`" + `: (string, optional) Custom output file path. Default: ` + "`.comanda/<repo>_INDEX.md`" + `
+- ` + "`output.format`" + `: (string, default: ` + "`structured`" + `) Output format: ` + "`summary`" + ` (compact 1-2KB for system prompts), ` + "`structured`" + ` (balanced with sections), or ` + "`full`" + ` (detailed with all symbols).
 - ` + "`output.store`" + `: (string, default: ` + "`repo`" + `) Where to save: ` + "`repo`" + ` (in repository), ` + "`config`" + ` (~/.comanda/), or ` + "`both`" + `.
 - ` + "`output.encrypt`" + `: (bool, default: false) Encrypt output with AES-256 GCM. Saves as ` + "`.enc`" + ` file. Requires ` + "`COMANDA_INDEX_KEY`" + ` environment variable.
 - ` + "`expose.workflow_variable`" + `: (bool, default: true) Export index as workflow variables.
@@ -2211,6 +2213,7 @@ step_name:
     root: .                   # Repository path (default: current directory)
     output:
       path: .comanda/INDEX.md # Custom output path (optional)
+      format: structured      # Output format: summary, structured, full
       store: repo             # Where to store: repo, config, or both
       encrypt: false          # Enable AES-256 encryption
     expose:
@@ -2232,6 +2235,7 @@ step_name:
 **` + "`codebase_index`" + ` Block Attributes:**
 - ` + "`root`" + `: (string, default: ` + "`.`" + `) Repository path to scan.
 - ` + "`output.path`" + `: (string, optional) Custom output file path. Default: ` + "`.comanda/<repo>_INDEX.md`" + `
+- ` + "`output.format`" + `: (string, default: ` + "`structured`" + `) Output format: ` + "`summary`" + ` (compact 1-2KB for system prompts), ` + "`structured`" + ` (balanced with sections), or ` + "`full`" + ` (detailed with all symbols).
 - ` + "`output.store`" + `: (string, default: ` + "`repo`" + `) Where to save: ` + "`repo`" + ` (in repository), ` + "`config`" + ` (~/.comanda/), or ` + "`both`" + `.
 - ` + "`output.encrypt`" + `: (bool, default: false) Encrypt output with AES-256 GCM. Saves as ` + "`.enc`" + ` file. Requires ` + "`COMANDA_INDEX_KEY`" + ` environment variable.
 - ` + "`expose.workflow_variable`" + `: (bool, default: true) Export index as workflow variables.
