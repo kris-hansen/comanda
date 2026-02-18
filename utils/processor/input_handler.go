@@ -24,7 +24,7 @@ func fileExists(path string) bool {
 
 // isSpecialInput checks if the input is a special type (e.g., screenshot)
 func (p *Processor) isSpecialInput(input string) bool {
-	specialInputs := []string{"screenshot", "NA", "STDIN"}
+	specialInputs := []string{"screenshot", "NA", InputSTDIN}
 	for _, special := range specialInputs {
 		if input == special {
 			return true
@@ -155,7 +155,7 @@ func (p *Processor) processInputs(inputs []string) error {
 				p.debugf("Skipping NA input")
 				continue
 			}
-			if inputPath == "STDIN" {
+			if inputPath == InputSTDIN {
 				p.debugf("Skipping STDIN input as it's handled in Process()")
 				continue
 			}
@@ -213,7 +213,7 @@ func (p *Processor) isOutputInOtherSteps(path string) bool {
 	for _, step := range p.config.Steps {
 		outputs := p.NormalizeStringSlice(step.Config.Output)
 		for _, output := range outputs {
-			if output != "STDOUT" {
+			if output != OutputSTDOUT {
 				// Check for exact match
 				if output == path {
 					p.debugf("Found exact match '%s' as output in sequential step: %s", path, step.Name)
@@ -234,7 +234,7 @@ func (p *Processor) isOutputInOtherSteps(path string) bool {
 		for _, step := range steps {
 			outputs := p.NormalizeStringSlice(step.Config.Output)
 			for _, output := range outputs {
-				if output != "STDOUT" {
+				if output != OutputSTDOUT {
 					// Check for exact match
 					if output == path {
 						p.debugf("Found exact match '%s' as output in parallel step: %s (group: %s)", path, step.Name, groupName)

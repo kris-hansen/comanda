@@ -542,7 +542,7 @@ func (p *Processor) extractOutputPath(output interface{}) string {
 
 	// Skip non-file outputs
 	if outputStr == "" ||
-		outputStr == "STDOUT" ||
+		outputStr == OutputSTDOUT ||
 		outputStr == "NA" ||
 		strings.HasPrefix(outputStr, "$") { // Variable reference
 		return ""

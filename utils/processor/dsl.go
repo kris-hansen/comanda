@@ -631,7 +631,7 @@ func (p *Processor) validateDependencies() error {
 		for _, step := range steps {
 			outputs := p.NormalizeStringSlice(step.Config.Output)
 			for _, output := range outputs {
-				if output != "STDOUT" {
+				if output != OutputSTDOUT {
 					// Check if this output is already produced by another parallel step
 					if producerStep, exists := parallelOutputs[output]; exists {
 						return fmt.Errorf("parallel step '%s' and '%s' both produce the same output file '%s', which creates a conflict",
@@ -649,7 +649,7 @@ func (p *Processor) validateDependencies() error {
 			// Check if this parallel step depends on outputs from other parallel steps
 			inputs := p.NormalizeStringSlice(step.Config.Input)
 			for _, input := range inputs {
-				if input != "NA" && input != "STDIN" {
+				if input != "NA" && input != InputSTDIN {
 					// Check if this input is an output from another parallel step
 					if producerStep, exists := parallelOutputs[input]; exists {
 						return fmt.Errorf("parallel step '%s' depends on output '%s' from parallel step '%s', which is not allowed",
@@ -667,7 +667,7 @@ func (p *Processor) validateDependencies() error {
 		var stepDependencies []string
 
 		for _, input := range inputs {
-			if input != "NA" && input != "STDIN" {
+			if input != "NA" && input != InputSTDIN {
 				// Check if this input is an output from another step
 				if producerStep, exists := outputFiles[input]; exists {
 					stepDependencies = append(stepDependencies, producerStep)
@@ -683,7 +683,7 @@ func (p *Processor) validateDependencies() error {
 		// Add this step's outputs to the map
 		outputs := p.NormalizeStringSlice(step.Config.Output)
 		for _, output := range outputs {
-			if output != "STDOUT" {
+			if output != OutputSTDOUT {
 				outputFiles[output] = step.Name
 			}
 		}
@@ -792,7 +792,7 @@ func (p *Processor) Process() error {
 		if step.Config.Generate == nil && step.Config.Process == nil && step.Config.Type != "openai-responses" && !isCodebaseIndex && !isQmdSearch {
 			modelNames := p.NormalizeStringSlice(step.Config.Model)
 			p.debugf("Normalized model names for step %s: %v", step.Name, modelNames)
-			if err := p.validateModel(modelNames, []string{"STDIN"}); err != nil { // STDIN is a placeholder here
+			if err := p.validateModel(modelNames, []string{InputSTDIN}); err != nil { // STDIN is a placeholder here
 				p.spinner.Stop()
 				errMsg := fmt.Sprintf("Model validation failed for step '%s': %v", step.Name, err)
 				p.debugf("Model validation error: %s", errMsg)
@@ -826,7 +826,7 @@ func (p *Processor) Process() error {
 			if step.Config.Generate == nil && step.Config.Process == nil && step.Config.Type != "openai-responses" && !isCodebaseIndex && !isQmdSearch {
 				modelNames := p.NormalizeStringSlice(step.Config.Model)
 				p.debugf("Normalized model names for parallel step %s: %v", step.Name, modelNames)
-				if err := p.validateModel(modelNames, []string{"STDIN"}); err != nil { // STDIN is a placeholder
+				if err := p.validateModel(modelNames, []string{InputSTDIN}); err != nil { // STDIN is a placeholder
 					p.spinner.Stop()
 					errMsg := fmt.Sprintf("Model validation failed for parallel step '%s': %v", step.Name, err)
 					p.debugf("Model validation error: %s", errMsg)
@@ -1138,7 +1138,7 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 	// Handle STDIN specially
 	if len(inputs) == 1 {
 		input := inputs[0]
-		if strings.HasPrefix(input, "STDIN") {
+		if strings.HasPrefix(input, InputSTDIN) {
 			// Initialize empty input if none provided
 			if p.lastOutput == "" {
 				p.lastOutput = ""
@@ -1243,7 +1243,7 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 		inputFile := inputs[0]
 
 		// Skip chunking for special inputs like STDIN
-		if inputFile != "STDIN" && inputFile != "NA" {
+		if inputFile != InputSTDIN && inputFile != "NA" {
 			p.debugf("Chunking enabled for step '%s', input file: %s", step.Name, inputFile)
 
 			// Convert the ChunkConfig from the YAML to the chunker's ChunkConfig
@@ -1635,7 +1635,7 @@ func (p *Processor) processGenerateStep(step Step, isParallel bool, parallelID s
 	var contextInput string
 	if step.Config.Input != nil {
 		inputValStr := fmt.Sprintf("%v", step.Config.Input)
-		if inputValStr == "STDIN" {
+		if inputValStr == InputSTDIN {
 			contextInput = p.lastOutput
 			p.debugf("Generate step '%s' using STDIN content as part of prompt context.", step.Name)
 		} else if inputValStr != "NA" && inputValStr != "" {
@@ -1827,7 +1827,7 @@ func (p *Processor) processProcessStep(step Step, isParallel bool, parallelID st
 	}
 
 	// If the parent 'process' step received STDIN, pass it to the sub-processor's lastOutput
-	if inputValStr := fmt.Sprintf("%v", step.Config.Input); inputValStr == "STDIN" {
+	if inputValStr := fmt.Sprintf("%v", step.Config.Input); inputValStr == InputSTDIN {
 		subProcessor.SetLastOutput(p.lastOutput)
 		p.debugf("Passing STDIN from parent step '%s' to sub-workflow '%s'", step.Name, subWorkflowPath)
 	}
@@ -2556,7 +2556,7 @@ func getFileOutputPath(output interface{}) string {
 
 	// Skip non-file outputs
 	if outputStr == "" ||
-		outputStr == "STDOUT" ||
+		outputStr == OutputSTDOUT ||
 		strings.HasPrefix(outputStr, "MEMORY") ||
 		strings.HasPrefix(outputStr, "tool:") ||
 		strings.Contains(outputStr, "|") ||
