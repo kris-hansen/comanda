@@ -420,8 +420,8 @@ func TestPreLoopStepChaining(t *testing.T) {
 }
 
 // TestContextYAMLPattern tests the specific pattern used in context.yaml:
-// - codebase-index step that sets $CORE_INDEX_PATH
-// - categorization step that uses $CORE_INDEX as input
+// - codebase-index step that sets $PROJECT_INDEX_PATH
+// - categorization step that uses $PROJECT_INDEX as input
 func TestContextYAMLPattern(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "comanda-context-test-*")
 	if err != nil {
@@ -438,7 +438,7 @@ func TestContextYAMLPattern(t *testing.T) {
 	config := &DSLConfig{
 		Steps: []Step{
 			{
-				Name: "index_core_codebase",
+				Name: "index_project_codebase",
 				Config: StepConfig{
 					Type: "codebase-index",
 					CodebaseIndex: &CodebaseIndexConfig{
@@ -452,8 +452,8 @@ func TestContextYAMLPattern(t *testing.T) {
 			{
 				Name: "categorize_codebase_sections",
 				Config: StepConfig{
-					// This is the pattern that was failing - $CORE_INDEX should be substituted
-					Input:  "$CORE_INDEX",
+					// This is the pattern that was failing - $PROJECT_INDEX should be substituted
+					Input:  "$PROJECT_INDEX",
 					Model:  "mock",
 					Action: "categorize",
 					Output: ".comanda/categories.md",
@@ -495,8 +495,8 @@ func TestContextYAMLPattern(t *testing.T) {
 
 	// Verify the step2 input uses the variable pattern
 	step2Input := processor.config.Steps[1].Config.Input.(string)
-	if !strings.HasPrefix(step2Input, "$CORE") {
-		t.Errorf("step2 input should reference $CORE variable, got %q", step2Input)
+	if !strings.HasPrefix(step2Input, "$PROJECT") {
+		t.Errorf("step2 input should reference $PROJECT variable, got %q", step2Input)
 	}
 
 	t.Logf("Context YAML pattern validated: %d pre-loop steps, %d loops",
