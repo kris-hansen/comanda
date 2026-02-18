@@ -438,3 +438,108 @@ func TestValidationResult_ErrorSummary(t *testing.T) {
 		t.Error("Expected empty summary for valid result")
 	}
 }
+
+func TestValidateWorkflowStructure_ExecuteLoopsIgnoresTopLevel(t *testing.T) {
+	yaml := `
+index_codebase:
+  step_type: codebase-index
+  codebase_index:
+    root: ~/myproject
+
+categorize:
+  input: $MYPROJECT_INDEX
+  model: claude-code
+  action: "Categorize"
+  output: STDOUT
+
+loops:
+  analyze:
+    max_iterations: 5
+    steps:
+      step1:
+        input: STDIN
+        model: claude-code
+        action: "Analyze"
+        output: STDOUT
+
+execute_loops:
+  - analyze
+`
+	result := ValidateWorkflowStructure(yaml)
+	if result.Valid {
+		t.Error("Expected validation to fail for top-level steps with execute_loops")
+	}
+
+	foundIgnoredWarning := false
+	for _, err := range result.Errors {
+		if strings.Contains(err.Message, "IGNORED") && strings.Contains(err.Message, "execute_loops") {
+			foundIgnoredWarning = true
+			break
+		}
+	}
+	if !foundIgnoredWarning {
+		t.Error("Expected warning about ignored top-level steps")
+	}
+}
+
+func TestValidateWorkflowStructure_ValidLoopsWithCodebaseIndex(t *testing.T) {
+	yaml := `
+loops:
+  indexer:
+    max_iterations: 1
+    steps:
+      index:
+        step_type: codebase-index
+        codebase_index:
+          root: ~/myproject
+          output:
+            path: .comanda/INDEX.md
+
+  analyzer:
+    depends_on: [indexer]
+    max_iterations: 5
+    steps:
+      analyze:
+        input: .comanda/INDEX.md
+        model: claude-code
+        action: "Analyze the codebase"
+        output: results.md
+
+execute_loops:
+  - indexer
+  - analyzer
+`
+	result := ValidateWorkflowStructure(yaml)
+
+	// Should not have the "ignored steps" error
+	for _, err := range result.Errors {
+		if strings.Contains(err.Message, "IGNORED") {
+			t.Errorf("Should not warn about ignored steps when all steps are inside loops: %s", err.Message)
+		}
+	}
+}
+
+func TestValidateWorkflowStructure_MissingVariableReference(t *testing.T) {
+	yaml := `
+analyze:
+  input: $NONEXISTENT_VAR
+  model: claude-code
+  action: "Analyze"
+  output: STDOUT
+`
+	result := ValidateWorkflowStructure(yaml)
+	if result.Valid {
+		t.Error("Expected validation to fail for missing variable reference")
+	}
+
+	foundMissingVar := false
+	for _, err := range result.Errors {
+		if strings.Contains(err.Message, "NONEXISTENT_VAR") && strings.Contains(err.Message, "no prior step exports") {
+			foundMissingVar = true
+			break
+		}
+	}
+	if !foundMissingVar {
+		t.Error("Expected error about missing variable reference")
+	}
+}

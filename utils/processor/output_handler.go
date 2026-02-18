@@ -112,7 +112,7 @@ func (p *Processor) handleOutputWithToolConfig(modelName string, response string
 			continue
 		}
 
-		if output == "STDOUT" {
+		if output == OutputSTDOUT {
 			if p.progress != nil {
 				// Send through progress channel for streaming
 				p.debugf("Sending output event with content: %s", response)

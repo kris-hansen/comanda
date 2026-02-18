@@ -218,7 +218,7 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 
 		// Check if model has required capabilities based on input types
 		for _, input := range inputs {
-			if input == "NA" || input == "STDIN" {
+			if input == "NA" || input == InputSTDIN {
 				continue
 			}
 
