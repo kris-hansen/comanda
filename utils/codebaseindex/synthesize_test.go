@@ -20,10 +20,10 @@ func TestOutputFormats(t *testing.T) {
 		mustNotContain []string
 	}{
 		{
-			name:    "summary format is compact",
-			format:  FormatSummary,
-			minLen:  100,
-			maxLen:  5000, // ~3KB max for summary
+			name:   "summary format is compact",
+			format: FormatSummary,
+			minLen: 100,
+			maxLen: 5000, // ~3KB max for summary
 			mustContain: []string{
 				"Quick Reference",
 			},
@@ -32,20 +32,20 @@ func TestOutputFormats(t *testing.T) {
 			},
 		},
 		{
-			name:    "structured format has categories",
-			format:  FormatStructured,
-			minLen:  100,
-			maxLen:  100000, // up to ~80KB for structured
+			name:   "structured format has categories",
+			format: FormatStructured,
+			minLen: 100,
+			maxLen: 100000, // up to ~80KB for structured
 			mustContain: []string{
 				"File Categories",
 				"Repository Layout",
 			},
 		},
 		{
-			name:    "full format has all sections",
-			format:  FormatFull,
-			minLen:  100,
-			maxLen:  300000, // up to ~250KB for full
+			name:   "full format has all sections",
+			format: FormatFull,
+			minLen: 100,
+			maxLen: 300000, // up to ~250KB for full
 			mustContain: []string{
 				"Repository Layout",
 			},
@@ -60,7 +60,7 @@ func TestOutputFormats(t *testing.T) {
 			config.RepoVarSlug = "TESTPROJECT"
 
 			manager := &Manager{
-				config:  config,
+				config:   config,
 				adapters: []Adapter{&mockAdapter{name: "Go"}},
 			}
 
