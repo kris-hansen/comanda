@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
@@ -183,8 +182,12 @@ func GetEnvPath() string {
 
 // PromptPassword prompts the user for a password securely
 func PromptPassword(prompt string) (string, error) {
+	// Check if stdin is a terminal - if not, we can't read passwords interactively
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		return "", fmt.Errorf("cannot read password: stdin is not a terminal (non-interactive environment)")
+	}
 	log.Printf("%s", prompt)
-	password, err := term.ReadPassword(int(syscall.Stdin))
+	password, err := term.ReadPassword(int(os.Stdin.Fd()))
 	log.Printf("\n") // Add newline after password input
 	if err != nil {
 		return "", fmt.Errorf("error reading password: %w", err)
