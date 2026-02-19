@@ -20,6 +20,7 @@ import (
 	"github.com/kris-hansen/comanda/utils/models"
 	openai "github.com/sashabaranov/go-openai"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 var (
@@ -1758,6 +1759,14 @@ Flag Groups:
 			envConfig.DefaultGenerationModel = selectedDefaultModel
 			log.Printf("%s Default generation model set to '%s'\n", greenCheckmark, selectedDefaultModel)
 		} else {
+			// Interactive mode requires a terminal
+			if !term.IsTerminal(int(os.Stdin.Fd())) {
+				log.Printf("Error: Interactive configuration requires a terminal.\n")
+				log.Printf("Please run 'comanda configure' in an interactive shell,\n")
+				log.Printf("or use non-interactive flags like --list, --encrypt, --remove, etc.\n")
+				return
+			}
+
 			reader := bufio.NewReader(os.Stdin)
 
 			// Show main menu
