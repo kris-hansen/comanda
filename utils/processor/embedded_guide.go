@@ -386,7 +386,7 @@ agentic-loop:
 - ` + "`max_iterations`" + `: (int, default: 10) Maximum iterations before stopping.
 - ` + "`timeout_seconds`" + `: (int, default: 0) Total time limit in seconds. **0 = no timeout** (loop runs until max_iterations or exit condition).
 - ` + "`exit_condition`" + `: (string) How to detect completion:
-  - ` + "`llm_decides`" + `: Exits when output contains "DONE", "COMPLETE", or "FINISHED"
+  - ` + "`llm_decides`" + `: Exits when output ends with "DONE", "COMPLETE", or "FINISHED" (case-insensitive). Works when these words appear at the very end of the output, at the end of any line, or as the entire output.
   - ` + "`pattern_match`" + `: Exits when output matches ` + "`exit_pattern`" + ` regex
 - ` + "`exit_pattern`" + `: (string) Regex pattern for ` + "`pattern_match`" + ` condition.
 - ` + "`context_window`" + `: (int, default: 5) Number of past iterations to include in context.
@@ -1708,7 +1708,7 @@ agentic-loop:
 - ` + "`max_iterations`" + `: (int, default: 10) Maximum iterations before stopping.
 - ` + "`timeout_seconds`" + `: (int, default: 0) Total time limit in seconds. **0 = no timeout** (loop runs until max_iterations or exit condition).
 - ` + "`exit_condition`" + `: (string) How to detect completion:
-  - ` + "`llm_decides`" + `: Exits when output contains "DONE", "COMPLETE", or "FINISHED"
+  - ` + "`llm_decides`" + `: Exits when output ends with "DONE", "COMPLETE", or "FINISHED" (case-insensitive). Works when these words appear at the very end of the output, at the end of any line, or as the entire output.
   - ` + "`pattern_match`" + `: Exits when output matches ` + "`exit_pattern`" + ` regex
 - ` + "`exit_pattern`" + `: (string) Regex pattern for ` + "`pattern_match`" + ` condition.
 - ` + "`context_window`" + `: (int, default: 5) Number of past iterations to include in context.
