@@ -18,6 +18,32 @@ const (
 	DefaultCheckpointInterval = 5 // Save state every N iterations
 )
 
+// Pre-compiled regex patterns for exit condition detection (better performance)
+var (
+	completionPatterns = []*regexp.Regexp{
+		regexp.MustCompile(`(?i)^\s*DONE\.?\s*$`),      // DONE as entire output
+		regexp.MustCompile(`(?i)^\s*COMPLETE\.?\s*$`),  // COMPLETE as entire output
+		regexp.MustCompile(`(?i)^\s*FINISHED\.?\s*$`),  // FINISHED as entire output
+		regexp.MustCompile(`(?i)\bDONE\.?\s*$`),        // DONE at end of output
+		regexp.MustCompile(`(?i)\bCOMPLETE\.?\s*$`),    // COMPLETE at end of output
+		regexp.MustCompile(`(?i)\bFINISHED\.?\s*$`),    // FINISHED at end of output
+		regexp.MustCompile(`(?i)^.*\bDONE\.?\s*$`),     // DONE at end of any line (multiline)
+		regexp.MustCompile(`(?i)^.*\bCOMPLETE\.?\s*$`), // COMPLETE at end of any line
+		regexp.MustCompile(`(?i)^.*\bFINISHED\.?\s*$`), // FINISHED at end of any line
+		regexp.MustCompile(`(?i)TASK[_\s-]?COMPLETE`),  // TASK_COMPLETE anywhere
+	}
+	contextExhaustionPatterns = []*regexp.Regexp{
+		regexp.MustCompile(`(?i)completion[_\-\s]?plan`),
+		regexp.MustCompile(`(?i)context[_\s]*(limit|exhaust|full|window)`),
+		regexp.MustCompile(`(?i)remaining[_\s]*work`),
+		regexp.MustCompile(`(?i)continue[_\s]*in[_\s]*(a\s+)?new[_\s]*session`),
+		regexp.MustCompile(`(?i)documented.*remaining`),
+		regexp.MustCompile(`(?i)out\s+of\s+(context|tokens?)`),
+		regexp.MustCompile(`(?i)cannot\s+continue`),
+		regexp.MustCompile(`(?i)unable\s+to\s+complete`),
+	}
+)
+
 // processAgenticLoop handles the execution of an agentic loop
 func (p *Processor) processAgenticLoop(loopName string, config *AgenticLoopConfig, initialInput string) (string, error) {
 	return p.processAgenticLoopWithFile(loopName, config, initialInput, "")
@@ -399,46 +425,29 @@ func (p *Processor) executeLoopSteps(steps []Step, input string) (string, error)
 
 // checkExitCondition determines if the loop should exit
 func (p *Processor) checkExitCondition(config *AgenticLoopConfig, output string) (bool, string) {
+	// Early return for empty output to avoid unnecessary processing
+	if strings.TrimSpace(output) == "" {
+		return false, ""
+	}
+
 	switch config.ExitCondition {
 	case "llm_decides", "":
-		// Look for common completion indicators
+		// Look for common completion indicators using pre-compiled patterns
 		// Patterns match DONE/COMPLETE/FINISHED:
 		// - As the entire output (with optional whitespace)
 		// - At the end of output (e.g., "All tasks completed. DONE")
 		// - On their own line
-		completionPatterns := []string{
-			`(?i)^\s*DONE\.?\s*$`,      // DONE as entire output
-			`(?i)^\s*COMPLETE\.?\s*$`,  // COMPLETE as entire output
-			`(?i)^\s*FINISHED\.?\s*$`,  // FINISHED as entire output
-			`(?i)\bDONE\.?\s*$`,        // DONE at end of output
-			`(?i)\bCOMPLETE\.?\s*$`,    // COMPLETE at end of output
-			`(?i)\bFINISHED\.?\s*$`,    // FINISHED at end of output
-			`(?i)^.*\bDONE\.?\s*$`,     // DONE at end of any line (multiline)
-			`(?i)^.*\bCOMPLETE\.?\s*$`, // COMPLETE at end of any line
-			`(?i)^.*\bFINISHED\.?\s*$`, // FINISHED at end of any line
-			`(?i)TASK[_\s-]?COMPLETE`,  // TASK_COMPLETE anywhere
-		}
 		trimmedOutput := strings.TrimSpace(output)
 		for _, pattern := range completionPatterns {
-			if matched, _ := regexp.MatchString(pattern, trimmedOutput); matched {
+			if pattern.MatchString(trimmedOutput) {
 				return true, "LLM indicated completion"
 			}
 		}
 
 		// Check for context exhaustion / completion plan signals
 		// These indicate the agent realized it can't continue and documented remaining work
-		contextExhaustionPatterns := []string{
-			`(?i)completion[_\-\s]?plan`,
-			`(?i)context[_\s]*(limit|exhaust|full|window)`,
-			`(?i)remaining[_\s]*work`,
-			`(?i)continue[_\s]*in[_\s]*(a\s+)?new[_\s]*session`,
-			`(?i)documented.*remaining`,
-			`(?i)out\s+of\s+(context|tokens?)`,
-			`(?i)cannot\s+continue`,
-			`(?i)unable\s+to\s+complete`,
-		}
 		for _, pattern := range contextExhaustionPatterns {
-			if matched, _ := regexp.MatchString(pattern, output); matched {
+			if pattern.MatchString(output) {
 				return true, "Agent signaled context exhaustion or documented remaining work"
 			}
 		}
