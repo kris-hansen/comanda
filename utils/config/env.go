@@ -183,6 +183,10 @@ func GetEnvPath() string {
 
 // PromptPassword prompts the user for a password securely
 func PromptPassword(prompt string) (string, error) {
+	// Check if stdin is a terminal - if not, we can't read passwords interactively
+	if !term.IsTerminal(int(syscall.Stdin)) {
+		return "", fmt.Errorf("cannot read password: stdin is not a terminal (non-interactive environment)")
+	}
 	log.Printf("%s", prompt)
 	password, err := term.ReadPassword(int(syscall.Stdin))
 	log.Printf("\n") // Add newline after password input
