@@ -212,12 +212,27 @@ overridden with --model.`,
 		var structureErrors string
 		maxAttempts := 3 // Increased to allow for both model and structure fixes
 
+		// Create spinner for visual feedback during generation
+		spinner := processor.NewSpinner()
+		if verbose {
+			// Disable spinner in verbose mode to avoid interfering with debug output
+			spinner.Disable()
+		}
+
 		for attempt := 1; attempt <= maxAttempts; attempt++ {
 			// Build the prompt with any previous validation errors
 			prompt := buildGeneratePrompt(dslGuide, userPrompt, invalidModels, structureErrors)
 
+			// Start spinner for LLM generation
+			spinnerMsg := "Generating workflow"
+			if attempt > 1 {
+				spinnerMsg = fmt.Sprintf("Regenerating workflow (attempt %d/%d)", attempt, maxAttempts)
+			}
+			spinner.Start(spinnerMsg)
+
 			// Call the LLM
 			generatedResponse, err := provider.SendPrompt(modelForGeneration, prompt)
+			spinner.Stop()
 			if err != nil {
 				return fmt.Errorf("LLM execution failed for model '%s': %w", modelForGeneration, err)
 			}
