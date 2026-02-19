@@ -402,11 +402,21 @@ func (p *Processor) checkExitCondition(config *AgenticLoopConfig, output string)
 	switch config.ExitCondition {
 	case "llm_decides", "":
 		// Look for common completion indicators
+		// Patterns match DONE/COMPLETE/FINISHED:
+		// - As the entire output (with optional whitespace)
+		// - At the end of output (e.g., "All tasks completed. DONE")
+		// - On their own line
 		completionPatterns := []string{
-			`(?i)^\s*DONE\s*$`,
-			`(?i)^\s*COMPLETE\s*$`,
-			`(?i)^\s*FINISHED\s*$`,
-			`(?i)TASK[_\s-]?COMPLETE`,
+			`(?i)^\s*DONE\.?\s*$`,      // DONE as entire output
+			`(?i)^\s*COMPLETE\.?\s*$`,  // COMPLETE as entire output
+			`(?i)^\s*FINISHED\.?\s*$`,  // FINISHED as entire output
+			`(?i)\bDONE\.?\s*$`,        // DONE at end of output
+			`(?i)\bCOMPLETE\.?\s*$`,    // COMPLETE at end of output
+			`(?i)\bFINISHED\.?\s*$`,    // FINISHED at end of output
+			`(?i)^.*\bDONE\.?\s*$`,     // DONE at end of any line (multiline)
+			`(?i)^.*\bCOMPLETE\.?\s*$`, // COMPLETE at end of any line
+			`(?i)^.*\bFINISHED\.?\s*$`, // FINISHED at end of any line
+			`(?i)TASK[_\s-]?COMPLETE`,  // TASK_COMPLETE anywhere
 		}
 		trimmedOutput := strings.TrimSpace(output)
 		for _, pattern := range completionPatterns {

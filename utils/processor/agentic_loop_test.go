@@ -55,6 +55,42 @@ func TestCheckExitCondition_LLMDecides(t *testing.T) {
 			output:     "  DONE  ",
 			shouldExit: true,
 		},
+		// New test cases for end-of-output detection
+		{
+			name:       "DONE at end of sentence exits",
+			output:     "There is nothing further to document. DONE",
+			shouldExit: true,
+		},
+		{
+			name:       "DONE at end with period exits",
+			output:     "All tasks completed. DONE.",
+			shouldExit: true,
+		},
+		{
+			name:       "COMPLETE at end of output exits",
+			output:     "All work has been finished. COMPLETE",
+			shouldExit: true,
+		},
+		{
+			name:       "FINISHED at end of output exits",
+			output:     "The implementation is ready. FINISHED",
+			shouldExit: true,
+		},
+		{
+			name:       "DONE in middle of sentence does NOT exit",
+			output:     "I am not DONE yet, there is more work",
+			shouldExit: false,
+		},
+		{
+			name:       "multiline with DONE at end of last line exits",
+			output:     "Step 1 complete.\nStep 2 complete.\nAll work DONE",
+			shouldExit: true,
+		},
+		{
+			name:       "multiline with DONE in middle continues",
+			output:     "I thought I was DONE but\nactually there's more to do",
+			shouldExit: false,
+		},
 	}
 
 	config := &AgenticLoopConfig{
