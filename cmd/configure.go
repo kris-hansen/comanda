@@ -14,7 +14,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 
 	"github.com/kris-hansen/comanda/utils/config"
 	"github.com/kris-hansen/comanda/utils/database"
@@ -1761,7 +1760,7 @@ Flag Groups:
 			log.Printf("%s Default generation model set to '%s'\n", greenCheckmark, selectedDefaultModel)
 		} else {
 			// Interactive mode requires a terminal
-			if !term.IsTerminal(int(syscall.Stdin)) {
+			if !term.IsTerminal(int(os.Stdin.Fd())) {
 				log.Printf("Error: Interactive configuration requires a terminal.\n")
 				log.Printf("Please run 'comanda configure' in an interactive shell,\n")
 				log.Printf("or use non-interactive flags like --list, --encrypt, --remove, etc.\n")
