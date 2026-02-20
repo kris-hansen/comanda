@@ -58,7 +58,11 @@ func (p *ProgressDisplay) StartWorkflow(name string, loopCount int) {
 	fmt.Println()
 
 	if loopCount > 0 {
-		fmt.Printf("  %s %d loops to execute\n", p.styler.Muted(iconBullet), loopCount)
+		loopWord := "loops"
+		if loopCount == 1 {
+			loopWord = "loop"
+		}
+		fmt.Printf("  %s %d %s to execute\n", p.styler.Muted(iconBullet), loopCount, loopWord)
 		fmt.Println()
 	}
 }
