@@ -2,8 +2,11 @@ package processor
 
 import (
 	"fmt"
+	"os"
 	"sync"
 	"time"
+
+	"golang.org/x/term"
 )
 
 type Spinner struct {
@@ -20,7 +23,7 @@ type Spinner struct {
 
 func NewSpinner() *Spinner {
 	return &Spinner{
-		chars: []string{"|", "/", "-", "\\"},
+		chars: []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"},
 		stop:  make(chan struct{}),
 	}
 }
@@ -62,6 +65,11 @@ func (s *Spinner) Start(message string) {
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
+		// Hide cursor during spinner animation (only if stdout is a terminal)
+		isTTY := term.IsTerminal(int(os.Stdout.Fd()))
+		if isTTY {
+			fmt.Print("\033[?25l")
+		}
 		for {
 			select {
 			case <-s.stop:
@@ -73,6 +81,10 @@ func (s *Spinner) Start(message string) {
 
 				if !disabled {
 					fmt.Printf("\r%s     \n", msg)
+				}
+				// Show cursor again (only if stdout is a terminal)
+				if isTTY {
+					fmt.Print("\033[?25h")
 				}
 				// Send completion update
 				if progress != nil {
