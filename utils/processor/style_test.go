@@ -94,6 +94,105 @@ func TestStylerNoColors(t *testing.T) {
 	})
 }
 
+func TestDisplayWidth(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected int
+	}{
+		{"empty string", "", 0},
+		{"ASCII only", "hello", 5},
+		{"ASCII with spaces", "hello world", 11},
+		{"single emoji", "🔀", 2},
+		{"emoji with text", "🔀 Multi-Loop", 13}, // 2 + 1 + 10
+		{"multiple emojis", "🔀🎉✨", 6},           // 2 + 2 + 2
+		{"misc symbols", "★☆♠♣", 8},             // Each is width 2
+		{"mixed content", "Test 🚀 Done", 12},    // 5 + 2 + 5
+		{"numbers", "12345", 5},
+		{"special chars", "!@#$%", 5},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := displayWidth(tt.input)
+			if result != tt.expected {
+				t.Errorf("displayWidth(%q) = %d, want %d", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestBoxWithEmoji(t *testing.T) {
+	config := &StyleConfig{
+		UseColors:  false, // Disable colors for predictable output
+		UseUnicode: true,
+	}
+	styler := NewStyler(config)
+
+	t.Run("box with emoji has correct structure", func(t *testing.T) {
+		box := styler.Box("🔀 Test", 20)
+		lines := strings.Split(box, "\n")
+		if len(lines) != 3 {
+			t.Fatalf("Box should have 3 lines, got %d", len(lines))
+		}
+
+		// Top should start with ╭ and end with ╮
+		if !strings.HasPrefix(lines[0], "╭") || !strings.HasSuffix(lines[0], "╮") {
+			t.Errorf("Top line has incorrect corners: %q", lines[0])
+		}
+
+		// Middle should start and end with │
+		if !strings.HasPrefix(lines[1], "│") || !strings.HasSuffix(lines[1], "│") {
+			t.Errorf("Middle line has incorrect borders: %q", lines[1])
+		}
+
+		// Bottom should start with ╰ and end with ╯
+		if !strings.HasPrefix(lines[2], "╰") || !strings.HasSuffix(lines[2], "╯") {
+			t.Errorf("Bottom line has incorrect corners: %q", lines[2])
+		}
+
+		// Top and bottom should have same length (they use same width)
+		if len(lines[0]) != len(lines[2]) {
+			t.Errorf("Top and bottom have different byte lengths: %d vs %d", len(lines[0]), len(lines[2]))
+		}
+
+		// Middle display width + 2 (for corners vs vertical bars) should equal top display width
+		topWidth := displayWidth(lines[0])
+		middleWidth := displayWidth(lines[1])
+		if middleWidth+2 != topWidth {
+			t.Errorf("Box alignment issue: middle width (%d) + 2 should equal top width (%d)", middleWidth, topWidth)
+		}
+	})
+
+	t.Run("box without emoji has correct structure", func(t *testing.T) {
+		box := styler.Box("Plain Text", 20)
+		lines := strings.Split(box, "\n")
+
+		if !strings.HasPrefix(lines[0], "╭") || !strings.HasSuffix(lines[0], "╮") {
+			t.Errorf("Top line has incorrect corners: %q", lines[0])
+		}
+		if !strings.HasPrefix(lines[1], "│") || !strings.HasSuffix(lines[1], "│") {
+			t.Errorf("Middle line has incorrect borders: %q", lines[1])
+		}
+		if !strings.HasPrefix(lines[2], "╰") || !strings.HasSuffix(lines[2], "╯") {
+			t.Errorf("Bottom line has incorrect corners: %q", lines[2])
+		}
+	})
+
+	t.Run("box expands for long titles", func(t *testing.T) {
+		box := styler.Box("This is a very long title that exceeds width", 20)
+		lines := strings.Split(box, "\n")
+
+		// Should still have correct structure
+		if !strings.HasPrefix(lines[0], "╭") || !strings.HasSuffix(lines[0], "╮") {
+			t.Errorf("Top line has incorrect corners for long title")
+		}
+		if !strings.Contains(lines[1], "This is a very long title") {
+			t.Errorf("Middle line should contain the full title")
+		}
+	})
+}
+
 func TestProgressDisplay(t *testing.T) {
 	pd := NewProgressDisplay(true)
 

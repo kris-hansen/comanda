@@ -217,17 +217,36 @@ func (s *Styler) StepIcon() string {
 	return s.Info(iconStep)
 }
 
+// displayWidth calculates the visual width of a string in terminal
+// Accounts for multi-byte characters and emoji (which typically display as 2 chars wide)
+func displayWidth(s string) int {
+	width := 0
+	for _, r := range s {
+		if r > 0x1F600 && r < 0x1F9FF { // Common emoji ranges
+			width += 2
+		} else if r > 0x2600 && r < 0x27BF { // Misc symbols
+			width += 2
+		} else if r > 0x1F300 && r < 0x1F5FF { // Misc symbols and pictographs
+			width += 2
+		} else {
+			width += 1
+		}
+	}
+	return width
+}
+
 // Box draws a box around content
 func (s *Styler) Box(title string, width int) string {
 	if !s.config.UseUnicode {
 		return s.asciiBox(title, width)
 	}
 
-	if width < len(title)+4 {
-		width = len(title) + 4
+	titleWidth := displayWidth(title)
+	if width < titleWidth+4 {
+		width = titleWidth + 4
 	}
 
-	padding := width - len(title) - 2
+	padding := width - titleWidth - 2
 	leftPad := padding / 2
 	rightPad := padding - leftPad
 
@@ -239,12 +258,13 @@ func (s *Styler) Box(title string, width int) string {
 }
 
 func (s *Styler) asciiBox(title string, width int) string {
-	if width < len(title)+4 {
-		width = len(title) + 4
+	titleWidth := displayWidth(title)
+	if width < titleWidth+4 {
+		width = titleWidth + 4
 	}
 
 	border := "+" + strings.Repeat("-", width) + "+"
-	padding := width - len(title)
+	padding := width - titleWidth
 	leftPad := padding / 2
 	rightPad := padding - leftPad
 	middle := "|" + strings.Repeat(" ", leftPad) + title + strings.Repeat(" ", rightPad) + "|"
