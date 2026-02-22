@@ -54,6 +54,31 @@ type Processor struct {
 	currentAgenticConfig *AgenticLoopConfig // Current agentic loop config (set during agentic loop execution)
 	streamLog            *StreamLogger      // Stream logger for real-time monitoring of long operations
 	streamLogPath        string             // Path to stream log file (for passing to sub-processes)
+	worktreeHandler      *WorktreeHandler   // Handler for Git worktrees (parallel Claude Code execution)
+	currentStepWorktree  string             // Current step's worktree name (if any)
+}
+
+// getEffectiveWorkDir returns the working directory for the current step
+// If a worktree is set for the current step, returns that path
+// Otherwise returns the default runtimeDir
+func (p *Processor) getEffectiveWorkDir() string {
+	if p.currentStepWorktree != "" && p.worktreeHandler != nil {
+		if path, err := p.worktreeHandler.GetWorktreePath(p.currentStepWorktree); err == nil {
+			p.debugf("Using worktree path for step: %s -> %s", p.currentStepWorktree, path)
+			return path
+		}
+	}
+	return p.runtimeDir
+}
+
+// setCurrentStepWorktree sets the worktree context for the current step
+func (p *Processor) setCurrentStepWorktree(worktreeName string) {
+	p.currentStepWorktree = worktreeName
+}
+
+// clearCurrentStepWorktree clears the worktree context
+func (p *Processor) clearCurrentStepWorktree() {
+	p.currentStepWorktree = ""
 }
 
 // setAgenticConfig sets the current agentic config (thread-safe)
@@ -335,6 +360,17 @@ func NewProcessor(dslConfig *DSLConfig, envConfig *config.EnvConfig, serverConfi
 		p.debugf("No memory file configured")
 	}
 
+	// Initialize worktree handler if worktrees are configured
+	if dslConfig.Worktrees != nil && len(dslConfig.Worktrees.Trees) > 0 {
+		wtHandler, err := NewWorktreeHandler(dslConfig.Worktrees, runtimeDir, verbose)
+		if err != nil {
+			p.debugf("Warning: Failed to initialize worktree handler: %v", err)
+		} else {
+			p.worktreeHandler = wtHandler
+			p.debugf("Worktree handler initialized with %d worktrees", len(dslConfig.Worktrees.Trees))
+		}
+	}
+
 	// Disable spinner in test environments
 	if isTestMode() {
 		p.spinner.Disable()
@@ -500,6 +536,10 @@ func (p *Processor) parseVariableAssignment(input string) (string, string) {
 func (p *Processor) substituteVariables(text string) string {
 	for name, value := range p.variables {
 		text = strings.ReplaceAll(text, "$"+name, value)
+	}
+	// Also expand worktree variables (${worktrees.name.path}, etc.)
+	if p.worktreeHandler != nil {
+		text = p.worktreeHandler.ExpandWorktreeVariables(text)
 	}
 	return text
 }
@@ -740,6 +780,20 @@ func (p *Processor) Process() error {
 		return fmt.Errorf("validation failed: %w", err)
 	}
 
+	// Set up worktrees if configured
+	if p.worktreeHandler != nil {
+		p.debugf("Setting up worktrees...")
+		if err := p.worktreeHandler.Setup(); err != nil {
+			return fmt.Errorf("failed to set up worktrees: %w", err)
+		}
+		// Ensure cleanup runs at the end
+		defer func() {
+			if cleanupErr := p.worktreeHandler.Cleanup(); cleanupErr != nil {
+				p.debugf("Warning: worktree cleanup failed: %v", cleanupErr)
+			}
+		}()
+	}
+
 	// If we have both steps and loops, run steps first as "pre-loop" steps
 	// This allows workflows to set up prerequisites (like codebase-index) before loops run
 	if hasSteps && hasLoops {
@@ -969,8 +1023,18 @@ func (p *Processor) Process() error {
 		p.emitProgress(stepMsg, stepInfo)
 		p.spinner.Start(stepMsg)
 
+		// Set worktree context for this step (if specified)
+		if step.Config.Worktree != "" {
+			p.setCurrentStepWorktree(step.Config.Worktree)
+			p.debugf("Step '%s' using worktree: %s", step.Name, step.Config.Worktree)
+		}
+
 		// Process the step
 		response, err := p.processStep(step, false, "")
+
+		// Clear worktree context after step completes
+		p.clearCurrentStepWorktree()
+
 		if err != nil {
 			p.spinner.Stop()
 			errMsg := fmt.Sprintf("Error processing step '%s': %v", step.Name, err)
