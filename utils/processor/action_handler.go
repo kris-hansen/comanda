@@ -113,7 +113,7 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 						}
 					}
 					result, err := claudeCode.SendPromptAgentic(modelName, action,
-						agenticConfig.AllowedPaths, agenticConfig.Tools, p.runtimeDir)
+						agenticConfig.AllowedPaths, agenticConfig.Tools, p.getEffectiveWorkDir())
 					// Stop the debug watcher
 					if debugWatcher != nil {
 						debugWatcher.Stop()
@@ -297,7 +297,7 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 						}
 					}
 					result, err := claudeCode.SendPromptAgentic(modelName, combinedPrompt,
-						agenticConfig.AllowedPaths, agenticConfig.Tools, p.runtimeDir)
+						agenticConfig.AllowedPaths, agenticConfig.Tools, p.getEffectiveWorkDir())
 					// Stop the debug watcher
 					if debugWatcher != nil {
 						debugWatcher.Stop()
