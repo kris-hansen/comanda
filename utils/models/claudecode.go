@@ -21,6 +21,7 @@ type ClaudeCodeProvider struct {
 	verbose    bool
 	binaryPath string
 	debugFile  string // Optional debug file path for streaming output
+	worktree   string // Optional worktree name for isolated execution
 	mu         sync.Mutex
 }
 
@@ -312,6 +313,12 @@ func (c *ClaudeCodeProvider) buildArgsAgentic(modelName string, prompt string, a
 		c.debugf("No debug file set for agentic mode")
 	}
 
+	// Add worktree for isolated execution
+	if c.worktree != "" {
+		c.debugf("Adding --worktree flag: %s", c.worktree)
+		args = append(args, "--worktree", c.worktree)
+	}
+
 	// Add allowed paths for tool access scope
 	// Resolve paths to absolute (expands ~ and converts relative to absolute)
 	for _, path := range allowedPaths {
@@ -403,6 +410,17 @@ func (c *ClaudeCodeProvider) SetVerbose(verbose bool) {
 // This enables --debug-file which streams tool calls and execution details
 func (c *ClaudeCodeProvider) SetDebugFile(path string) {
 	c.debugFile = path
+}
+
+// SetWorktree sets the worktree name for isolated execution
+// This enables --worktree which runs Claude Code in an isolated Git worktree
+func (c *ClaudeCodeProvider) SetWorktree(name string) {
+	c.worktree = name
+}
+
+// ClearWorktree clears the worktree setting
+func (c *ClaudeCodeProvider) ClearWorktree() {
+	c.worktree = ""
 }
 
 // ValidateModel checks if the model is valid for Claude Code

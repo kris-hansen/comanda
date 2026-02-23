@@ -81,6 +81,24 @@ func (p *Processor) clearCurrentStepWorktree() {
 	p.currentStepWorktree = ""
 }
 
+// getCurrentStepWorktree returns the worktree name for the current step
+func (p *Processor) getCurrentStepWorktree() string {
+	return p.currentStepWorktree
+}
+
+// providerSupportsWorktrees checks if a provider has native worktree support
+func (p *Processor) providerSupportsWorktrees(providerName string) bool {
+	if p.envConfig == nil {
+		return false
+	}
+	provider, err := p.envConfig.GetProviderConfig(providerName)
+	if err != nil || provider == nil {
+		// Default to true for claude-code (native support)
+		return providerName == "claude-code"
+	}
+	return provider.SupportsWorktrees
+}
+
 // setAgenticConfig sets the current agentic config (thread-safe)
 func (p *Processor) setAgenticConfig(config *AgenticLoopConfig) {
 	p.mu.Lock()
