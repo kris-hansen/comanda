@@ -186,22 +186,31 @@ func (m *Manager) Remove(name string, removeBranch bool) error {
 
 	m.debugf("Removing worktree: %s", name)
 
-	// Remove the worktree
-	cmd := exec.Command("git", "worktree", "remove", wt.Path, "--force")
-	cmd.Dir = m.RepoPath
-
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		// Try to remove directory manually if git worktree remove fails
-		if rmErr := os.RemoveAll(wt.Path); rmErr != nil {
-			return fmt.Errorf("failed to remove worktree: %w (%s)", err, stderr.String())
-		}
-		// Prune worktrees to clean up
+	// Check if the worktree directory exists before attempting removal
+	if _, err := os.Stat(wt.Path); os.IsNotExist(err) {
+		m.debugf("Worktree directory already removed: %s", wt.Path)
+		// Directory doesn't exist, just prune and clean up the map
 		pruneCmd := exec.Command("git", "worktree", "prune")
 		pruneCmd.Dir = m.RepoPath
 		_ = pruneCmd.Run()
+	} else {
+		// Remove the worktree
+		cmd := exec.Command("git", "worktree", "remove", wt.Path, "--force")
+		cmd.Dir = m.RepoPath
+
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+
+		if err := cmd.Run(); err != nil {
+			// Try to remove directory manually if git worktree remove fails
+			if rmErr := os.RemoveAll(wt.Path); rmErr != nil {
+				return fmt.Errorf("failed to remove worktree: %w (%s)", err, stderr.String())
+			}
+			// Prune worktrees to clean up
+			pruneCmd := exec.Command("git", "worktree", "prune")
+			pruneCmd.Dir = m.RepoPath
+			_ = pruneCmd.Run()
+		}
 	}
 
 	// Optionally remove the branch
