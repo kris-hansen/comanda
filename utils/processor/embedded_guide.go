@@ -2936,6 +2936,169 @@ final_summary:
 
 This file-based approach is the correct way to handle any workflow where a step's logic depends on having discrete access to multiple prior outputs.
 
+## 8. Git Worktree Support (Parallel Isolated Execution)
+
+Git worktrees enable running multiple Claude Code sessions in parallel, each with isolated branches and working directories. This is powerful for parallel feature development, multi-task workflows, and avoiding code conflicts between concurrent agents.
+
+**When to use worktrees:**
+- Running multiple Claude Code agents on different tasks simultaneously
+- Parallel feature development (implement auth AND api AND ui at once)
+- A/B testing or comparing different implementations
+- Tasks that would conflict if run in the same directory
+
+### Worktree Configuration
+
+Define worktrees at the top level of your workflow:
+
+` + "```yaml" + `
+worktrees:
+  repo: .                        # Repository path (default: current directory)
+  base_dir: .comanda-worktrees   # Where to create worktrees
+  cleanup: true                  # Auto-cleanup after workflow (default: true)
+  trees:
+    - name: auth                 # Worktree identifier
+      new_branch: true           # Create new branch (worktree-auth)
+    - name: api
+      branch: feature/api        # Use existing branch
+    - name: ui
+      new_branch: true
+      base: develop              # Base branch for new branch
+` + "```" + `
+
+**Worktree Configuration Fields:**
+- ` + "`repo`" + `: (string, default: ` + "`.`" + `) Repository path to use.
+- ` + "`base_dir`" + `: (string, default: ` + "`.comanda-worktrees`" + `) Directory for worktree checkouts.
+- ` + "`cleanup`" + `: (bool, default: true) Remove worktrees after workflow completes.
+- ` + "`trees`" + `: (list) List of worktree specifications.
+
+**Worktree Specification Fields:**
+- ` + "`name`" + `: (string, required) Unique identifier for the worktree.
+- ` + "`new_branch`" + `: (bool) Create a new branch named ` + "`worktree-<name>`" + `.
+- ` + "`branch`" + `: (string) Use an existing branch.
+- ` + "`base`" + `: (string, default: HEAD) Base branch when creating new branch.
+
+### Step-Level Worktree Selection
+
+Use the ` + "`worktree`" + ` field in a step to run it in a specific worktree:
+
+` + "```yaml" + `
+implement_auth:
+  worktree: auth               # Run in 'auth' worktree
+  model: claude-code
+  action: "Implement JWT authentication"
+  output: STDOUT
+
+implement_api:
+  worktree: api                # Run in 'api' worktree
+  model: claude-code
+  action: "Add rate limiting to API endpoints"
+  output: STDOUT
+` + "```" + `
+
+### Variable Expansion
+
+Worktree paths and branches are available as variables:
+- ` + "`${worktrees.auth.path}`" + ` - Absolute path to the auth worktree
+- ` + "`${worktrees.auth.branch}`" + ` - Branch name in the auth worktree
+
+### Example: Parallel Feature Development
+
+` + "```yaml" + `
+worktrees:
+  trees:
+    - name: auth
+      new_branch: true
+    - name: api
+      new_branch: true
+    - name: ui
+      new_branch: true
+
+implement_auth:
+  worktree: auth
+  agentic_loop:
+    max_iterations: 5
+    exit_condition: llm_decides
+    allowed_paths: [.]
+  model: claude-code
+  action: "Implement JWT authentication with refresh tokens. Say DONE when complete."
+  output: STDOUT
+
+implement_api:
+  worktree: api
+  agentic_loop:
+    max_iterations: 5
+    exit_condition: llm_decides
+    allowed_paths: [.]
+  model: claude-code
+  action: "Add rate limiting to all API endpoints. Say DONE when complete."
+  output: STDOUT
+
+implement_ui:
+  worktree: ui
+  agentic_loop:
+    max_iterations: 5
+    exit_condition: llm_decides
+    allowed_paths: [.]
+  model: claude-code
+  action: "Create a login component with form validation. Say DONE when complete."
+  output: STDOUT
+
+qa_review:
+  model: claude-sonnet
+  action: |
+    Review the implementations across all branches:
+    - Auth branch: ${worktrees.auth.path}
+    - API branch: ${worktrees.api.path}
+    - UI branch: ${worktrees.ui.path}
+    
+    Check for consistency, integration issues, and provide a summary.
+  output: ./qa_report.md
+` + "```" + `
+
+### Example: Two Worktrees for Different Tasks
+
+When a user asks to "create two worktrees, one for X and one for Y":
+
+` + "```yaml" + `
+worktrees:
+  trees:
+    - name: task_x
+      new_branch: true
+    - name: task_y
+      new_branch: true
+
+work_on_x:
+  worktree: task_x
+  agentic_loop:
+    max_iterations: 10
+    exit_condition: llm_decides
+    allowed_paths: [.]
+  model: claude-code
+  action: |
+    Work on task X in this isolated worktree.
+    You have full access to modify files without affecting task Y.
+    Say DONE when complete.
+  output: STDOUT
+
+work_on_y:
+  worktree: task_y
+  agentic_loop:
+    max_iterations: 10
+    exit_condition: llm_decides
+    allowed_paths: [.]
+  model: claude-code
+  action: |
+    Work on task Y in this isolated worktree.
+    You have full access to modify files without affecting task X.
+    Say DONE when complete.
+  output: STDOUT
+` + "```" + `
+
+**Provider Support:**
+- ` + "`claude-code`" + `: Native worktree support (uses ` + "`--worktree`" + ` flag when available)
+- Other providers: Worktrees managed by Comanda, passed as working directory
+
+
 ## CRITICAL: Workflow Simplicity Guidelines
 
 **ALWAYS prefer the simplest possible workflow.** Over-engineered workflows are harder to debug, maintain, and understand.
