@@ -18,11 +18,12 @@ import (
 
 // ClaudeCodeProvider handles Claude Code CLI for agentic programming tasks
 type ClaudeCodeProvider struct {
-	verbose    bool
-	binaryPath string
-	debugFile  string // Optional debug file path for streaming output
-	worktree   string // Optional worktree name for isolated execution
-	mu         sync.Mutex
+	verbose            bool
+	binaryPath         string
+	debugFile          string // Optional debug file path for streaming output
+	worktree           string // Optional worktree name for isolated execution
+	worktreeSupported  *bool  // Cached result of worktree flag probe
+	mu                 sync.Mutex
 }
 
 // NewClaudeCodeProvider creates a new Claude Code provider instance
@@ -313,10 +314,12 @@ func (c *ClaudeCodeProvider) buildArgsAgentic(modelName string, prompt string, a
 		c.debugf("No debug file set for agentic mode")
 	}
 
-	// Add worktree for isolated execution
-	if c.worktree != "" {
+	// Add worktree for isolated execution (only if flag is supported)
+	if c.worktree != "" && c.SupportsWorktreeFlag() {
 		c.debugf("Adding --worktree flag: %s", c.worktree)
 		args = append(args, "--worktree", c.worktree)
+	} else if c.worktree != "" {
+		c.debugf("Worktree requested but --worktree flag not supported, using workDir fallback")
 	}
 
 	// Add allowed paths for tool access scope
@@ -421,6 +424,34 @@ func (c *ClaudeCodeProvider) SetWorktree(name string) {
 // ClearWorktree clears the worktree setting
 func (c *ClaudeCodeProvider) ClearWorktree() {
 	c.worktree = ""
+}
+
+// SupportsWorktreeFlag probes if Claude Code CLI supports the --worktree flag
+// Result is cached after first probe
+func (c *ClaudeCodeProvider) SupportsWorktreeFlag() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Return cached result if available
+	if c.worktreeSupported != nil {
+		return *c.worktreeSupported
+	}
+
+	// Probe by checking --help output for --worktree
+	supported := false
+	if c.binaryPath != "" {
+		cmd := exec.Command(c.binaryPath, "--help")
+		output, err := cmd.Output()
+		if err == nil {
+			supported = strings.Contains(string(output), "--worktree")
+		}
+	}
+
+	c.worktreeSupported = &supported
+	if c.verbose {
+		log.Printf("[DEBUG][ClaudeCode] Worktree flag probe: supported=%v\n", supported)
+	}
+	return supported
 }
 
 // ValidateModel checks if the model is valid for Claude Code
