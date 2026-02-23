@@ -85,6 +85,22 @@ type ToolListConfig struct {
 	Timeout   int      `yaml:"timeout"`   // Timeout in seconds for tool execution
 }
 
+// WorktreeConfig defines Git worktrees for parallel Claude Code execution
+type WorktreeConfig struct {
+	Repo    string         `yaml:"repo,omitempty"`     // Repository path (default: ".")
+	BaseDir string         `yaml:"base_dir,omitempty"` // Directory for worktrees (default: ".comanda-worktrees")
+	Trees   []WorktreeSpec `yaml:"trees,omitempty"`    // Explicit worktree specifications
+	Cleanup bool           `yaml:"cleanup,omitempty"`  // Cleanup worktrees after workflow (default: true)
+}
+
+// WorktreeSpec defines a single worktree
+type WorktreeSpec struct {
+	Name       string `yaml:"name"`                 // Worktree identifier (required)
+	Branch     string `yaml:"branch,omitempty"`     // Existing branch to checkout
+	NewBranch  bool   `yaml:"new_branch,omitempty"` // Create a new branch (named worktree-<name>)
+	BaseBranch string `yaml:"base,omitempty"`       // Base branch for new branch (default: HEAD)
+}
+
 // StepConfig represents the configuration for a single step
 type StepConfig struct {
 	Type       string          `yaml:"type"`            // Step type (default is standard LLM step)
@@ -115,6 +131,10 @@ type StepConfig struct {
 	AgenticLoop   *AgenticLoopConfig   `yaml:"agentic_loop,omitempty"`   // Inline agentic loop configuration
 	CodebaseIndex *CodebaseIndexConfig `yaml:"codebase_index,omitempty"` // Codebase indexing configuration
 	QmdSearch     *QmdSearchConfig     `yaml:"qmd_search,omitempty"`     // qmd search configuration
+
+	// Worktree fields
+	Worktree     string `yaml:"worktree,omitempty"`      // Run step in a specific worktree by name
+	EachWorktree bool   `yaml:"each_worktree,omitempty"` // Run step once per worktree (combine with parallel for concurrent)
 }
 
 // Step represents a named step in the DSL
@@ -134,6 +154,9 @@ type DSLConfig struct {
 	Loops        map[string]*AgenticLoopConfig `yaml:"loops,omitempty"`         // Named loops for orchestration
 	ExecuteLoops []string                      `yaml:"execute_loops,omitempty"` // Simple execution order
 	Workflow     map[string]*WorkflowNode      `yaml:"workflow,omitempty"`      // Complex workflow definition
+
+	// Worktree support for parallel Claude Code execution
+	Worktrees *WorktreeConfig `yaml:"worktrees,omitempty"` // Git worktree configuration
 }
 
 // StepDependency represents a dependency between steps

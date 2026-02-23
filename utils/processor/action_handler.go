@@ -112,8 +112,15 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 							debugWatcher.Start()
 						}
 					}
+					// Set native worktree if provider supports it and step uses a worktree
+					worktreeName := p.getCurrentStepWorktree()
+					if worktreeName != "" && p.providerSupportsWorktrees("claude-code") {
+						p.debugf("Using native worktree support: %s", worktreeName)
+						claudeCode.SetWorktree(worktreeName)
+						defer claudeCode.ClearWorktree()
+					}
 					result, err := claudeCode.SendPromptAgentic(modelName, action,
-						agenticConfig.AllowedPaths, agenticConfig.Tools, p.runtimeDir)
+						agenticConfig.AllowedPaths, agenticConfig.Tools, p.getEffectiveWorkDir())
 					// Stop the debug watcher
 					if debugWatcher != nil {
 						debugWatcher.Stop()
@@ -296,8 +303,15 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 							debugWatcher.Start()
 						}
 					}
+					// Set native worktree if provider supports it and step uses a worktree
+					worktreeName := p.getCurrentStepWorktree()
+					if worktreeName != "" && p.providerSupportsWorktrees("claude-code") {
+						p.debugf("Using native worktree support: %s", worktreeName)
+						claudeCode.SetWorktree(worktreeName)
+						defer claudeCode.ClearWorktree()
+					}
 					result, err := claudeCode.SendPromptAgentic(modelName, combinedPrompt,
-						agenticConfig.AllowedPaths, agenticConfig.Tools, p.runtimeDir)
+						agenticConfig.AllowedPaths, agenticConfig.Tools, p.getEffectiveWorkDir())
 					// Stop the debug watcher
 					if debugWatcher != nil {
 						debugWatcher.Stop()
