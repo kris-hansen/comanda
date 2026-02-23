@@ -18,12 +18,12 @@ import (
 
 // ClaudeCodeProvider handles Claude Code CLI for agentic programming tasks
 type ClaudeCodeProvider struct {
-	verbose            bool
-	binaryPath         string
-	debugFile          string // Optional debug file path for streaming output
-	worktree           string // Optional worktree name for isolated execution
-	worktreeSupported  *bool  // Cached result of worktree flag probe
-	mu                 sync.Mutex
+	verbose           bool
+	binaryPath        string
+	debugFile         string // Optional debug file path for streaming output
+	worktree          string // Optional worktree name for isolated execution
+	worktreeSupported *bool  // Cached result of worktree flag probe
+	mu                sync.Mutex
 }
 
 // NewClaudeCodeProvider creates a new Claude Code provider instance
