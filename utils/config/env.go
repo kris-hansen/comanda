@@ -53,8 +53,9 @@ type Model struct {
 
 // Provider represents a provider's configuration
 type Provider struct {
-	APIKey string  `yaml:"api_key"`
-	Models []Model `yaml:"models"`
+	APIKey            string  `yaml:"api_key"`
+	Models            []Model `yaml:"models"`
+	SupportsWorktrees bool    `yaml:"supports_worktrees,omitempty"`
 }
 
 // ToolConfig represents global tool execution settings
