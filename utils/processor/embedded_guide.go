@@ -1088,6 +1088,33 @@ index_repo:
     root: .
 ` + "```" + `
 
+### Using the Index Registry
+
+Indexes can be pre-captured using ` + "`comanda index capture`" + `, then loaded without regenerating:
+
+**Loading from Registry:**
+` + "```yaml" + `
+load_index:
+  codebase_index:
+    use: myproject              # Load from registry
+    max_age: 24h                # Warn if stale
+
+load_multiple:
+  codebase_index:
+    use: [project1, project2]   # Load multiple indexes
+    aggregate: true             # Create $AGGREGATED_INDEX
+` + "```" + `
+
+**Inline Index References (` + "`${INDEX:name}`" + `):**
+` + "```yaml" + `
+analyze:
+  input: |
+    Context: ${INDEX:myproject}
+    Review the architecture.
+  model: claude
+  output: STDOUT
+` + "```" + `
+
 
 ## 7. qmd Search Step Definition (` + "`qmd_search`" + `)
 
@@ -2408,6 +2435,33 @@ index_repo:
   step_type: codebase-index
   codebase_index:
     root: .
+` + "```" + `
+
+### Using the Index Registry
+
+Indexes can be pre-captured using ` + "`comanda index capture`" + `, then loaded without regenerating:
+
+**Loading from Registry:**
+` + "```yaml" + `
+load_index:
+  codebase_index:
+    use: myproject              # Load from registry
+    max_age: 24h                # Warn if stale
+
+load_multiple:
+  codebase_index:
+    use: [project1, project2]   # Load multiple indexes
+    aggregate: true             # Create $AGGREGATED_INDEX
+` + "```" + `
+
+**Inline Index References (` + "`${INDEX:name}`" + `):**
+` + "```yaml" + `
+analyze:
+  input: |
+    Context: ${INDEX:myproject}
+    Review the architecture.
+  model: claude
+  output: STDOUT
 ` + "```" + `
 
 

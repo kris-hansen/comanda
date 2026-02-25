@@ -220,6 +220,43 @@ curl -X POST "http://localhost:8080/process?filename=review.yaml" \
   -d '{"input": "code to review"}'
 ```
 
+## Codebase Indexing
+
+Generate rich code context for AI workflows:
+
+```bash
+# Index a codebase and register it
+comanda index capture ~/my-project -n myproject
+
+# List registered indexes
+comanda index list
+
+# Show what changed since last index
+comanda index diff myproject
+
+# Use in workflows
+```
+
+```yaml
+# Load from registry instead of regenerating each time
+steps:
+  analyze:
+    codebase_index:
+      use: myproject              # Load from registry
+    model: claude
+    action: "Analyze the architecture"
+
+  # Multi-codebase analysis
+  compare:
+    codebase_index:
+      use: [project1, project2]   # Load multiple
+      aggregate: true             # Combine into single context
+    model: claude
+    action: "Compare these codebases"
+```
+
+See `examples/index-registry/` for more examples.
+
 ## Features
 
 | Feature | Description |
@@ -236,6 +273,7 @@ curl -X POST "http://localhost:8080/process?filename=review.yaml" \
 | **Memory** | Persistent context via COMANDA.md |
 | **Branching** | Conditional workflows with `defer:` |
 | **qmd integration** | Local search for knowledge bases with [qmd](https://github.com/tobi/qmd) |
+| **Codebase indexing** | Persistent code indexes for multi-repo AI context |
 | **Visualization** | ASCII workflow charts with `comanda chart` |
 
 ## Visualize Workflows

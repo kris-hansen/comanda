@@ -97,6 +97,22 @@ func (m *Manager) Generate() (*Result, error) {
 	}
 	m.logf("Index written to: %s", outputPath)
 
+	// Step 6b: Save metadata for future diffing
+	result := &Result{
+		Content:     content,
+		OutputPath:  outputPath,
+		ContentHash: contentHash,
+		Updated:     true,
+		Format:      m.config.OutputFormat,
+		GeneratedAt: time.Now(),
+		RepoName:    m.config.RepoFileSlug,
+		Languages:   languages,
+		FileCount:   len(scanResult.Candidates),
+	}
+	if err := m.SaveMetadata(result, scanResult.Candidates); err != nil {
+		m.logf("Warning: failed to save metadata: %v", err)
+	}
+
 	// Step 7: Register with qmd (if configured)
 	if m.config.Qmd != nil && m.config.Qmd.Collection != "" {
 		if err := m.registerWithQmd(outputPath); err != nil {
@@ -107,17 +123,10 @@ func (m *Manager) Generate() (*Result, error) {
 	duration := time.Since(startTime)
 	m.logf("Index generation completed in %v", duration)
 
-	return &Result{
-		Content:     content,
-		OutputPath:  outputPath,
-		ContentHash: contentHash,
-		Updated:     true, // TODO: support incremental mode
-		GeneratedAt: time.Now(),
-		RepoName:    m.config.RepoFileSlug,
-		Languages:   languages,
-		FileCount:   len(scanResult.Candidates),
-		Duration:    duration,
-	}, nil
+	// Update result with duration
+	result.Duration = duration
+
+	return result, nil
 }
 
 // detectAdapters determines which language adapters to use
