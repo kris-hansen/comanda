@@ -3,6 +3,8 @@ package processor
 import (
 	"fmt"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/kris-hansen/comanda/utils/codebaseindex"
 	"github.com/kris-hansen/comanda/utils/fileutil"
@@ -12,6 +14,118 @@ import (
 func (p *Processor) processCodebaseIndexStep(step Step, isParallel bool, parallelID string) (string, error) {
 	p.debugf("Processing codebase-index step: %s", step.Name)
 
+	ci := step.Config.CodebaseIndex
+	if ci == nil {
+		ci = &CodebaseIndexConfig{}
+	}
+
+	// Check if we're loading from registry
+	if ci.Use != nil {
+		return p.processCodebaseIndexFromRegistry(step, ci)
+	}
+
+	// Otherwise, generate fresh index
+	return p.processCodebaseIndexGenerate(step)
+}
+
+// processCodebaseIndexFromRegistry loads indexes from the registry
+func (p *Processor) processCodebaseIndexFromRegistry(step Step, ci *CodebaseIndexConfig) (string, error) {
+	// Parse 'use' field - can be string or []string
+	var names []string
+	switch v := ci.Use.(type) {
+	case string:
+		names = []string{v}
+	case []interface{}:
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				names = append(names, s)
+			}
+		}
+	case []string:
+		names = v
+	default:
+		return "", fmt.Errorf("invalid 'use' field type: expected string or []string")
+	}
+
+	if len(names) == 0 {
+		return "", fmt.Errorf("'use' field is empty")
+	}
+
+	// Check for registered indexes in envConfig
+	if p.envConfig == nil || p.envConfig.Indexes == nil {
+		return "", fmt.Errorf("no indexes registered (run 'comanda index capture' first)")
+	}
+
+	var allContent []string
+	var loadedIndexes []string
+
+	for _, name := range names {
+		entry, ok := p.envConfig.Indexes[name]
+		if !ok {
+			return "", fmt.Errorf("index '%s' not found in registry", name)
+		}
+
+		// Check max_age if specified
+		if ci.MaxAge != "" {
+			maxAge, err := time.ParseDuration(ci.MaxAge)
+			if err != nil {
+				p.debugf("Warning: invalid max_age '%s': %v", ci.MaxAge, err)
+			} else {
+				if t, err := time.Parse(time.RFC3339, entry.LastIndexed); err == nil {
+					age := time.Since(t)
+					if age > maxAge {
+						p.debugf("Warning: index '%s' is stale (age: %v, max: %v)", name, age, maxAge)
+					}
+				}
+			}
+		}
+
+		// Load index content
+		content, err := os.ReadFile(entry.IndexPath)
+		if err != nil {
+			return "", fmt.Errorf("failed to read index '%s' from %s: %w", name, entry.IndexPath, err)
+		}
+
+		// Handle encrypted indexes
+		if entry.Encrypted {
+			key := os.Getenv("COMANDA_INDEX_KEY")
+			if key == "" && p.envConfig != nil {
+				key = p.envConfig.IndexEncryptionKey
+			}
+			if key == "" {
+				return "", fmt.Errorf("index '%s' is encrypted but no decryption key provided", name)
+			}
+			decrypted, err := codebaseindex.Decrypt(content, key)
+			if err != nil {
+				return "", fmt.Errorf("failed to decrypt index '%s': %w", name, err)
+			}
+			content = decrypted
+		}
+
+		contentStr := string(content)
+
+		// Export as individual variable
+		p.variables[entry.VarPrefix+"_INDEX"] = contentStr
+		p.variables[entry.VarPrefix+"_INDEX_PATH"] = entry.IndexPath
+
+		allContent = append(allContent, contentStr)
+		loadedIndexes = append(loadedIndexes, name)
+
+		p.debugf("Loaded index '%s' from registry (%d bytes)", name, len(content))
+	}
+
+	// If aggregate mode, also create combined variable
+	if ci.Aggregate && len(allContent) > 1 {
+		aggregated := strings.Join(allContent, "\n\n---\n\n")
+		p.variables["AGGREGATED_INDEX"] = aggregated
+		p.debugf("Created AGGREGATED_INDEX from %d indexes", len(allContent))
+	}
+
+	return fmt.Sprintf("Loaded %d index(es) from registry: %v", len(loadedIndexes), loadedIndexes), nil
+}
+
+// processCodebaseIndexGenerate generates a fresh index
+func (p *Processor) processCodebaseIndexGenerate(step Step) (string, error) {
 	// Build configuration from step config
 	config := p.buildCodebaseIndexConfig(step.Config)
 

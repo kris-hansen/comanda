@@ -70,6 +70,20 @@ type SecurityConfig struct {
 	AllowAgenticTools bool `yaml:"allow_agentic_tools"` // Allow agentic tool use in loops (default true)
 }
 
+// IndexEntry represents a registered codebase index
+type IndexEntry struct {
+	Path        string `yaml:"path"`                  // Source repository path
+	IndexPath   string `yaml:"index_path"`            // Where index file is stored
+	LastIndexed string `yaml:"last_indexed"`          // ISO8601 timestamp
+	ContentHash string `yaml:"content_hash"`          // Hash of index content
+	Format      string `yaml:"format"`                // summary, structured, full
+	FileCount   int    `yaml:"file_count"`            // Number of files indexed
+	SizeBytes   int64  `yaml:"size_bytes"`            // Size of index file
+	VarPrefix   string `yaml:"var_prefix"`            // Variable prefix for workflows
+	Encrypted   bool   `yaml:"encrypted,omitempty"`   // Whether index is encrypted
+	Languages   string `yaml:"languages,omitempty"`   // Detected languages
+}
+
 // EnvConfig represents the complete environment configuration
 type EnvConfig struct {
 	Providers              map[string]*Provider      `yaml:"providers"` // Changed to store pointers to Provider
@@ -77,6 +91,7 @@ type EnvConfig struct {
 	Databases              map[string]DatabaseConfig `yaml:"databases,omitempty"` // Added database configurations
 	Tool                   *ToolConfig               `yaml:"tool,omitempty"`      // Global tool execution settings
 	Security               *SecurityConfig           `yaml:"security,omitempty"`  // Global security settings
+	Indexes                map[string]*IndexEntry    `yaml:"indexes,omitempty"`   // Registered codebase indexes
 	DefaultGenerationModel string                    `yaml:"default_generation_model,omitempty"`
 	MemoryFile             string                    `yaml:"memory_file,omitempty"`          // Path to COMANDA.md memory file
 	IndexEncryptionKey     string                    `yaml:"index_encryption_key,omitempty"` // Key for encrypting codebase indexes

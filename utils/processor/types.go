@@ -187,6 +187,11 @@ type CodebaseIndexConfig struct {
 	Adapters    map[string]*AdapterOverride `yaml:"adapters,omitempty"`      // Per-adapter overrides
 	MaxOutputKB int                         `yaml:"max_output_kb,omitempty"` // Maximum output size in KB
 	Qmd         *QmdIntegrationConfig       `yaml:"qmd,omitempty"`           // qmd integration configuration
+
+	// Registry integration
+	Use       interface{} `yaml:"use,omitempty"`       // Load from registry: string or []string
+	MaxAge    string      `yaml:"max_age,omitempty"`   // Warn if index is older than this duration (e.g., "24h")
+	Aggregate bool        `yaml:"aggregate,omitempty"` // Combine multiple indexes into single context
 }
 
 // QmdIntegrationConfig configures qmd integration for codebase indexing
