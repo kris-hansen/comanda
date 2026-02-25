@@ -11,12 +11,12 @@ import (
 
 // IndexMetadata stores metadata about an index for diffing
 type IndexMetadata struct {
-	GeneratedAt time.Time         `json:"generated_at"`
-	RepoName    string            `json:"repo_name"`
-	ContentHash string            `json:"content_hash"`
-	FileCount   int               `json:"file_count"`
-	Files       []FileMetadata    `json:"files"`
-	Languages   []string          `json:"languages"`
+	GeneratedAt time.Time      `json:"generated_at"`
+	RepoName    string         `json:"repo_name"`
+	ContentHash string         `json:"content_hash"`
+	FileCount   int            `json:"file_count"`
+	Files       []FileMetadata `json:"files"`
+	Languages   []string       `json:"languages"`
 }
 
 // FileMetadata stores per-file metadata for diffing
@@ -161,7 +161,7 @@ func (m *Manager) parseIndexForFiles(indexPath string) (*IndexMetadata, error) {
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := scanner.Text()
-		
+
 		// Look for file entries (lines starting with "- `" or "- ")
 		if strings.HasPrefix(line, "- `") {
 			// Extract path from markdown link or code block

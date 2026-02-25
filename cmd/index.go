@@ -16,12 +16,12 @@ import (
 
 var (
 	// Capture flags
-	indexName     string
-	indexOutput   string
-	indexFormat   string
-	indexGlobal   bool
-	indexEncrypt  bool
-	indexForce    bool
+	indexName    string
+	indexOutput  string
+	indexFormat  string
+	indexGlobal  bool
+	indexEncrypt bool
+	indexForce   bool
 
 	// Update flags
 	updateFull bool

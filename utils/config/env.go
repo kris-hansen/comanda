@@ -72,16 +72,16 @@ type SecurityConfig struct {
 
 // IndexEntry represents a registered codebase index
 type IndexEntry struct {
-	Path        string `yaml:"path"`                  // Source repository path
-	IndexPath   string `yaml:"index_path"`            // Where index file is stored
-	LastIndexed string `yaml:"last_indexed"`          // ISO8601 timestamp
-	ContentHash string `yaml:"content_hash"`          // Hash of index content
-	Format      string `yaml:"format"`                // summary, structured, full
-	FileCount   int    `yaml:"file_count"`            // Number of files indexed
-	SizeBytes   int64  `yaml:"size_bytes"`            // Size of index file
-	VarPrefix   string `yaml:"var_prefix"`            // Variable prefix for workflows
-	Encrypted   bool   `yaml:"encrypted,omitempty"`   // Whether index is encrypted
-	Languages   string `yaml:"languages,omitempty"`   // Detected languages
+	Path        string `yaml:"path"`                // Source repository path
+	IndexPath   string `yaml:"index_path"`          // Where index file is stored
+	LastIndexed string `yaml:"last_indexed"`        // ISO8601 timestamp
+	ContentHash string `yaml:"content_hash"`        // Hash of index content
+	Format      string `yaml:"format"`              // summary, structured, full
+	FileCount   int    `yaml:"file_count"`          // Number of files indexed
+	SizeBytes   int64  `yaml:"size_bytes"`          // Size of index file
+	VarPrefix   string `yaml:"var_prefix"`          // Variable prefix for workflows
+	Encrypted   bool   `yaml:"encrypted,omitempty"` // Whether index is encrypted
+	Languages   string `yaml:"languages,omitempty"` // Detected languages
 }
 
 // EnvConfig represents the complete environment configuration

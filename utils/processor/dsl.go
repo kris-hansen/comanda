@@ -570,7 +570,7 @@ func (p *Processor) substituteVariables(text string) string {
 func (p *Processor) expandIndexReferences(text string) string {
 	// Match ${INDEX:name} pattern
 	re := regexp.MustCompile(`\$\{INDEX:([a-zA-Z0-9_-]+)\}`)
-	
+
 	return re.ReplaceAllStringFunc(text, func(match string) string {
 		// Extract index name
 		matches := re.FindStringSubmatch(match)
@@ -578,32 +578,32 @@ func (p *Processor) expandIndexReferences(text string) string {
 			return match
 		}
 		indexName := matches[1]
-		
+
 		// Check if already loaded as a variable
 		varName := strings.ToUpper(indexName) + "_INDEX"
 		if content, ok := p.variables[varName]; ok {
 			return content
 		}
-		
+
 		// Try to load from registry
 		if p.envConfig == nil || p.envConfig.Indexes == nil {
 			p.debugf("Warning: ${INDEX:%s} - no registry available", indexName)
 			return match
 		}
-		
+
 		entry, ok := p.envConfig.Indexes[indexName]
 		if !ok {
 			p.debugf("Warning: ${INDEX:%s} - index not found in registry", indexName)
 			return match
 		}
-		
+
 		// Load index content
 		content, err := os.ReadFile(entry.IndexPath)
 		if err != nil {
 			p.debugf("Warning: ${INDEX:%s} - failed to read: %v", indexName, err)
 			return match
 		}
-		
+
 		// Handle encrypted indexes
 		if entry.Encrypted {
 			key := os.Getenv("COMANDA_INDEX_KEY")
@@ -621,11 +621,11 @@ func (p *Processor) expandIndexReferences(text string) string {
 			}
 			content = decrypted
 		}
-		
+
 		// Cache in variables for future use
 		p.variables[varName] = string(content)
 		p.variables[strings.ToUpper(indexName)+"_INDEX_PATH"] = entry.IndexPath
-		
+
 		p.debugf("Loaded index '%s' via ${INDEX:%s} reference", indexName, indexName)
 		return string(content)
 	})
