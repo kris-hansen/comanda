@@ -1,72 +1,34 @@
 ![robot image](comanda-small.jpg)
 
-# COMandA
+# comanda
 
 **Declarative AI pipelines for the command line.** Define LLM workflows in YAML, run them anywhere, version control everything.
 
-🌐 **Website:** [comanda.sh](https://comanda.sh) · 📖 **Docs:** [Examples](examples/README.md) · ⭐ **Star this repo** to support the project!
+🌐 [comanda.sh](https://comanda.sh) · 📖 [Examples](examples/README.md) · ⭐ Star to support!
 
 ```bash
-# Pipe code through multiple AI agents
-cat main.go | comanda process code-review.yaml
-
-# Compare how different models solve a problem
-comanda process model-comparison.yaml
-
-# Run Claude Code, Codex, and Gemini CLI in parallel
-echo "Design a REST API" | comanda process multi-agent/architecture.yaml
+cat main.go | comanda process code-review.yaml      # Pipe code through AI
+comanda process multi-agent/architecture.yaml       # Run multiple agents in parallel
+comanda generate "review this PR for security"      # Generate workflows from English
 ```
 
-## Why comanda?
+## Install
 
-**For AI-powered development workflows:**
-- Run Claude Code, OpenAI Codex, and Gemini CLI side-by-side
-- Chain multiple agents for code review → test generation → documentation
-- Get diverse perspectives on architecture decisions
+```bash
+brew install kris-hansen/comanda/comanda    # macOS
+go install github.com/kris-hansen/comanda@latest   # or via Go
+```
 
-**For reproducible AI pipelines:**
-- YAML workflows you can version control and share
-- Same workflow runs locally, in CI, or on a server
-- Switch providers without changing your pipeline
-
-**For command-line power users:**
-- Pipes, redirects, scripts—works like `grep` or `jq`
-- Process files, URLs, databases, screenshots
-- Batch operations with wildcards and parallel execution
+```bash
+comanda configure   # Set up API keys
+comanda --version   # Verify install
+```
 
 ## Quick Start
 
-### Install
-
-```bash
-# macOS
-brew install kris-hansen/comanda/comanda
-
-# Or via Go
-go install github.com/kris-hansen/comanda@latest
-
-# Or download from GitHub Releases
-```
-
-Ensure the Go install location is on your `PATH` (often `$(go env GOPATH)/bin` or `$(go env GOBIN)`), then verify:
-
-```bash
-comanda --version
-```
-
-### Configure
-
-```bash
-comanda configure
-# Select providers (OpenAI, Anthropic, Google, Ollama, Claude Code, etc.)
-# Enter API keys where needed
-```
-
-### Run Your First Workflow
-
-Create `hello.yaml`:
+**hello.yaml:**
 ```yaml
-generate:
+hello:
   input: NA
   model: gpt-4o
   action: Write a haiku about programming
@@ -77,92 +39,30 @@ generate:
 comanda process hello.yaml
 ```
 
-## Multi-Agent Workflows
+## Core Features
 
-Run multiple agentic coding tools in parallel and synthesize their outputs:
+### Multi-Agent Orchestration
+
+Run Claude Code, Codex, and Gemini CLI in parallel:
 
 ```yaml
 parallel-process:
-  claude-analysis:
+  claude:
     input: STDIN
     model: claude-code
-    action: "Analyze architecture and trade-offs"
-    output: $CLAUDE_RESULT
+    action: "Analyze architecture"
+    output: $CLAUDE
 
-  gemini-analysis:
+  gemini:
     input: STDIN
     model: gemini-cli
-    action: "Identify patterns and best practices"
-    output: $GEMINI_RESULT
-
-  codex-analysis:
-    input: STDIN
-    model: openai-codex
-    action: "Focus on implementation structure"
-    output: $CODEX_RESULT
+    action: "Identify patterns"
+    output: $GEMINI
 
 synthesize:
-  input: |
-    Claude: $CLAUDE_RESULT
-    Gemini: $GEMINI_RESULT
-    Codex: $CODEX_RESULT
+  input: "Claude: $CLAUDE\nGemini: $GEMINI"
   model: claude-code
-  action: "Combine into unified recommendation"
-  output: STDOUT
-```
-
-```bash
-echo "Design a real-time collaborative editor" | comanda process architecture.yaml
-```
-
-### Supported Agents
-
-| Agent | Model Names | Best For |
-|-------|-------------|----------|
-| **Claude Code** | `claude-code`, `claude-code-opus`, `claude-code-sonnet` | Deep reasoning, synthesis |
-| **Gemini CLI** | `gemini-cli`, `gemini-cli-pro`, `gemini-cli-flash` | Broad knowledge, patterns |
-| **OpenAI Codex** | `openai-codex`, `openai-codex-o3` | Implementation, code structure |
-
-No API keys needed for these—they use their own CLI authentication.
-
-## Common Use Cases
-
-### Code Review Pipeline
-
-```yaml
-review:
-  input: "src/*.go"
-  model: claude-code
-  action: "Review for bugs, security issues, and improvements"
-  output: review.md
-```
-
-### Data Analysis
-
-```bash
-comanda process analyze.yaml < quarterly_data.csv
-```
-
-### Model Comparison
-
-```yaml
-parallel-process:
-  gpt4:
-    input: NA
-    model: gpt-4o
-    action: "Write a function to parse JSON"
-    output: gpt4-solution.py
-
-  claude:
-    input: NA
-    model: claude-3-5-sonnet-latest
-    action: "Write a function to parse JSON"
-    output: claude-solution.py
-
-compare:
-  input: [gpt4-solution.py, claude-solution.py]
-  model: gpt-4o-mini
-  action: "Compare these implementations"
+  action: "Combine into recommendations"
   output: STDOUT
 ```
 
@@ -175,110 +75,59 @@ implement:
   agentic_loop:
     max_iterations: 5
     exit_condition: llm_decides
+    allowed_paths: [./src, ./tests]
+    tools: [Read, Write, Edit, Bash]
   input: STDIN
   model: claude-code
-  action: |
-    Iteration {{ loop.iteration }}.
-    Previous: {{ loop.previous_output }}
-
-    Implement and refine. Say DONE when complete.
+  action: "Implement and test. Say DONE when complete."
   output: STDOUT
 ```
 
-```bash
-echo "Write a binary search function with tests" | comanda process implement.yaml
-```
+### Codebase Indexing
 
-### Agentic Tool Use
-
-Enable Claude Code's full tool capabilities (Read, Write, Edit, Bash) within agentic loops:
-
-```yaml
-explore:
-  agentic_loop:
-    max_iterations: 3
-    exit_condition: llm_decides
-    allowed_paths: [./src, ./tests]  # Enable tool access to these directories
-    tools: [Read, Glob, Grep]        # Restrict to read-only tools
-  input: STDIN
-  model: claude-code
-  action: |
-    Explore the codebase and answer: {{ loop.previous_output }}
-    Say DONE when you have the answer.
-  output: STDOUT
-```
-
-Without `allowed_paths`, Claude Code runs in print-only mode. The `tools` option restricts available tools for safety.
-
-### Server Mode
-
-Turn any workflow into an HTTP API:
+Persistent code context for AI workflows:
 
 ```bash
-comanda server
-curl -X POST "http://localhost:8080/process?filename=review.yaml" \
-  -d '{"input": "code to review"}'
-```
-
-## Codebase Indexing
-
-Generate rich code context for AI workflows:
-
-```bash
-# Index a codebase and register it
-comanda index capture ~/my-project -n myproject
-
-# List registered indexes
-comanda index list
-
-# Show what changed since last index
-comanda index diff myproject
-
-# Use in workflows
+comanda index capture ~/project -n myproject   # Index once
+comanda index list                              # See all indexes
+comanda index diff myproject                    # What changed?
 ```
 
 ```yaml
-# Load from registry instead of regenerating each time
-steps:
-  analyze:
-    codebase_index:
-      use: myproject              # Load from registry
-    model: claude
-    action: "Analyze the architecture"
-
-  # Multi-codebase analysis
-  compare:
-    codebase_index:
-      use: [project1, project2]   # Load multiple
-      aggregate: true             # Combine into single context
-    model: claude
-    action: "Compare these codebases"
+analyze:
+  codebase_index:
+    use: [project1, project2]   # Load from registry
+    aggregate: true
+  model: claude
+  action: "Compare these codebases"
 ```
 
-See `examples/index-registry/` for more examples.
+### Git Worktrees
 
-## Features
+Parallel Claude Code execution in isolated worktrees:
 
-| Feature | Description |
-|---------|-------------|
-| **Multi-provider** | OpenAI, Anthropic, Google, X.AI, Ollama, vLLM, Claude Code, Codex, Gemini CLI |
-| **Parallel processing** | Run independent steps concurrently |
-| **Tool execution** | Run shell commands (`ls`, `jq`, `grep`, custom CLIs) within workflows |
-| **File operations** | Read/write files, wildcards, batch processing |
-| **Vision support** | Analyze images and screenshots |
-| **Web scraping** | Fetch and process URLs |
-| **Database I/O** | Read from and write to PostgreSQL |
-| **Chunking** | Auto-split large files for processing |
-| **Agentic loops** | Iterative refinement until exit condition met |
-| **Memory** | Persistent context via COMANDA.md |
-| **Branching** | Conditional workflows with `defer:` |
-| **qmd integration** | Local search for knowledge bases with [qmd](https://github.com/tobi/qmd) |
-| **Codebase indexing** | Persistent code indexes for multi-repo AI context |
-| **Visualization** | ASCII workflow charts with `comanda chart` |
+```yaml
+worktrees:
+  repo: .
+  trees:
+    - name: feature-a
+      new_branch: true
+    - name: feature-b
+      new_branch: true
 
-## Visualize Workflows
+parallel-process:
+  implement-a:
+    worktree: feature-a
+    model: claude-code
+    action: "Implement feature A"
 
-See the structure of any workflow at a glance:
+  implement-b:
+    worktree: feature-b
+    model: claude-code
+    action: "Implement feature B"
+```
+
+### Workflow Visualization
 
 ```bash
 comanda chart workflow.yaml
@@ -286,154 +135,68 @@ comanda chart workflow.yaml
 
 ```
 +================================================+
-| WORKFLOW: examples/parallel-data-processing... |
-+================================================+
-
-+------------------------------------------------+
-|            INPUT: examples/test.csv            |
-+------------------------------------------------+
-                        |
-                        v
-+================================================+
 | PARALLEL: parallel-process (3 steps)           |
 +------------------------------------------------+
-  +----------------------------------------------+
-  | [OK] analyze_csv                             |
-  | Model:  gpt-4o-mini                          |
-  | Action: Analyze this CSV data and            |
-  +----------------------------------------------+
-  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  +----------------------------------------------+
-  | [OK] extract_entities                        |
-  | Model:  gpt-4o-mini                          |
-  | Action: Extract all named entities           |
-  +----------------------------------------------+
+  ├─ claude-analysis
+  ├─ gemini-analysis
+  └─ codex-analysis
 +================================================+
                         |
                         v
 +------------------------------------------------+
-| [OK] consolidate_results                       |
-| Model:  gpt-4o                                 |
-| Action: Create a comprehensive data analysis   |
+| synthesize                                     |
 +------------------------------------------------+
-
-                        |
-                        v
-+------------------------------------------------+
-|     OUTPUT: comprehensive-report.txt           |
-+------------------------------------------------+
-
-+================================================+
-| STATISTICS                                     |
-|------------------------------------------------|
-| Steps: 4 total, 3 parallel                     |
-| Valid: 4/4                                     |
-+================================================+
 ```
+
+## Supported Providers
+
+| Type | Providers |
+|------|-----------|
+| **Cloud APIs** | OpenAI, Anthropic, Google, X.AI, DeepSeek, Moonshot |
+| **Local** | Ollama, vLLM, any OpenAI-compatible endpoint |
+| **Agentic CLIs** | Claude Code, Gemini CLI, OpenAI Codex |
+
+## All Features
+
+| Feature | Description |
+|---------|-------------|
+| Multi-provider | Cloud APIs, local models, agentic CLIs |
+| Parallel execution | Run steps concurrently |
+| Agentic loops | Iterative refinement with exit conditions |
+| Tool execution | Shell commands within workflows |
+| Codebase indexing | Persistent code context across workflows |
+| Git worktrees | Parallel branches for isolated execution |
+| File operations | Wildcards, chunking, batch processing |
+| Vision | Analyze images and screenshots |
+| Web scraping | Fetch and process URLs |
+| Database I/O | PostgreSQL read/write |
+| Memory | Persistent context via COMANDA.md |
+| qmd integration | Local semantic search |
+| Server mode | HTTP API for any workflow |
+| Visualization | ASCII workflow charts |
 
 ## Documentation
 
-- **[Examples](examples/README.md)** — Sample workflows for common tasks
-- **[Multi-Agent Workflows](examples/multi-agent/README.md)** — Claude Code + Codex + Gemini CLI patterns
-- **[Claude Code Examples](examples/claude-code/README.md)** — Agentic coding workflows
-- **[Agentic Loops](examples/agentic-loop/)** — Iterative refinement workflows
-- **[Tool Use Guide](examples/tool-use/README.md)** — Execute shell commands in workflows
-- **[Server API](docs/server-api.md)** — HTTP endpoints reference
-- **[Configuration Guide](docs/adding-new-model-guide.md)** — Adding models and providers
+- [Examples](examples/README.md) — Sample workflows
+- [Multi-Agent Patterns](examples/multi-agent/README.md)
+- [Agentic Loops](examples/agentic-loop/)
+- [Tool Use Guide](examples/tool-use/README.md)
+- [Server API](docs/server-api.md)
 
-## Installation Options
-
-### Homebrew (macOS)
-```bash
-brew install kris-hansen/comanda/comanda
-```
-
-### Go Install
-```bash
-go install github.com/kris-hansen/comanda@latest
-```
-
-### Remote Install (Go)
-Install directly on a remote host over SSH:
+## Server Mode
 
 ```bash
-ssh user@host 'GOBIN=$HOME/bin go install github.com/kris-hansen/comanda@latest'
-ssh user@host 'export PATH="$HOME/bin:$PATH"; comanda --version'
-```
-
-If you already manage Go on the remote host, you can omit `GOBIN` and rely on the default `$(go env GOPATH)/bin` in your `PATH`.
-
-### Pre-built Binaries
-Download from [GitHub Releases](https://github.com/kris-hansen/comanda/releases) for Windows, macOS, and Linux.
-
-### Build from Source
-```bash
-git clone https://github.com/kris-hansen/comanda.git
-cd comanda && go build
-```
-
-## Configuration
-
-### Provider Setup
-
-```bash
-comanda configure
-```
-
-Interactive prompts for:
-- Provider selection (OpenAI, Anthropic, Google, X.AI, Ollama, vLLM)
-- API keys
-- Model names and capabilities
-
-### Agentic CLI Tools
-
-These use their own authentication—no comanda configuration needed:
-
-```bash
-# Claude Code
-claude --version  # Verify installed
-
-# Gemini CLI
-gemini --version
-
-# OpenAI Codex
-codex --version
-```
-
-### Environment File
-
-Configuration stored in `.env` (current directory) or custom path:
-
-```bash
-export COMANDA_ENV=/path/to/.env
-```
-
-### Encryption
-
-Protect your API keys:
-
-```bash
-comanda configure --encrypt
+comanda server
+curl -X POST "http://localhost:8080/process?filename=review.yaml" \
+  -d '{"input": "code to review"}'
 ```
 
 ## Development
 
 ```bash
-make deps      # Install dependencies
-make build     # Build binary
-make test      # Run tests
-make lint      # Run linter
-make dev       # Full dev cycle
+make deps && make build && make test
 ```
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
 
 ## License
 
 MIT — see [LICENSE](LICENSE)
-
-## Acknowledgments
-
-- OpenAI, Anthropic, and Google for their APIs
-- Ollama and vLLM for local model support
-- The Go community
