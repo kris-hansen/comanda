@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/kris-hansen/comanda/utils/chunker"
+	"github.com/kris-hansen/comanda/utils/codebaseindex"
 	"github.com/kris-hansen/comanda/utils/config"
 	"github.com/kris-hansen/comanda/utils/input"
 	"github.com/kris-hansen/comanda/utils/models"
@@ -559,7 +561,74 @@ func (p *Processor) substituteVariables(text string) string {
 	if p.worktreeHandler != nil {
 		text = p.worktreeHandler.ExpandWorktreeVariables(text)
 	}
+	// Expand index references: ${INDEX:name} -> load from registry
+	text = p.expandIndexReferences(text)
 	return text
+}
+
+// expandIndexReferences expands ${INDEX:name} references by loading from registry
+func (p *Processor) expandIndexReferences(text string) string {
+	// Match ${INDEX:name} pattern
+	re := regexp.MustCompile(`\$\{INDEX:([a-zA-Z0-9_-]+)\}`)
+
+	return re.ReplaceAllStringFunc(text, func(match string) string {
+		// Extract index name
+		matches := re.FindStringSubmatch(match)
+		if len(matches) < 2 {
+			return match
+		}
+		indexName := matches[1]
+
+		// Check if already loaded as a variable
+		varName := strings.ToUpper(indexName) + "_INDEX"
+		if content, ok := p.variables[varName]; ok {
+			return content
+		}
+
+		// Try to load from registry
+		if p.envConfig == nil || p.envConfig.Indexes == nil {
+			p.debugf("Warning: ${INDEX:%s} - no registry available", indexName)
+			return match
+		}
+
+		entry, ok := p.envConfig.Indexes[indexName]
+		if !ok {
+			p.debugf("Warning: ${INDEX:%s} - index not found in registry", indexName)
+			return match
+		}
+
+		// Load index content
+		content, err := os.ReadFile(entry.IndexPath)
+		if err != nil {
+			p.debugf("Warning: ${INDEX:%s} - failed to read: %v", indexName, err)
+			return match
+		}
+
+		// Handle encrypted indexes
+		if entry.Encrypted {
+			key := os.Getenv("COMANDA_INDEX_KEY")
+			if key == "" && p.envConfig != nil {
+				key = p.envConfig.IndexEncryptionKey
+			}
+			if key == "" {
+				p.debugf("Warning: ${INDEX:%s} - encrypted but no key", indexName)
+				return match
+			}
+			decrypted, err := codebaseindex.Decrypt(content, key)
+			if err != nil {
+				p.debugf("Warning: ${INDEX:%s} - decryption failed: %v", indexName, err)
+				return match
+			}
+			content = decrypted
+		}
+
+		// Cache in variables for future use
+		p.variables[varName] = string(content)
+		p.variables[strings.ToUpper(indexName)+"_INDEX_PATH"] = entry.IndexPath
+
+		p.debugf("Loaded index '%s' via ${INDEX:%s} reference", indexName, indexName)
+		return string(content)
+	})
 }
 
 // SubstituteCLIVariables replaces {{varname}} with CLI-provided values
