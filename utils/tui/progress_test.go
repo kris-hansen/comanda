@@ -235,3 +235,38 @@ func TestProgressReporterMultipleSubscribers(t *testing.T) {
 		}
 	}
 }
+
+func TestProgressReporterCollectProcessTree(t *testing.T) {
+	reporter := NewProgressReporter()
+	defer reporter.Close()
+
+	// collectProcessTree should at least return the current process
+	procs := reporter.collectProcessTree(reporter.proc)
+
+	if len(procs) < 1 {
+		t.Errorf("Expected at least 1 process in tree, got %d", len(procs))
+	}
+
+	// First process should be the one we passed in
+	if procs[0].Pid != reporter.proc.Pid {
+		t.Errorf("First process should be the root process")
+	}
+
+	t.Logf("Process tree contains %d process(es)", len(procs))
+}
+
+func TestProgressReporterGetResourceUsageWithChildren(t *testing.T) {
+	reporter := NewProgressReporter()
+	defer reporter.Close()
+
+	// Get resource usage - should aggregate from process tree
+	cpu, mem := reporter.GetResourceUsage()
+
+	// Memory should be positive for any running process
+	if mem <= 0 {
+		t.Errorf("Expected positive memory usage, got %f MB", mem)
+	}
+
+	// CPU can be 0 on first call, that's okay
+	t.Logf("Aggregated resource usage - CPU: %.2f%%, Memory: %.2f MB", cpu, mem)
+}
