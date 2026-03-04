@@ -131,26 +131,51 @@ func (p *ProgressReporter) Complete(err error) {
 	})
 }
 
-// GetResourceUsage returns current CPU and memory usage
+// GetResourceUsage returns current CPU and memory usage for this process and all children
 func (p *ProgressReporter) GetResourceUsage() (cpuPercent float64, memoryMB float64) {
 	if p.proc == nil {
 		return 0, 0
 	}
 
-	// Get CPU percent (this is per-process)
-	cpu, err := p.proc.CPUPercent()
-	if err == nil {
-		// Normalize by number of CPUs for more intuitive display
-		cpuPercent = cpu / float64(runtime.NumCPU())
+	// Collect all processes to monitor (self + children recursively)
+	procs := p.collectProcessTree(p.proc)
+
+	var totalCPU float64
+	var totalMemory uint64
+
+	for _, proc := range procs {
+		// Get CPU percent
+		if cpu, err := proc.CPUPercent(); err == nil {
+			totalCPU += cpu
+		}
+
+		// Get memory info
+		if memInfo, err := proc.MemoryInfo(); err == nil && memInfo != nil {
+			totalMemory += memInfo.RSS
+		}
 	}
 
-	// Get memory info
-	memInfo, err := p.proc.MemoryInfo()
-	if err == nil && memInfo != nil {
-		memoryMB = float64(memInfo.RSS) / 1024 / 1024
-	}
+	// Normalize CPU by number of CPUs for more intuitive display
+	cpuPercent = totalCPU / float64(runtime.NumCPU())
+	memoryMB = float64(totalMemory) / 1024 / 1024
 
 	return cpuPercent, memoryMB
+}
+
+// collectProcessTree recursively collects a process and all its children
+func (p *ProgressReporter) collectProcessTree(proc *process.Process) []*process.Process {
+	procs := []*process.Process{proc}
+
+	children, err := proc.Children()
+	if err != nil || len(children) == 0 {
+		return procs
+	}
+
+	for _, child := range children {
+		procs = append(procs, p.collectProcessTree(child)...)
+	}
+
+	return procs
 }
 
 // Close cleans up all subscribers
