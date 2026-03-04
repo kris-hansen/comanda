@@ -164,6 +164,18 @@ func (p *ProgressReporter) GetResourceUsage() (cpuPercent float64, memoryMB floa
 
 // collectProcessTree recursively collects a process and all its children
 func (p *ProgressReporter) collectProcessTree(proc *process.Process) []*process.Process {
+	visited := make(map[int32]bool)
+	return p.collectProcessTreeWithVisited(proc, visited)
+}
+
+// collectProcessTreeWithVisited recursively collects processes, tracking visited PIDs to prevent cycles
+func (p *ProgressReporter) collectProcessTreeWithVisited(proc *process.Process, visited map[int32]bool) []*process.Process {
+	// Prevent cycles (shouldn't happen with PIDs, but defensive)
+	if visited[proc.Pid] {
+		return nil
+	}
+	visited[proc.Pid] = true
+
 	procs := []*process.Process{proc}
 
 	children, err := proc.Children()
@@ -172,7 +184,7 @@ func (p *ProgressReporter) collectProcessTree(proc *process.Process) []*process.
 	}
 
 	for _, child := range children {
-		procs = append(procs, p.collectProcessTree(child)...)
+		procs = append(procs, p.collectProcessTreeWithVisited(child, visited)...)
 	}
 
 	return procs
