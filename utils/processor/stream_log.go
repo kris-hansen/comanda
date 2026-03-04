@@ -136,7 +136,7 @@ func (s *StreamLogger) LogContextUsage(usedTokens, thresholdTokens, windowTokens
 		return
 	}
 	bar := s.contextBar(percentage)
-	s.Log("📊 CONTEXT: %s %.1f%% (%dk/%dk tokens, %dk window)",
+	s.Log("CONTEXT: %s %.1f%% (%dk/%dk tokens, %dk window)",
 		bar, percentage, usedTokens/1000, thresholdTokens/1000, windowTokens/1000)
 }
 
