@@ -18,37 +18,33 @@ type Activity struct {
 	Message   string
 }
 
-// DashboardState holds the current state of the workflow
-type DashboardState struct {
-	WorkflowName    string
-	CurrentStep     string
-	CurrentLoop     string
-	LoopIteration   int
-	MaxIterations   int
-	ElapsedTime     time.Duration
-	TokensUsed      int
-	TokensAvailable int
-	ContextPercent  float64
-	CPUPercent      float64
-	MemoryMB        float64
-	Activities      []Activity
-	OutputLines     []string
-	Status          string // "running", "paused", "complete", "error"
-	Error           string
-}
-
 // DashboardModel is the bubbletea model for the live dashboard
 type DashboardModel struct {
-	state       DashboardState
+	workflowName  string
+	currentStep   string
+	currentLoop   string
+	loopIteration int
+	maxIterations int
+	elapsedTime   time.Duration
+	tokensUsed    int
+	tokensAvail   int
+	contextPct    float64
+	cpuPercent    float64
+	memoryMB      float64
+	activities    []Activity
+	outputLines   []string
+	status        string // "running", "paused", "complete", "error"
+	errorMsg      string
+
 	spinner     spinner.Model
 	width       int
 	height      int
 	theme       *Theme
 	keymap      dashboardKeyMap
 	startTime   time.Time
-	updateChan  chan DashboardState
+	eventChan   chan ProgressEvent
+	reporter    *ProgressReporter
 	quitting    bool
-	paused      bool
 	verbose     bool
 	maxActivity int
 	maxOutput   int
@@ -56,9 +52,7 @@ type DashboardModel struct {
 
 type dashboardKeyMap struct {
 	Quit    key.Binding
-	Pause   key.Binding
 	Verbose key.Binding
-	Save    key.Binding
 }
 
 func defaultDashboardKeyMap() dashboardKeyMap {
@@ -67,47 +61,40 @@ func defaultDashboardKeyMap() dashboardKeyMap {
 			key.WithKeys("q", "ctrl+c"),
 			key.WithHelp("q", "quit"),
 		),
-		Pause: key.NewBinding(
-			key.WithKeys("p"),
-			key.WithHelp("p", "pause"),
-		),
 		Verbose: key.NewBinding(
 			key.WithKeys("v"),
 			key.WithHelp("v", "verbose"),
 		),
-		Save: key.NewBinding(
-			key.WithKeys("s"),
-			key.WithHelp("s", "snapshot"),
-		),
 	}
 }
 
-// StateUpdateMsg is sent when the state is updated
-type StateUpdateMsg struct {
-	State DashboardState
-}
-
-// TickMsg is sent on each tick for time updates
+// TickMsg is sent on each tick for time/resource updates
 type TickMsg time.Time
 
+// EventMsg wraps a progress event
+type EventMsg struct {
+	Event ProgressEvent
+}
+
 // NewDashboardModel creates a new dashboard model
-func NewDashboardModel(workflowName string) *DashboardModel {
+func NewDashboardModel(workflowName string, reporter *ProgressReporter) *DashboardModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#7C3AED"))
 
+	eventChan := reporter.Subscribe()
+
 	return &DashboardModel{
-		state: DashboardState{
-			WorkflowName: workflowName,
-			Status:       "running",
-		},
-		spinner:     s,
-		theme:       DefaultTheme(),
-		keymap:      defaultDashboardKeyMap(),
-		startTime:   time.Now(),
-		updateChan:  make(chan DashboardState, 100),
-		maxActivity: 8,
-		maxOutput:   5,
+		workflowName: workflowName,
+		status:       "running",
+		spinner:      s,
+		theme:        DefaultTheme(),
+		keymap:       defaultDashboardKeyMap(),
+		startTime:    time.Now(),
+		eventChan:    eventChan,
+		reporter:     reporter,
+		maxActivity:  8,
+		maxOutput:    5,
 	}
 }
 
@@ -116,29 +103,23 @@ func (m *DashboardModel) Init() tea.Cmd {
 	return tea.Batch(
 		m.spinner.Tick,
 		m.tickCmd(),
-		m.waitForUpdate(),
+		m.waitForEvent(),
 	)
 }
 
 func (m *DashboardModel) tickCmd() tea.Cmd {
-	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
+	return tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg {
 		return TickMsg(t)
 	})
 }
 
-func (m *DashboardModel) waitForUpdate() tea.Cmd {
+func (m *DashboardModel) waitForEvent() tea.Cmd {
 	return func() tea.Msg {
-		state := <-m.updateChan
-		return StateUpdateMsg{State: state}
-	}
-}
-
-// SendUpdate sends a state update to the dashboard
-func (m *DashboardModel) SendUpdate(state DashboardState) {
-	select {
-	case m.updateChan <- state:
-	default:
-		// Channel full, skip update
+		event, ok := <-m.eventChan
+		if !ok {
+			return nil
+		}
+		return EventMsg{Event: event}
 	}
 }
 
@@ -152,8 +133,6 @@ func (m *DashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keymap.Quit):
 			m.quitting = true
 			return m, tea.Quit
-		case key.Matches(msg, m.keymap.Pause):
-			m.paused = !m.paused
 		case key.Matches(msg, m.keymap.Verbose):
 			m.verbose = !m.verbose
 		}
@@ -168,16 +147,88 @@ func (m *DashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 
 	case TickMsg:
-		m.state.ElapsedTime = time.Since(m.startTime)
+		m.elapsedTime = time.Since(m.startTime)
+		// Update resource usage
+		if m.reporter != nil {
+			m.cpuPercent, m.memoryMB = m.reporter.GetResourceUsage()
+		}
 		cmds = append(cmds, m.tickCmd())
 
-	case StateUpdateMsg:
-		m.state = msg.State
-		m.state.ElapsedTime = time.Since(m.startTime)
-		cmds = append(cmds, m.waitForUpdate())
+	case EventMsg:
+		m.handleEvent(msg.Event)
+		if m.status != "complete" && m.status != "error" {
+			cmds = append(cmds, m.waitForEvent())
+		}
 	}
 
 	return m, tea.Batch(cmds...)
+}
+
+func (m *DashboardModel) handleEvent(event ProgressEvent) {
+	switch event.Type {
+	case "step_start":
+		m.currentStep = event.StepName
+		m.addActivity("info", fmt.Sprintf("Starting: %s", event.StepName))
+
+	case "step_end":
+		if event.Error != nil {
+			m.addActivity("error", fmt.Sprintf("Failed: %s - %v", event.StepName, event.Error))
+		} else {
+			m.addActivity("info", fmt.Sprintf("Completed: %s", event.StepName))
+		}
+
+	case "loop_iter":
+		m.currentLoop = event.LoopName
+		m.loopIteration = event.Iteration
+		m.maxIterations = event.MaxIter
+		m.addActivity("info", fmt.Sprintf("Loop %s iteration %d/%d", event.LoopName, event.Iteration, event.MaxIter))
+
+	case "tool_call":
+		m.addActivity("tool", event.Message)
+
+	case "output":
+		m.addOutput(event.Message)
+
+	case "tokens":
+		m.tokensUsed = event.TokensUsed
+		m.tokensAvail = event.TokensAvail
+		if m.tokensAvail > 0 {
+			m.contextPct = float64(m.tokensUsed) / float64(m.tokensAvail) * 100
+		}
+
+	case "complete":
+		if event.Error != nil {
+			m.status = "error"
+			m.errorMsg = event.Error.Error()
+			m.addActivity("error", fmt.Sprintf("Workflow failed: %v", event.Error))
+		} else {
+			m.status = "complete"
+			m.addActivity("info", "Workflow completed successfully")
+		}
+	}
+}
+
+func (m *DashboardModel) addActivity(actType, message string) {
+	m.activities = append(m.activities, Activity{
+		Timestamp: time.Now(),
+		Type:      actType,
+		Message:   message,
+	})
+
+	// Trim to max
+	if len(m.activities) > m.maxActivity*2 {
+		m.activities = m.activities[len(m.activities)-m.maxActivity:]
+	}
+}
+
+func (m *DashboardModel) addOutput(line string) {
+	lines := strings.Split(line, "\n")
+	m.outputLines = append(m.outputLines, lines...)
+
+	// Trim to max
+	if len(m.outputLines) > m.maxOutput*2 {
+		m.outputLines = m.outputLines[len(m.outputLines)-m.maxOutput:]
+	}
 }
 
 // View renders the dashboard
@@ -205,7 +256,7 @@ func (m *DashboardModel) View() string {
 	sections = append(sections, m.renderActivity())
 
 	// Output section
-	if len(m.state.OutputLines) > 0 || m.verbose {
+	if len(m.outputLines) > 0 || m.verbose {
 		sections = append(sections, m.renderOutput())
 	}
 
@@ -216,7 +267,6 @@ func (m *DashboardModel) View() string {
 }
 
 func (m *DashboardModel) renderHeader() string {
-	// Main title box
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(m.theme.Primary).
@@ -225,16 +275,12 @@ func (m *DashboardModel) renderHeader() string {
 		Width(m.width - 2).
 		Align(lipgloss.Center)
 
-	// Status indicator
 	var statusIcon string
 	var statusStyle lipgloss.Style
-	switch m.state.Status {
+	switch m.status {
 	case "running":
 		statusIcon = m.spinner.View()
 		statusStyle = lipgloss.NewStyle().Foreground(m.theme.Primary)
-	case "paused":
-		statusIcon = "⏸"
-		statusStyle = lipgloss.NewStyle().Foreground(m.theme.Warning)
 	case "complete":
 		statusIcon = "✓"
 		statusStyle = lipgloss.NewStyle().Foreground(m.theme.Success)
@@ -243,12 +289,12 @@ func (m *DashboardModel) renderHeader() string {
 		statusStyle = lipgloss.NewStyle().Foreground(m.theme.Error)
 	}
 
-	elapsed := formatDuration(m.state.ElapsedTime)
+	elapsed := formatDuration(m.elapsedTime)
 	elapsedStyle := lipgloss.NewStyle().Foreground(m.theme.Muted)
 
 	header := fmt.Sprintf("COMANDA  %s %s  %s",
 		statusStyle.Render(statusIcon),
-		statusStyle.Render(m.state.Status),
+		statusStyle.Render(m.status),
 		elapsedStyle.Render("elapsed: "+elapsed),
 	)
 
@@ -260,26 +306,23 @@ func (m *DashboardModel) renderProgress() string {
 
 	var content strings.Builder
 
-	// Workflow name
 	nameStyle := lipgloss.NewStyle().Bold(true).Foreground(m.theme.Secondary)
 	content.WriteString(nameStyle.Render("Workflow: "))
-	content.WriteString(m.state.WorkflowName)
+	content.WriteString(m.workflowName)
 	content.WriteString("\n")
 
-	// Current step/loop
-	if m.state.CurrentLoop != "" {
+	if m.currentLoop != "" {
 		loopStyle := lipgloss.NewStyle().Foreground(m.theme.Accent)
-		content.WriteString(loopStyle.Render(fmt.Sprintf("Loop: %s", m.state.CurrentLoop)))
+		content.WriteString(loopStyle.Render(fmt.Sprintf("Loop: %s", m.currentLoop)))
 
-		if m.state.MaxIterations > 0 {
-			// Progress bar for loop
-			progress := float64(m.state.LoopIteration) / float64(m.state.MaxIterations)
+		if m.maxIterations > 0 {
+			progress := float64(m.loopIteration) / float64(m.maxIterations)
 			progressBar := m.theme.ProgressBar(progress, 20)
 			percent := int(progress * 100)
 
 			content.WriteString(fmt.Sprintf("  [%d/%d]  %s  %d%%",
-				m.state.LoopIteration,
-				m.state.MaxIterations,
+				m.loopIteration,
+				m.maxIterations,
 				progressBar,
 				percent,
 			))
@@ -287,10 +330,10 @@ func (m *DashboardModel) renderProgress() string {
 		content.WriteString("\n")
 	}
 
-	if m.state.CurrentStep != "" {
+	if m.currentStep != "" {
 		stepStyle := lipgloss.NewStyle().Foreground(m.theme.Muted)
 		content.WriteString(stepStyle.Render("Step: "))
-		content.WriteString(m.state.CurrentStep)
+		content.WriteString(m.currentStep)
 	}
 
 	return boxStyle.Render(content.String())
@@ -299,29 +342,25 @@ func (m *DashboardModel) renderProgress() string {
 func (m *DashboardModel) renderResources() string {
 	boxStyle := m.theme.BoxNormal.Copy().Width(m.width - 4)
 
-	// Split into two columns
 	leftWidth := (m.width - 8) / 2
 	rightWidth := (m.width - 8) / 2
 
 	labelStyle := lipgloss.NewStyle().Bold(true).Foreground(m.theme.Secondary)
-	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#E5E7EB"))
 
 	// Left column: System resources
 	var left strings.Builder
 	left.WriteString(labelStyle.Render("RESOURCES"))
 	left.WriteString("\n")
 
-	// CPU
-	cpuBar := m.theme.ProgressBar(m.state.CPUPercent/100, 12)
-	left.WriteString(fmt.Sprintf("CPU:  %s %3.0f%%\n", cpuBar, m.state.CPUPercent))
+	cpuBar := m.theme.ProgressBar(m.cpuPercent/100, 12)
+	left.WriteString(fmt.Sprintf("CPU:  %s %3.0f%%\n", cpuBar, m.cpuPercent))
 
-	// Memory
-	memPercent := m.state.MemoryMB / 8192 // Assume 8GB baseline
+	memPercent := m.memoryMB / 8192
 	if memPercent > 1 {
 		memPercent = 1
 	}
 	memBar := m.theme.ProgressBar(memPercent, 12)
-	left.WriteString(fmt.Sprintf("MEM:  %s %.1fGB", memBar, m.state.MemoryMB/1024))
+	left.WriteString(fmt.Sprintf("MEM:  %s %.1fGB", memBar, m.memoryMB/1024))
 
 	leftBox := lipgloss.NewStyle().Width(leftWidth).Render(left.String())
 
@@ -330,13 +369,14 @@ func (m *DashboardModel) renderResources() string {
 	right.WriteString(labelStyle.Render("CONTEXT WINDOW"))
 	right.WriteString("\n")
 
-	ctxBar := m.theme.ProgressBar(m.state.ContextPercent/100, 16)
-	right.WriteString(fmt.Sprintf("%s %.0f%%\n", ctxBar, m.state.ContextPercent))
+	ctxBar := m.theme.ProgressBar(m.contextPct/100, 16)
+	right.WriteString(fmt.Sprintf("%s %.0f%%\n", ctxBar, m.contextPct))
 
-	if m.state.TokensAvailable > 0 {
+	if m.tokensAvail > 0 {
+		valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#E5E7EB"))
 		right.WriteString(valueStyle.Render(fmt.Sprintf("%dk / %dk tokens",
-			m.state.TokensUsed/1000,
-			m.state.TokensAvailable/1000,
+			m.tokensUsed/1000,
+			m.tokensAvail/1000,
 		)))
 	}
 
@@ -356,17 +396,16 @@ func (m *DashboardModel) renderActivity() string {
 	content.WriteString(labelStyle.Render("RECENT ACTIVITY"))
 	content.WriteString("\n")
 
-	if len(m.state.Activities) == 0 {
+	if len(m.activities) == 0 {
 		mutedStyle := lipgloss.NewStyle().Foreground(m.theme.Muted).Italic(true)
 		content.WriteString(mutedStyle.Render("  Waiting for activity..."))
 	} else {
-		// Show last N activities
 		start := 0
-		if len(m.state.Activities) > m.maxActivity {
-			start = len(m.state.Activities) - m.maxActivity
+		if len(m.activities) > m.maxActivity {
+			start = len(m.activities) - m.maxActivity
 		}
 
-		for _, activity := range m.state.Activities[start:] {
+		for _, activity := range m.activities[start:] {
 			var icon string
 			var style lipgloss.Style
 
@@ -388,7 +427,6 @@ func (m *DashboardModel) renderActivity() string {
 				style = lipgloss.NewStyle().Foreground(m.theme.Muted)
 			}
 
-			// Truncate long messages
 			msg := activity.Message
 			maxLen := m.width - 10
 			if len(msg) > maxLen {
@@ -413,16 +451,15 @@ func (m *DashboardModel) renderOutput() string {
 	content.WriteString(mutedStyle.Render(fmt.Sprintf(" (last %d lines)", m.maxOutput)))
 	content.WriteString("\n")
 
-	if len(m.state.OutputLines) == 0 {
+	if len(m.outputLines) == 0 {
 		content.WriteString(mutedStyle.Italic(true).Render("  No output yet..."))
 	} else {
 		start := 0
-		if len(m.state.OutputLines) > m.maxOutput {
-			start = len(m.state.OutputLines) - m.maxOutput
+		if len(m.outputLines) > m.maxOutput {
+			start = len(m.outputLines) - m.maxOutput
 		}
 
-		for _, line := range m.state.OutputLines[start:] {
-			// Truncate long lines
+		for _, line := range m.outputLines[start:] {
 			if len(line) > m.width-8 {
 				line = line[:m.width-11] + "..."
 			}
@@ -440,7 +477,7 @@ func (m *DashboardModel) renderFooter() string {
 		Align(lipgloss.Center).
 		MarginTop(1)
 
-	keys := []string{"q quit", "p pause", "v verbose", "s snapshot"}
+	keys := []string{"q quit", "v verbose"}
 	help := strings.Join(keys, "  •  ")
 
 	return helpStyle.Render(help)
@@ -450,20 +487,19 @@ func formatDuration(d time.Duration) string {
 	d = d.Round(time.Second)
 	h := d / time.Hour
 	d -= h * time.Hour
-	m := d / time.Minute
-	d -= m * time.Minute
+	min := d / time.Minute
+	d -= min * time.Minute
 	s := d / time.Second
 
 	if h > 0 {
-		return fmt.Sprintf("%02d:%02d:%02d", h, m, s)
+		return fmt.Sprintf("%02d:%02d:%02d", h, min, s)
 	}
-	return fmt.Sprintf("%02d:%02d", m, s)
+	return fmt.Sprintf("%02d:%02d", min, s)
 }
 
-// RunDashboard starts the dashboard TUI
-func RunDashboard(workflowName string) (*DashboardModel, *tea.Program) {
-	m := NewDashboardModel(workflowName)
+// RunDashboard starts the dashboard TUI and returns the program for external control
+func RunDashboard(workflowName string, reporter *ProgressReporter) (*DashboardModel, *tea.Program) {
+	m := NewDashboardModel(workflowName, reporter)
 	p := tea.NewProgram(m, tea.WithAltScreen())
-
 	return m, p
 }
