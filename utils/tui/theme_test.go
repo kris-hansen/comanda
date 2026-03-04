@@ -39,8 +39,8 @@ func TestModelColor(t *testing.T) {
 	theme := DefaultTheme()
 
 	tests := []struct {
-		model    string
-		wantKey  string // Expected key to match in ModelColors
+		model   string
+		wantKey string // Expected key to match in ModelColors
 	}{
 		{"claude-sonnet", "claude"},
 		{"claude-code", "claude-code"},
@@ -72,7 +72,7 @@ func TestProgressBar(t *testing.T) {
 		{0.5, 10},
 		{1.0, 10},
 		{0.25, 20},
-		{1.5, 10}, // Over 100%
+		{1.5, 10},  // Over 100%
 		{-0.5, 10}, // Negative
 	}
 
