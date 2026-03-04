@@ -3,10 +3,12 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/kris-hansen/comanda/utils/processor"
+	"github.com/kris-hansen/comanda/utils/tui"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -43,7 +45,8 @@ type WorkflowChart struct {
 }
 
 var (
-	chartFormat string
+	chartFormat      string
+	chartInteractive bool
 )
 
 var chartCmd = &cobra.Command{
@@ -86,7 +89,11 @@ Output formats:
 		// Build chart structure
 		chart := buildWorkflowChart(&dslConfig)
 
-		// Render based on format
+		// Render based on format/mode
+		if chartInteractive {
+			return renderInteractiveChart(chart, workflowFile)
+		}
+
 		switch chartFormat {
 		case "mermaid":
 			renderMermaidChart(chart, workflowFile)
@@ -100,6 +107,7 @@ Output formats:
 
 func init() {
 	chartCmd.Flags().StringVarP(&chartFormat, "format", "f", "ascii", "Output format: ascii, mermaid")
+	chartCmd.Flags().BoolVarP(&chartInteractive, "interactive", "i", false, "Interactive TUI mode with colors and navigation")
 	rootCmd.AddCommand(chartCmd)
 }
 
@@ -472,11 +480,11 @@ const (
 	boxDoubleBottomRight = "╝"
 	arrowDown            = "▼"
 	arrowRight           = "▶"
-	loopIcon             = "🔄"
-	stepIcon             = "📋"
-	parallelIcon         = "⫸"
-	inputIcon            = "📥"
-	outputIcon           = "📤"
+	loopIcon             = "*"
+	stepIcon             = ">"
+	parallelIcon         = "="
+	inputIcon            = "<"
+	outputIcon           = ">"
 )
 
 // printBox prints a double-line box with centered text
@@ -609,7 +617,7 @@ func printStatsBox(chart *WorkflowChart, width int) {
 	}
 
 	fmt.Println(boxDoubleTopLeft + strings.Repeat(boxDoubleHoriz, width-2) + boxDoubleTopRight)
-	fmt.Printf("%s %-*s %s\n", boxDoubleVert, width-4, "📊 STATISTICS", boxDoubleVert)
+	fmt.Printf("%s %-*s %s\n", boxDoubleVert, width-4, "STATISTICS", boxDoubleVert)
 	fmt.Println(boxVertRight + strings.Repeat(boxHoriz, width-2) + boxVertLeft)
 	if loopCount > 0 {
 		fmt.Printf("%s %-*s %s\n", boxVert, width-4, fmt.Sprintf(" %s Loops: %d agentic", loopIcon, loopCount), boxVert)
@@ -1189,6 +1197,127 @@ func formatIOList(items []string) string {
 		return strings.Join(items, ", ")
 	}
 	return fmt.Sprintf("%s, %s, ... (+%d more)", items[0], items[1], len(items)-2)
+}
+
+// renderInteractiveChart displays an interactive TUI chart
+func renderInteractiveChart(chart *WorkflowChart, filename string) error {
+	// Convert ChartNodes to TUI nodes
+	var tuiNodes []*tui.ChartNode
+
+	// Add regular nodes
+	for _, node := range chart.Nodes {
+		tuiNode := &tui.ChartNode{
+			Name:    node.Name,
+			Model:   node.Model,
+			Type:    getNodeType(node),
+			IsValid: node.IsValid,
+			Input:   strings.Join(node.Input, ", "),
+			Output:  strings.Join(node.Output, ", "),
+			Action:  node.Action,
+		}
+		tuiNodes = append(tuiNodes, tuiNode)
+	}
+
+	// Add parallel group nodes
+	for groupName, nodes := range chart.ParallelGroups {
+		// Add a parent node for the parallel group
+		parentNode := &tui.ChartNode{
+			Name:    groupName,
+			Model:   "parallel",
+			Type:    "parallel",
+			IsValid: true,
+		}
+		tuiNodes = append(tuiNodes, parentNode)
+
+		// Add child nodes
+		for _, node := range nodes {
+			tuiNode := &tui.ChartNode{
+				Name:    node.Name,
+				Model:   node.Model,
+				Type:    "step",
+				IsValid: node.IsValid,
+				Input:   strings.Join(node.Input, ", "),
+				Output:  strings.Join(node.Output, ", "),
+				Action:  node.Action,
+			}
+			tuiNodes = append(tuiNodes, tuiNode)
+		}
+	}
+
+	// Add agentic loop nodes
+	for loopName, cfg := range chart.AgenticLoopCfgs {
+		// Get model from first step if available
+		model := "agentic"
+		if len(cfg.Steps) > 0 {
+			if m, ok := cfg.Steps[0].Config.Model.(string); ok && m != "" {
+				model = m
+			}
+		}
+		tuiNode := &tui.ChartNode{
+			Name:  loopName,
+			Model: model,
+			Type:  "loop",
+			LoopConfig: &tui.LoopConfig{
+				MaxIterations: cfg.MaxIterations,
+				ExitCondition: cfg.ExitCondition,
+				ContextWindow: cfg.ContextWindow,
+			},
+			IsValid: true,
+		}
+		tuiNodes = append(tuiNodes, tuiNode)
+	}
+
+	// Calculate stats
+	stats := tui.ChartStats{
+		TotalSteps:    len(chart.Nodes),
+		ParallelSteps: 0,
+		LoopCount:     len(chart.AgenticLoopCfgs),
+		ValidSteps:    0,
+		DeferredSteps: len(chart.DeferredSteps),
+		Models:        make(map[string]int),
+	}
+
+	for _, nodes := range chart.ParallelGroups {
+		stats.ParallelSteps += len(nodes)
+	}
+	stats.TotalSteps += stats.ParallelSteps
+
+	for _, node := range chart.Nodes {
+		if node.IsValid {
+			stats.ValidSteps++
+		}
+		if node.Model != "" && node.Model != "N/A" {
+			stats.Models[node.Model]++
+		}
+	}
+	for _, nodes := range chart.ParallelGroups {
+		for _, node := range nodes {
+			if node.IsValid {
+				stats.ValidSteps++
+			}
+			if node.Model != "" && node.Model != "N/A" {
+				stats.Models[node.Model]++
+			}
+		}
+	}
+
+	workflowName := filepath.Base(filename)
+	return tui.RunChart(workflowName, tuiNodes, stats)
+}
+
+// getNodeType determines the TUI node type from a ChartNode
+func getNodeType(node ChartNode) string {
+	switch node.StepType {
+	case "agentic-loop":
+		return "loop"
+	case "generate", "process":
+		return "step"
+	default:
+		if node.IsParallel {
+			return "parallel"
+		}
+		return "step"
+	}
 }
 
 // renderMermaidChart outputs a Mermaid flowchart representation

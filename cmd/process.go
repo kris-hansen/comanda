@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/kris-hansen/comanda/utils/config"
 	"github.com/kris-hansen/comanda/utils/processor"
+	"github.com/kris-hansen/comanda/utils/tui"
 )
 
 // Runtime directory flag
@@ -22,6 +24,9 @@ var varsFlags []string
 
 // Stream log file for real-time monitoring
 var streamLogFile string
+
+// Live TUI dashboard mode
+var processLive bool
 
 var processCmd = &cobra.Command{
 	Use:   "process <workflow.yaml> [additional workflows...]",
@@ -56,6 +61,12 @@ Input can be provided via:
   # In another terminal: tail -f /tmp/progress.log`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		// Handle live TUI mode
+		if processLive {
+			runLiveProcess(args)
+			return
+		}
+
 		// The environment configuration is already loaded in rootCmd's PersistentPreRunE
 		// and available in the package-level envConfig variable
 
@@ -253,6 +264,9 @@ func init() {
 
 	// Add stream log flag for real-time monitoring of long-running operations
 	processCmd.Flags().StringVar(&streamLogFile, "stream-log", "", "Write real-time progress to file (use with tail -f for monitoring)")
+
+	// Add live TUI dashboard mode
+	processCmd.Flags().BoolVar(&processLive, "live", false, "Show live TUI dashboard with progress, resources, and activity")
 }
 
 // parseVarsFlags parses the --vars flags into a map, handling STDIN as a special value
@@ -270,4 +284,84 @@ func parseVarsFlags(flags []string, stdinData string) map[string]string {
 		}
 	}
 	return vars
+}
+
+// runLiveProcess runs the workflow with a live TUI dashboard
+func runLiveProcess(args []string) {
+	if len(args) == 0 {
+		log.Fatal("No workflow file specified")
+	}
+
+	workflowFile := args[0]
+	workflowName := filepath.Base(workflowFile)
+
+	// Create temp stream log file for monitoring
+	tmpFile, err := os.CreateTemp("", "comanda-stream-*.log")
+	if err != nil {
+		log.Fatalf("Failed to create temp stream log: %v", err)
+	}
+	tmpLogPath := tmpFile.Name()
+	tmpFile.Close()
+	defer os.Remove(tmpLogPath)
+
+	// Create progress reporter
+	reporter := tui.NewProgressReporter()
+	defer reporter.Close()
+
+	// Create log watcher
+	watcher := tui.NewLogWatcher(tmpLogPath, reporter)
+	watcher.Start()
+	defer watcher.Stop()
+
+	// Create and start the dashboard
+	_, program := tui.RunDashboard(workflowName, reporter)
+
+	// Run the processor in a goroutine
+	processDone := make(chan error, 1)
+	go func() {
+		err := runWorkflowWithStreamLog(workflowFile, tmpLogPath)
+		reporter.Complete(err)
+		processDone <- err
+	}()
+
+	// Run the TUI (blocks until quit)
+	if _, err := program.Run(); err != nil {
+		log.Printf("Dashboard error: %v", err)
+	}
+
+	// Wait for processing to complete
+	if err := <-processDone; err != nil {
+		log.Printf("\nWorkflow error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// runWorkflowWithStreamLog runs a single workflow with stream logging
+func runWorkflowWithStreamLog(workflowFile, streamLogPath string) error {
+	// Read YAML file
+	yamlFile, err := os.ReadFile(workflowFile)
+	if err != nil {
+		return err
+	}
+
+	// Unmarshal YAML
+	var dslConfig processor.DSLConfig
+	if err := yaml.Unmarshal(yamlFile, &dslConfig); err != nil {
+		return err
+	}
+
+	// Create processor
+	serverConfig := &config.ServerConfig{Enabled: false}
+	cliVars := parseVarsFlags(varsFlags, "")
+
+	proc := processor.NewProcessor(&dslConfig, envConfig, serverConfig, verbose, runtimeDir, cliVars)
+
+	// Set up stream logging
+	if err := proc.SetStreamLog(streamLogPath); err != nil {
+		return err
+	}
+	defer proc.CloseStreamLog()
+
+	// Run processor
+	return proc.Process()
 }

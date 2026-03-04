@@ -58,7 +58,7 @@ const (
 	iconWarning    = "⚠"
 	iconRunning    = "⏳"
 	iconPending    = "○"
-	iconLoop       = "🔄"
+	iconLoop       = "*"
 	iconStep       = "→"
 	iconArrowDown  = "↓"
 	iconArrowRight = "→"
