@@ -302,7 +302,7 @@ func (m *DashboardModel) renderHeader() string {
 }
 
 func (m *DashboardModel) renderProgress() string {
-	boxStyle := m.theme.BoxNormal.Copy().Width(m.width - 4)
+	boxStyle := m.theme.BoxNormal.Width(m.width - 4)
 
 	var content strings.Builder
 
@@ -340,7 +340,7 @@ func (m *DashboardModel) renderProgress() string {
 }
 
 func (m *DashboardModel) renderResources() string {
-	boxStyle := m.theme.BoxNormal.Copy().Width(m.width - 4)
+	boxStyle := m.theme.BoxNormal.Width(m.width - 4)
 
 	leftWidth := (m.width - 8) / 2
 	rightWidth := (m.width - 8) / 2
@@ -388,7 +388,7 @@ func (m *DashboardModel) renderResources() string {
 }
 
 func (m *DashboardModel) renderActivity() string {
-	boxStyle := m.theme.BoxNormal.Copy().Width(m.width - 4)
+	boxStyle := m.theme.BoxNormal.Width(m.width - 4)
 
 	labelStyle := lipgloss.NewStyle().Bold(true).Foreground(m.theme.Secondary)
 
@@ -441,7 +441,7 @@ func (m *DashboardModel) renderActivity() string {
 }
 
 func (m *DashboardModel) renderOutput() string {
-	boxStyle := m.theme.BoxNormal.Copy().Width(m.width - 4)
+	boxStyle := m.theme.BoxNormal.Width(m.width - 4)
 
 	labelStyle := lipgloss.NewStyle().Bold(true).Foreground(m.theme.Secondary)
 	mutedStyle := lipgloss.NewStyle().Foreground(m.theme.Muted)

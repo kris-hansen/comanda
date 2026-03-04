@@ -73,7 +73,7 @@ func (o *Output) Section(title, content string) string {
 		Bold(true).
 		Foreground(o.theme.Secondary)
 
-	boxStyle := o.theme.BoxNormal.Copy().
+	boxStyle := o.theme.BoxNormal.
 		Width(o.width - 4)
 
 	inner := titleStyle.Render(title) + "\n" + content
@@ -261,7 +261,7 @@ func (o *Output) StatsBox(stats map[string]interface{}) string {
 		return b.String()
 	}
 
-	boxStyle := o.theme.BoxNormal.Copy().Width(o.width - 4)
+	boxStyle := o.theme.BoxNormal.Width(o.width - 4)
 	labelStyle := lipgloss.NewStyle().Bold(true).Foreground(o.theme.Secondary)
 	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#E5E7EB"))
 
@@ -295,7 +295,7 @@ func (o *Output) Box(content string) string {
 		return content
 	}
 
-	return o.theme.BoxNormal.Copy().Width(o.width - 4).Render(content)
+	return o.theme.BoxNormal.Width(o.width - 4).Render(content)
 }
 
 // HighlightBox wraps content in a highlighted box
@@ -304,5 +304,5 @@ func (o *Output) HighlightBox(content string) string {
 		return content
 	}
 
-	return o.theme.BoxHighlight.Copy().Width(o.width - 4).Render(content)
+	return o.theme.BoxHighlight.Width(o.width - 4).Render(content)
 }

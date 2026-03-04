@@ -70,7 +70,7 @@ func (w *LogWatcher) watch() {
 	defer file.Close()
 
 	// Start from end of file
-	file.Seek(0, 2)
+	_, _ = file.Seek(0, 2)
 
 	reader := bufio.NewReader(file)
 	ticker := time.NewTicker(100 * time.Millisecond)

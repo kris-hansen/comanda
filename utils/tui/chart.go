@@ -245,7 +245,7 @@ func (m ChartModel) renderNode(node *ChartNode, selected bool, depth int) string
 	// Determine style based on node type and selection
 	var boxStyle lipgloss.Style
 	if selected {
-		boxStyle = m.theme.BoxHighlight.Copy().
+		boxStyle = m.theme.BoxHighlight.
 			BorderForeground(m.theme.Primary).
 			Bold(true)
 	} else if !node.IsValid {
@@ -348,7 +348,7 @@ func (m ChartModel) renderDetails() string {
 
 	node := m.selected
 
-	detailStyle := m.theme.BoxHighlight.Copy().
+	detailStyle := m.theme.BoxHighlight.
 		Width(m.width-4).
 		Padding(1, 2)
 
