@@ -54,7 +54,7 @@ func (p *ProgressDisplay) StartWorkflow(name string, loopCount int) {
 	p.loopCount = 0
 
 	fmt.Println()
-	fmt.Println(p.styler.Box(fmt.Sprintf("🔀 %s", name), 50))
+	fmt.Println(p.styler.Box(name, 50))
 	fmt.Println()
 
 	if loopCount > 0 {

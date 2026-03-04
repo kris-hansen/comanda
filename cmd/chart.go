@@ -472,11 +472,11 @@ const (
 	boxDoubleBottomRight = "╝"
 	arrowDown            = "▼"
 	arrowRight           = "▶"
-	loopIcon             = "🔄"
-	stepIcon             = "📋"
-	parallelIcon         = "⫸"
-	inputIcon            = "📥"
-	outputIcon           = "📤"
+	loopIcon             = "*"
+	stepIcon             = ">"
+	parallelIcon         = "="
+	inputIcon            = "<"
+	outputIcon           = ">"
 )
 
 // printBox prints a double-line box with centered text
@@ -609,7 +609,7 @@ func printStatsBox(chart *WorkflowChart, width int) {
 	}
 
 	fmt.Println(boxDoubleTopLeft + strings.Repeat(boxDoubleHoriz, width-2) + boxDoubleTopRight)
-	fmt.Printf("%s %-*s %s\n", boxDoubleVert, width-4, "📊 STATISTICS", boxDoubleVert)
+	fmt.Printf("%s %-*s %s\n", boxDoubleVert, width-4, "STATISTICS", boxDoubleVert)
 	fmt.Println(boxVertRight + strings.Repeat(boxHoriz, width-2) + boxVertLeft)
 	if loopCount > 0 {
 		fmt.Printf("%s %-*s %s\n", boxVert, width-4, fmt.Sprintf(" %s Loops: %d agentic", loopIcon, loopCount), boxVert)
