@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 // ANSI color codes
@@ -241,20 +243,20 @@ func (s *Styler) Box(title string, width int) string {
 		return s.asciiBox(title, width)
 	}
 
-	titleWidth := displayWidth(title)
-	if width < titleWidth+4 {
-		width = titleWidth + 4
+	// Use lipgloss for proper box rendering
+	border := lipgloss.RoundedBorder()
+	if !s.config.UseUnicode {
+		border = lipgloss.NormalBorder()
 	}
 
-	padding := width - titleWidth - 2
-	leftPad := padding / 2
-	rightPad := padding - leftPad
+	style := lipgloss.NewStyle().
+		Border(border).
+		BorderForeground(lipgloss.Color("240")).
+		Width(width - 2). // Account for border width
+		Align(lipgloss.Center).
+		Bold(true)
 
-	top := boxTopLeft + strings.Repeat(boxHorizontal, width) + boxTopRight
-	middle := boxVertical + strings.Repeat(" ", leftPad) + s.Bold(title) + strings.Repeat(" ", rightPad) + boxVertical
-	bottom := boxBottomLeft + strings.Repeat(boxHorizontal, width) + boxBottomRight
-
-	return top + "\n" + middle + "\n" + bottom
+	return style.Render(title)
 }
 
 func (s *Styler) asciiBox(title string, width int) string {

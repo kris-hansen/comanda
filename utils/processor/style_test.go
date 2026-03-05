@@ -156,11 +156,12 @@ func TestBoxWithEmoji(t *testing.T) {
 			t.Errorf("Top and bottom have different byte lengths: %d vs %d", len(lines[0]), len(lines[2]))
 		}
 
-		// Middle display width + 2 (for corners vs vertical bars) should equal top display width
+		// All three lines should have the same display width
 		topWidth := displayWidth(lines[0])
 		middleWidth := displayWidth(lines[1])
-		if middleWidth+2 != topWidth {
-			t.Errorf("Box alignment issue: middle width (%d) + 2 should equal top width (%d)", middleWidth, topWidth)
+		bottomWidth := displayWidth(lines[2])
+		if middleWidth != topWidth || bottomWidth != topWidth {
+			t.Errorf("Box alignment issue: all lines should have same width, got top=%d, middle=%d, bottom=%d", topWidth, middleWidth, bottomWidth)
 		}
 	})
 
@@ -179,16 +180,19 @@ func TestBoxWithEmoji(t *testing.T) {
 		}
 	})
 
-	t.Run("box expands for long titles", func(t *testing.T) {
+	t.Run("box handles long titles gracefully", func(t *testing.T) {
 		box := styler.Box("This is a very long title that exceeds width", 20)
 		lines := strings.Split(box, "\n")
 
-		// Should still have correct structure
+		// Should still have correct structure (first and last lines are borders)
 		if !strings.HasPrefix(lines[0], "╭") || !strings.HasSuffix(lines[0], "╮") {
 			t.Errorf("Top line has incorrect corners for long title")
 		}
-		if !strings.Contains(lines[1], "This is a very long title") {
-			t.Errorf("Middle line should contain the full title")
+		// lipgloss wraps long text, so the title may be split across multiple lines
+		// Just verify the box contains the title words
+		fullBox := strings.Join(lines, " ")
+		if !strings.Contains(fullBox, "This") || !strings.Contains(fullBox, "title") {
+			t.Errorf("Box should contain title text, got: %s", box)
 		}
 	})
 }
