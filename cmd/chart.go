@@ -7,10 +7,30 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/kris-hansen/comanda/utils/processor"
 	"github.com/kris-hansen/comanda/utils/tui"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
+)
+
+// Chart box styles using lipgloss
+var (
+	chartBoxStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("240")).
+			Padding(0, 1)
+
+	chartDoubleBoxStyle = lipgloss.NewStyle().
+				Border(lipgloss.DoubleBorder()).
+				BorderForeground(lipgloss.Color("240")).
+				Padding(0, 1)
+
+	chartHeaderStyle = lipgloss.NewStyle().
+				Border(lipgloss.DoubleBorder()).
+				BorderForeground(lipgloss.Color("99")).
+				Padding(0, 1).
+				Bold(true)
 )
 
 // ChartNode represents a step in the workflow visualization
@@ -489,31 +509,14 @@ const (
 
 // printBox prints a double-line box with centered text
 func printBox(text string, width int) {
-	// Truncate if needed
-	if len(text) > width-4 {
-		text = text[:width-7] + "..."
-	}
-	padding := width - 2 - len(text)
-	leftPad := padding / 2
-	rightPad := padding - leftPad
-
-	fmt.Println(boxDoubleTopLeft + strings.Repeat(boxDoubleHoriz, width-2) + boxDoubleTopRight)
-	fmt.Printf("%s%s%s%s%s\n", boxDoubleVert, strings.Repeat(" ", leftPad), text, strings.Repeat(" ", rightPad), boxDoubleVert)
-	fmt.Println(boxDoubleBottomLeft + strings.Repeat(boxDoubleHoriz, width-2) + boxDoubleBottomRight)
+	style := chartDoubleBoxStyle.Width(width - 2).Align(lipgloss.Center)
+	fmt.Println(style.Render(text))
 }
 
 // printSmallBox prints a single-line box
 func printSmallBox(text string, width int) {
-	if len(text) > width-4 {
-		text = text[:width-7] + "..."
-	}
-	padding := width - 2 - len(text)
-	leftPad := padding / 2
-	rightPad := padding - leftPad
-
-	fmt.Println(boxTopLeft + strings.Repeat(boxHoriz, width-2) + boxTopRight)
-	fmt.Printf("%s%s%s%s%s\n", boxVert, strings.Repeat(" ", leftPad), text, strings.Repeat(" ", rightPad), boxVert)
-	fmt.Println(boxBottomLeft + strings.Repeat(boxHoriz, width-2) + boxBottomRight)
+	style := chartBoxStyle.Width(width - 2).Align(lipgloss.Center)
+	fmt.Println(style.Render(text))
 }
 
 // printStepBox prints a step box with name, model, and summary
