@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/kris-hansen/comanda/utils/tui"
 )
 
 // ANSI color codes
@@ -279,7 +280,7 @@ func (s *Styler) Divider(width int) string {
 	if !s.config.UseUnicode {
 		return strings.Repeat("-", width)
 	}
-	return s.Muted(strings.Repeat(boxHorizontal, width))
+	return s.Muted(tui.Separator(width))
 }
 
 // TreeBranch returns tree-drawing characters for hierarchical output
