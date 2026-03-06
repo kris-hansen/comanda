@@ -5,6 +5,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/kris-hansen/comanda/utils/tui"
 )
 
 // StreamLogger handles real-time logging to a file for monitoring long-running operations
@@ -64,9 +66,10 @@ func (s *StreamLogger) LogSection(title string) {
 	if !s.enabled {
 		return
 	}
-	s.Log("═══════════════════════════════════════════════════════════════")
+	separator := tui.DoubleSeparator(64)
+	s.Log("%s", separator)
 	s.Log("  %s", title)
-	s.Log("═══════════════════════════════════════════════════════════════")
+	s.Log("%s", separator)
 }
 
 // LogIteration writes iteration start info

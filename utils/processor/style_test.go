@@ -151,16 +151,13 @@ func TestBoxWithEmoji(t *testing.T) {
 			t.Errorf("Bottom line has incorrect corners: %q", lines[2])
 		}
 
-		// Top and bottom should have same length (they use same width)
-		if len(lines[0]) != len(lines[2]) {
-			t.Errorf("Top and bottom have different byte lengths: %d vs %d", len(lines[0]), len(lines[2]))
-		}
-
-		// Middle display width + 2 (for corners vs vertical bars) should equal top display width
+		// All lines should have the same display width (lipgloss ensures proper alignment)
 		topWidth := displayWidth(lines[0])
 		middleWidth := displayWidth(lines[1])
-		if middleWidth+2 != topWidth {
-			t.Errorf("Box alignment issue: middle width (%d) + 2 should equal top width (%d)", middleWidth, topWidth)
+		bottomWidth := displayWidth(lines[2])
+		if topWidth != middleWidth || middleWidth != bottomWidth {
+			t.Errorf("Box alignment issue: all lines should have equal width (top=%d, middle=%d, bottom=%d)",
+				topWidth, middleWidth, bottomWidth)
 		}
 	})
 

@@ -39,8 +39,7 @@ func (o *Output) Header(title string) string {
 		Foreground(o.theme.Primary).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(o.theme.Primary).
-		Padding(0, 2).
-		Width(o.width - 2).
+		Padding(0, 4).
 		Align(lipgloss.Center)
 
 	return style.Render(title)
