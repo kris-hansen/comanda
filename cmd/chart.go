@@ -294,7 +294,7 @@ func stepToChartNode(step processor.Step, isParallel bool, parallelID string) Ch
 		node.Output = []string{step.Config.Generate.Output}
 	} else if step.Config.Process != nil {
 		node.StepType = "process"
-		node.Model = "N/A"
+		node.Model = modelNA
 		node.Action = fmt.Sprintf("Process: %s", step.Config.Process.WorkflowFile)
 	} else if step.Config.Type == "openai-responses" {
 		node.StepType = "openai-responses"
@@ -486,6 +486,7 @@ const (
 	arrowDown    = "▼" // Used for flow connectors
 	loopIcon     = "*"
 	parallelIcon = "="
+	modelNA      = "N/A" // Placeholder for missing model
 )
 
 // printBox prints a double-line box with centered text
@@ -512,7 +513,7 @@ func printStepBox(name, model, summary string, isValid bool, width int, node *Ch
 	lines = append(lines, fmt.Sprintf("%s %s", status, name))
 
 	// Add model if present
-	if model != "" && model != "N/A" && model != "[]" {
+	if model != "" && model != modelNA && model != "[]" {
 		lines = append(lines, fmt.Sprintf("Model: %s", model))
 	}
 
@@ -563,13 +564,13 @@ func printStatsBox(chart *WorkflowChart, width int) {
 	// Count models
 	modelCounts := make(map[string]int)
 	for _, node := range chart.Nodes {
-		if node.Model != "" && node.Model != "N/A" && node.Model != "[]" {
+		if node.Model != "" && node.Model != modelNA && node.Model != "[]" {
 			modelCounts[node.Model]++
 		}
 	}
 	for _, nodes := range chart.ParallelGroups {
 		for _, node := range nodes {
-			if node.Model != "" && node.Model != "N/A" && node.Model != "[]" {
+			if node.Model != "" && node.Model != modelNA && node.Model != "[]" {
 				modelCounts[node.Model]++
 			}
 		}
@@ -772,7 +773,7 @@ func renderNodeInline(node ChartNode, width int) {
 	var lines []string
 	lines = append(lines, fmt.Sprintf("%s %s", status, node.Name))
 
-	if node.Model != "" && node.Model != "N/A" && node.Model != "[]" {
+	if node.Model != "" && node.Model != modelNA && node.Model != "[]" {
 		lines = append(lines, fmt.Sprintf("Model: %s", node.Model))
 	}
 
@@ -807,7 +808,7 @@ func renderParallelGroup(nodes []ChartNode, groupName string, stepNum int, boxWi
 			status = "✗"
 		}
 		contentLines = append(contentLines, fmt.Sprintf("  %s %s", status, node.Name))
-		if node.Model != "" && node.Model != "N/A" && node.Model != "[]" {
+		if node.Model != "" && node.Model != modelNA && node.Model != "[]" {
 			contentLines = append(contentLines, fmt.Sprintf("    Model: %s", node.Model))
 		}
 		if i < len(nodes)-1 {
@@ -885,7 +886,7 @@ func renderAgenticLoopBox(config *processor.AgenticLoopConfig, boxWidth int) {
 			status = "✗"
 		}
 		lines = append(lines, fmt.Sprintf("  %s %s", status, node.Name))
-		if node.Model != "" && node.Model != "N/A" && node.Model != "[]" {
+		if node.Model != "" && node.Model != modelNA && node.Model != "[]" {
 			lines = append(lines, fmt.Sprintf("    Model: %s", node.Model))
 		}
 		if i < len(config.Steps)-1 {
@@ -1222,7 +1223,7 @@ func renderInteractiveChart(chart *WorkflowChart, filename string) error {
 		if node.IsValid {
 			stats.ValidSteps++
 		}
-		if node.Model != "" && node.Model != "N/A" {
+		if node.Model != "" && node.Model != modelNA {
 			stats.Models[node.Model]++
 		}
 	}
@@ -1231,7 +1232,7 @@ func renderInteractiveChart(chart *WorkflowChart, filename string) error {
 			if node.IsValid {
 				stats.ValidSteps++
 			}
-			if node.Model != "" && node.Model != "N/A" {
+			if node.Model != "" && node.Model != modelNA {
 				stats.Models[node.Model]++
 			}
 		}
@@ -1272,7 +1273,7 @@ func renderMermaidChart(chart *WorkflowChart, filename string) {
 	// Node label with details
 	nodeLabel := func(node ChartNode) string {
 		label := node.Name
-		if node.Model != "" && node.Model != "N/A" && node.Model != "[]" {
+		if node.Model != "" && node.Model != modelNA && node.Model != "[]" {
 			label += "<br/><i>" + node.Model + "</i>"
 		}
 		summary := summarizeAction(node.Action, node.StepType)
