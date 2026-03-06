@@ -7,10 +7,30 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/kris-hansen/comanda/utils/processor"
 	"github.com/kris-hansen/comanda/utils/tui"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
+)
+
+// Chart box styles using lipgloss
+var (
+	chartBoxStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("240")).
+			Padding(0, 1)
+
+	chartDoubleBoxStyle = lipgloss.NewStyle().
+				Border(lipgloss.DoubleBorder()).
+				BorderForeground(lipgloss.Color("240")).
+				Padding(0, 1)
+
+	chartHeaderStyle = lipgloss.NewStyle().
+				Border(lipgloss.DoubleBorder()).
+				BorderForeground(lipgloss.Color("99")).
+				Padding(0, 1).
+				Bold(true)
 )
 
 // ChartNode represents a step in the workflow visualization
@@ -460,60 +480,24 @@ func renderChart(chart *WorkflowChart, filename string) {
 }
 
 // Unicode box-drawing characters
+// Chart icons and connectors (boxes now rendered via lipgloss)
 const (
-	boxHoriz             = "─"
-	boxVert              = "│"
-	boxTopLeft           = "┌"
-	boxTopRight          = "┐"
-	boxBottomLeft        = "└"
-	boxBottomRight       = "┘"
-	boxVertRight         = "├"
-	boxVertLeft          = "┤"
-	boxHorizDown         = "┬"
-	boxHorizUp           = "┴"
-	boxCross             = "┼"
-	boxDoubleHoriz       = "═"
-	boxDoubleVert        = "║"
-	boxDoubleTopLeft     = "╔"
-	boxDoubleTopRight    = "╗"
-	boxDoubleBottomLeft  = "╚"
-	boxDoubleBottomRight = "╝"
-	arrowDown            = "▼"
-	arrowRight           = "▶"
-	loopIcon             = "*"
-	stepIcon             = ">"
-	parallelIcon         = "="
-	inputIcon            = "<"
-	outputIcon           = ">"
+	boxVert      = "│" // Used for flow connectors
+	arrowDown    = "▼" // Used for flow connectors
+	loopIcon     = "*"
+	parallelIcon = "="
 )
 
 // printBox prints a double-line box with centered text
 func printBox(text string, width int) {
-	// Truncate if needed
-	if len(text) > width-4 {
-		text = text[:width-7] + "..."
-	}
-	padding := width - 2 - len(text)
-	leftPad := padding / 2
-	rightPad := padding - leftPad
-
-	fmt.Println(boxDoubleTopLeft + strings.Repeat(boxDoubleHoriz, width-2) + boxDoubleTopRight)
-	fmt.Printf("%s%s%s%s%s\n", boxDoubleVert, strings.Repeat(" ", leftPad), text, strings.Repeat(" ", rightPad), boxDoubleVert)
-	fmt.Println(boxDoubleBottomLeft + strings.Repeat(boxDoubleHoriz, width-2) + boxDoubleBottomRight)
+	style := chartDoubleBoxStyle.Padding(0, 4).Align(lipgloss.Center)
+	fmt.Println(style.Render(text))
 }
 
 // printSmallBox prints a single-line box
 func printSmallBox(text string, width int) {
-	if len(text) > width-4 {
-		text = text[:width-7] + "..."
-	}
-	padding := width - 2 - len(text)
-	leftPad := padding / 2
-	rightPad := padding - leftPad
-
-	fmt.Println(boxTopLeft + strings.Repeat(boxHoriz, width-2) + boxTopRight)
-	fmt.Printf("%s%s%s%s%s\n", boxVert, strings.Repeat(" ", leftPad), text, strings.Repeat(" ", rightPad), boxVert)
-	fmt.Println(boxBottomLeft + strings.Repeat(boxHoriz, width-2) + boxBottomRight)
+	style := chartBoxStyle.Padding(0, 4).Align(lipgloss.Center)
+	fmt.Println(style.Render(text))
 }
 
 // printStepBox prints a step box with name, model, and summary
@@ -523,55 +507,30 @@ func printStepBox(name, model, summary string, isValid bool, width int, node *Ch
 		status = "✗"
 	}
 
-	// Build the content lines
-	line1 := fmt.Sprintf(" %s %s", status, name)
+	// Build content lines
+	var lines []string
+	lines = append(lines, fmt.Sprintf("%s %s", status, name))
 
-	// Truncate lines if needed
-	maxContent := width - 4
-
-	// Print the box
-	fmt.Println(boxTopLeft + strings.Repeat(boxHoriz, width-2) + boxTopRight)
-
-	// Name line
-	if len(line1) > maxContent {
-		line1 = line1[:maxContent-3] + "..."
-	}
-	fmt.Printf("%s %-*s %s\n", boxVert, width-4, line1, boxVert)
-
-	// Separator
-	fmt.Println(boxVertRight + strings.Repeat(boxHoriz, width-2) + boxVertLeft)
-
-	// Model line
+	// Add model if present
 	if model != "" && model != "N/A" && model != "[]" {
-		modelLine := fmt.Sprintf(" Model: %s", model)
-		if len(modelLine) > maxContent {
-			modelLine = modelLine[:maxContent-3] + "..."
-		}
-		fmt.Printf("%s %-*s %s\n", boxVert, width-4, modelLine, boxVert)
+		lines = append(lines, fmt.Sprintf("Model: %s", model))
 	}
 
-	// Action/prompt line
+	// Add action/summary if present
 	if summary != "" {
-		actionLine := fmt.Sprintf(" %s", summary)
-		if len(actionLine) > maxContent {
-			actionLine = actionLine[:maxContent-3] + "..."
-		}
-		fmt.Printf("%s %-*s %s\n", boxVert, width-4, actionLine, boxVert)
+		lines = append(lines, summary)
 	}
 
-	// Show output if available
+	// Add output if available
 	if node != nil && len(node.Output) > 0 {
 		outStr := strings.Join(node.Output, ", ")
 		if outStr != "" && outStr != "STDOUT" && outStr != "[]" {
-			outputLine := fmt.Sprintf(" Output: %s", outStr)
-			if len(outputLine) > maxContent {
-				outputLine = outputLine[:maxContent-3] + "..."
-			}
-			fmt.Printf("%s %-*s %s\n", boxVert, width-4, outputLine, boxVert)
+			lines = append(lines, fmt.Sprintf("Output: %s", outStr))
 		}
 	}
 
-	fmt.Println(boxBottomLeft + strings.Repeat(boxHoriz, width-2) + boxBottomRight)
+	// Render with lipgloss
+	fmt.Println(tui.RenderMultiLineBox(lines, width, false))
 }
 
 // printStatsBox prints the statistics in a box
@@ -616,34 +575,34 @@ func printStatsBox(chart *WorkflowChart, width int) {
 		}
 	}
 
-	fmt.Println(boxDoubleTopLeft + strings.Repeat(boxDoubleHoriz, width-2) + boxDoubleTopRight)
-	fmt.Printf("%s %-*s %s\n", boxDoubleVert, width-4, "STATISTICS", boxDoubleVert)
-	fmt.Println(boxVertRight + strings.Repeat(boxHoriz, width-2) + boxVertLeft)
+	// Build content lines
+	var lines []string
+	lines = append(lines, "STATISTICS")
+
 	if loopCount > 0 {
-		fmt.Printf("%s %-*s %s\n", boxVert, width-4, fmt.Sprintf(" %s Loops: %d agentic", loopIcon, loopCount), boxVert)
+		lines = append(lines, fmt.Sprintf("%s Loops: %d agentic", loopIcon, loopCount))
 	} else {
-		fmt.Printf("%s %-*s %s\n", boxVert, width-4, fmt.Sprintf(" Steps: %d total, %d parallel", totalSteps, parallelSteps), boxVert)
+		lines = append(lines, fmt.Sprintf("Steps: %d total, %d parallel", totalSteps, parallelSteps))
 	}
 	if len(chart.DeferredSteps) > 0 {
-		fmt.Printf("%s %-*s %s\n", boxVert, width-4, fmt.Sprintf(" Deferred: %d conditional", len(chart.DeferredSteps)), boxVert)
+		lines = append(lines, fmt.Sprintf("Deferred: %d conditional", len(chart.DeferredSteps)))
 	}
 	if loopCount == 0 {
-		fmt.Printf("%s %-*s %s\n", boxVert, width-4, fmt.Sprintf(" Valid: %d/%d", validSteps, totalSteps), boxVert)
+		lines = append(lines, fmt.Sprintf("Valid: %d/%d", validSteps, totalSteps))
 	}
 
 	if len(modelCounts) > 0 {
-		fmt.Println(boxVertRight + strings.Repeat(boxHoriz, width-2) + boxVertLeft)
 		var models []string
 		for model := range modelCounts {
 			models = append(models, model)
 		}
 		sort.Strings(models)
 		for _, model := range models {
-			modelLine := fmt.Sprintf(" %s (%d)", model, modelCounts[model])
-			fmt.Printf("%s %-*s %s\n", boxVert, width-4, modelLine, boxVert)
+			lines = append(lines, fmt.Sprintf("%s (%d)", model, modelCounts[model]))
 		}
 	}
-	fmt.Println(boxDoubleBottomLeft + strings.Repeat(boxDoubleHoriz, width-2) + boxDoubleBottomRight)
+
+	fmt.Println(tui.RenderMultiLineBox(lines, width, true))
 }
 
 // getEntryPointText returns a short description of entry points
@@ -809,71 +768,56 @@ func renderNodeInline(node ChartNode, width int) {
 	}
 	summary := summarizeAction(node.Action, node.StepType)
 
-	maxContent := width - 6
+	// Build content lines
+	var lines []string
+	lines = append(lines, fmt.Sprintf("%s %s", status, node.Name))
 
-	// Name line
-	line1 := fmt.Sprintf(" %s %s", status, node.Name)
-	if len(line1) > maxContent {
-		line1 = line1[:maxContent-3] + "..."
-	}
-
-	fmt.Println("  " + boxTopLeft + strings.Repeat(boxHoriz, width-4) + boxTopRight)
-	fmt.Printf("  %s %-*s %s\n", boxVert, width-6, line1, boxVert)
-
-	// Model line
 	if node.Model != "" && node.Model != "N/A" && node.Model != "[]" {
-		line2 := fmt.Sprintf(" Model: %s", node.Model)
-		if len(line2) > maxContent {
-			line2 = line2[:maxContent-3] + "..."
-		}
-		fmt.Printf("  %s %-*s %s\n", boxVert, width-6, line2, boxVert)
+		lines = append(lines, fmt.Sprintf("Model: %s", node.Model))
 	}
 
-	// Action line
 	if summary != "" {
-		line3 := fmt.Sprintf(" %s", summary)
-		if len(line3) > maxContent {
-			line3 = line3[:maxContent-3] + "..."
-		}
-		fmt.Printf("  %s %-*s %s\n", boxVert, width-6, line3, boxVert)
+		lines = append(lines, summary)
 	}
 
-	// Output line
 	if len(node.Output) > 0 {
 		outStr := strings.Join(node.Output, ", ")
 		if outStr != "" && outStr != "STDOUT" && outStr != "[]" {
-			outputLine := fmt.Sprintf(" Output: %s", outStr)
-			if len(outputLine) > maxContent {
-				outputLine = outputLine[:maxContent-3] + "..."
-			}
-			fmt.Printf("  %s %-*s %s\n", boxVert, width-6, outputLine, boxVert)
+			lines = append(lines, fmt.Sprintf("Output: %s", outStr))
 		}
 	}
 
-	fmt.Println("  " + boxBottomLeft + strings.Repeat(boxHoriz, width-4) + boxBottomRight)
+	// Render with indent
+	box := tui.RenderMultiLineBox(lines, width-4, false)
+	for _, line := range strings.Split(box, "\n") {
+		fmt.Println("  " + line)
+	}
 }
 
 // renderParallelGroup draws a parallel execution group
 func renderParallelGroup(nodes []ChartNode, groupName string, stepNum int, boxWidth int) {
-	// Draw a box around the parallel group
-	fmt.Println(boxDoubleTopLeft + strings.Repeat(boxDoubleHoriz, boxWidth-2) + boxDoubleTopRight)
-	header := fmt.Sprintf(" %s PARALLEL: %s (%d steps)", parallelIcon, groupName, len(nodes))
-	if len(header) > boxWidth-4 {
-		header = header[:boxWidth-7] + "..."
-	}
-	fmt.Printf("%s %-*s %s\n", boxDoubleVert, boxWidth-4, header, boxDoubleVert)
-	fmt.Println(boxVertRight + strings.Repeat(boxHoriz, boxWidth-2) + boxVertLeft)
+	// Build header
+	header := fmt.Sprintf("%s PARALLEL: %s (%d steps)", parallelIcon, groupName, len(nodes))
 
-	// Render each parallel node as a smaller box inside
+	// Build content with inline nodes
+	var contentLines []string
 	for i, node := range nodes {
-		renderNodeInline(node, boxWidth)
+		status := "✓"
+		if !node.IsValid {
+			status = "✗"
+		}
+		contentLines = append(contentLines, fmt.Sprintf("  %s %s", status, node.Name))
+		if node.Model != "" && node.Model != "N/A" && node.Model != "[]" {
+			contentLines = append(contentLines, fmt.Sprintf("    Model: %s", node.Model))
+		}
 		if i < len(nodes)-1 {
-			// Separator between parallel nodes
-			fmt.Println("  " + strings.Repeat("┄", boxWidth-6))
+			contentLines = append(contentLines, "  ┄┄┄")
 		}
 	}
 
-	fmt.Println(boxDoubleBottomLeft + strings.Repeat(boxDoubleHoriz, boxWidth-2) + boxDoubleBottomRight)
+	// Combine header and content
+	allLines := append([]string{header}, contentLines...)
+	fmt.Println(tui.RenderMultiLineBox(allLines, boxWidth, true))
 }
 
 // processAgenticLoopBlocks handles standalone agentic-loop blocks (config.AgenticLoops)
@@ -898,13 +842,11 @@ func renderAgenticLoopBox(config *processor.AgenticLoopConfig, boxWidth int) {
 		displayName = config.Name
 	}
 
+	// Build content lines
+	var lines []string
+
 	// Header
-	fmt.Println(boxDoubleTopLeft + strings.Repeat(boxDoubleHoriz, boxWidth-2) + boxDoubleTopRight)
-	header := fmt.Sprintf(" %s %s", loopIcon, displayName)
-	if len(header) > boxWidth-4 {
-		header = header[:boxWidth-7] + "..."
-	}
-	fmt.Printf("%s %-*s %s\n", boxDoubleVert, boxWidth-4, header, boxDoubleVert)
+	lines = append(lines, fmt.Sprintf("%s %s", loopIcon, displayName))
 
 	// Config line
 	exitInfo := config.ExitCondition
@@ -915,53 +857,47 @@ func renderAgenticLoopBox(config *processor.AgenticLoopConfig, boxWidth int) {
 	if maxIter == 0 {
 		maxIter = 10
 	}
-	configLine := fmt.Sprintf(" Iterations: %d │ Exit: %s", maxIter, exitInfo)
+	configLine := fmt.Sprintf("Iterations: %d │ Exit: %s", maxIter, exitInfo)
 	if config.TimeoutSeconds > 0 {
 		configLine += fmt.Sprintf(" │ Timeout: %ds", config.TimeoutSeconds)
 	}
 	if config.Stateful {
 		configLine += " │ Stateful"
 	}
-	if len(configLine) > boxWidth-4 {
-		configLine = configLine[:boxWidth-7] + "..."
-	}
-	fmt.Printf("%s %-*s %s\n", boxVert, boxWidth-4, configLine, boxVert)
+	lines = append(lines, configLine)
 
 	if config.ContextWindow > 0 {
-		ctxLine := fmt.Sprintf(" Context Window: %d iterations", config.ContextWindow)
-		fmt.Printf("%s %-*s %s\n", boxVert, boxWidth-4, ctxLine, boxVert)
+		lines = append(lines, fmt.Sprintf("Context Window: %d iterations", config.ContextWindow))
 	}
 
 	// Show allowed paths if any
 	if len(config.AllowedPaths) > 0 {
 		pathsPreview := strings.Join(config.AllowedPaths, ", ")
-		if len(pathsPreview) > boxWidth-14 {
-			pathsPreview = pathsPreview[:boxWidth-17] + "..."
-		}
-		pathsLine := fmt.Sprintf(" Paths: %s", pathsPreview)
-		fmt.Printf("%s %-*s %s\n", boxVert, boxWidth-4, pathsLine, boxVert)
+		lines = append(lines, fmt.Sprintf("Paths: %s", pathsPreview))
 	}
 
-	fmt.Println(boxVertRight + strings.Repeat(boxHoriz, boxWidth-2) + boxVertLeft)
-
-	// Render each step
+	// Add steps
+	lines = append(lines, "─────────────────────────")
 	for i, step := range config.Steps {
 		node := stepToChartNode(step, false, "")
-		renderNodeInline(node, boxWidth)
+		status := "✓"
+		if !node.IsValid {
+			status = "✗"
+		}
+		lines = append(lines, fmt.Sprintf("  %s %s", status, node.Name))
+		if node.Model != "" && node.Model != "N/A" && node.Model != "[]" {
+			lines = append(lines, fmt.Sprintf("    Model: %s", node.Model))
+		}
 		if i < len(config.Steps)-1 {
-			fmt.Println("  " + strings.Repeat(" ", (boxWidth-6)/2) + boxVert)
-			fmt.Println("  " + strings.Repeat(" ", (boxWidth-6)/2) + arrowDown)
+			lines = append(lines, "    ↓")
 		}
 	}
 
 	// Loop-back indicator
-	fmt.Println(boxVert + strings.Repeat(" ", boxWidth-2) + boxVert)
-	loopBack := fmt.Sprintf(" ↺ loop back (max %d iterations)", maxIter)
-	if len(loopBack) > boxWidth-4 {
-		loopBack = loopBack[:boxWidth-7] + "..."
-	}
-	fmt.Printf("%s %-*s %s\n", boxVert, boxWidth-4, loopBack, boxVert)
-	fmt.Println(boxDoubleBottomLeft + strings.Repeat(boxDoubleHoriz, boxWidth-2) + boxDoubleBottomRight)
+	lines = append(lines, "")
+	lines = append(lines, fmt.Sprintf("↺ loop back (max %d iterations)", maxIter))
+
+	fmt.Println(tui.RenderMultiLineBox(lines, boxWidth, true))
 }
 
 // processMultiLoopWorkflow handles multi-loop orchestration syntax
