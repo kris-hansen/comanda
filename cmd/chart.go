@@ -490,13 +490,13 @@ const (
 
 // printBox prints a double-line box with centered text
 func printBox(text string, width int) {
-	style := chartDoubleBoxStyle.Width(width - 2).Align(lipgloss.Center)
+	style := chartDoubleBoxStyle.Padding(0, 4).Align(lipgloss.Center)
 	fmt.Println(style.Render(text))
 }
 
 // printSmallBox prints a single-line box
 func printSmallBox(text string, width int) {
-	style := chartBoxStyle.Width(width - 2).Align(lipgloss.Center)
+	style := chartBoxStyle.Padding(0, 4).Align(lipgloss.Center)
 	fmt.Println(style.Render(text))
 }
 

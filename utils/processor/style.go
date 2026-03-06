@@ -244,16 +244,14 @@ func (s *Styler) Box(title string, width int) string {
 		return s.asciiBox(title, width)
 	}
 
-	// Use lipgloss for proper box rendering
+	// Use lipgloss for proper box rendering with auto-width
+	// Adding horizontal padding for visual balance
 	border := lipgloss.RoundedBorder()
-	if !s.config.UseUnicode {
-		border = lipgloss.NormalBorder()
-	}
 
 	style := lipgloss.NewStyle().
 		Border(border).
 		BorderForeground(lipgloss.Color("240")).
-		Width(width - 2). // Account for border width
+		Padding(0, 4).
 		Align(lipgloss.Center).
 		Bold(true)
 

@@ -35,29 +35,30 @@ var (
 			Foreground(lipgloss.Color("240"))
 )
 
-// RenderBox renders text in a rounded box with specified width
+// RenderBox renders text in a rounded box with auto-width
 func RenderBox(text string, width int) string {
-	return RoundedBox.Width(width - 2).Align(lipgloss.Center).Render(text)
+	// Use padding for visual balance, let lipgloss calculate width
+	return RoundedBox.Padding(0, 4).Align(lipgloss.Center).Render(text)
 }
 
-// RenderDoubleBox renders text in a double-line box with specified width
+// RenderDoubleBox renders text in a double-line box with auto-width
 func RenderDoubleBox(text string, width int) string {
-	return DoubleBox.Width(width - 2).Align(lipgloss.Center).Render(text)
+	return DoubleBox.Padding(0, 4).Align(lipgloss.Center).Render(text)
 }
 
-// RenderHeaderBox renders text in a header-style box
+// RenderHeaderBox renders text in a header-style box with auto-width
 func RenderHeaderBox(text string, width int) string {
-	return HeaderBox.Width(width - 2).Align(lipgloss.Center).Render(text)
+	return HeaderBox.Padding(0, 4).Align(lipgloss.Center).Render(text)
 }
 
-// RenderMultiLineBox renders multiple lines in a box with optional title
+// RenderMultiLineBox renders multiple lines in a box with auto-width
 func RenderMultiLineBox(lines []string, width int, useDouble bool) string {
 	content := strings.Join(lines, "\n")
 	style := NormalBox
 	if useDouble {
 		style = DoubleBox
 	}
-	return style.Width(width - 2).Render(content)
+	return style.Padding(0, 2).Render(content)
 }
 
 // Separator returns a horizontal separator line of specified width
