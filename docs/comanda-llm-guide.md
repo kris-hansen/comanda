@@ -147,6 +147,26 @@ code_task:
 ```
 
 **Note:** Index filenames use the repository/project name as a slug (e.g., `myproject_INDEX.md`, `comanda_INDEX.md`). When writing workflows, check what indexes exist in `.comanda/` or let the agent discover them.
+
+### The .comanda Directory
+
+The `.comanda/` directory is comanda's home for project-specific files:
+- **Codebase indexes:** `{project}_INDEX.md` files
+- **Generated workflows:** When you run `comanda generate workflow.yaml "prompt"`, if `.comanda/` exists the workflow is saved there automatically
+- **Workflow artifacts:** Outputs, logs, and intermediate files
+
+**Auto-save to .comanda/:**
+When running `comanda generate`, plain filenames (without paths) are automatically saved to `.comanda/`:
+
+```bash
+# If .comanda/ exists, saves to .comanda/analyze.yaml
+comanda generate analyze.yaml "analyze the codebase"
+
+# Explicit paths are respected as-is
+comanda generate ./workflows/analyze.yaml "analyze the codebase"
+```
+
+This keeps your project root clean while organizing comanda artifacts together.
 - List with aliases: `input: [file1.txt as $file1_content, file2.txt as $file2_content]`
 
 ### Chunking
