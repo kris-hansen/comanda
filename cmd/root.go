@@ -212,6 +212,12 @@ overridden with --model.`,
 		var structureErrors string
 		maxAttempts := 3 // Increased to allow for both model and structure fixes
 
+		// Detect available codebase indexes in .comanda/
+		availableIndexes := detectAvailableIndexes()
+		if verbose && len(availableIndexes) > 0 {
+			log.Printf("[DEBUG] Found %d codebase index(es): %v\n", len(availableIndexes), availableIndexes)
+		}
+
 		// Create spinner for visual feedback during generation
 		spinner := processor.NewSpinner()
 		if verbose {
@@ -220,8 +226,8 @@ overridden with --model.`,
 		}
 
 		for attempt := 1; attempt <= maxAttempts; attempt++ {
-			// Build the prompt with any previous validation errors
-			prompt := buildGeneratePrompt(dslGuide, userPrompt, invalidModels, structureErrors)
+			// Build the prompt with any previous validation errors and available indexes
+			prompt := buildGeneratePrompt(dslGuide, userPrompt, invalidModels, structureErrors, availableIndexes)
 
 			// Start spinner for LLM generation
 			spinnerMsg := "Generating workflow"
@@ -297,7 +303,7 @@ overridden with --model.`,
 }
 
 // buildGeneratePrompt creates the prompt for workflow generation
-func buildGeneratePrompt(dslGuide, userPrompt string, invalidModels []string, structureErrors string) string {
+func buildGeneratePrompt(dslGuide, userPrompt string, invalidModels []string, structureErrors string, availableIndexes []string) string {
 	basePrompt := fmt.Sprintf(`SYSTEM: You are a YAML generator. You MUST output ONLY valid YAML content. No explanations, no markdown, no code blocks, no commentary - just raw YAML.
 
 --- BEGIN COMANDA DSL SPECIFICATION ---
@@ -308,6 +314,18 @@ User's request: %s
 
 CRITICAL INSTRUCTION: Your entire response must be valid YAML syntax that can be directly saved to a .yaml file. Do not include ANY text before or after the YAML content. Start your response with the first line of YAML and end with the last line of YAML.`,
 		dslGuide, userPrompt)
+
+	// Add available codebase indexes if any exist
+	if len(availableIndexes) > 0 {
+		basePrompt += "\n\n--- AVAILABLE CODEBASE INDEXES ---\n"
+		basePrompt += "The following codebase indexes are available in the .comanda/ directory:\n"
+		for _, idx := range availableIndexes {
+			basePrompt += fmt.Sprintf("- %s\n", idx)
+		}
+		basePrompt += "\nTo use a codebase index, reference it as input: .comanda/<index_name>\n"
+		basePrompt += "For agentic workflows, include .comanda in allowed_paths so the agent can read the index.\n"
+		basePrompt += "--- END AVAILABLE INDEXES ---"
+	}
 
 	// Add feedback about previous validation errors
 	if len(invalidModels) > 0 || structureErrors != "" {
@@ -333,6 +351,31 @@ Please fix all the above errors and regenerate the workflow.`, structureErrors)
 	}
 
 	return basePrompt
+}
+
+// detectAvailableIndexes looks for codebase indexes in .comanda/ directory
+func detectAvailableIndexes() []string {
+	var indexes []string
+
+	// Check current directory's .comanda/
+	comandaDir := ".comanda"
+	entries, err := os.ReadDir(comandaDir)
+	if err != nil {
+		return indexes // No .comanda directory or can't read it
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		// Look for index files (ending in _INDEX.md, not .meta.json)
+		if strings.HasSuffix(name, "_INDEX.md") && !strings.HasSuffix(name, ".meta.json") {
+			indexes = append(indexes, name)
+		}
+	}
+
+	return indexes
 }
 
 // extractYAMLContent extracts YAML from an LLM response, handling code blocks
