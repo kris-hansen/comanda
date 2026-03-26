@@ -11,17 +11,19 @@ import (
 
 // ChunkConfig represents the configuration for chunking a large file
 type ChunkConfig struct {
-	By        string // How to split the file: "lines", "bytes", or "tokens"
-	Size      int    // Chunk size (e.g., 10000 lines)
-	Overlap   int    // Lines/bytes to overlap between chunks for context
-	MaxChunks int    // Limit total chunks to prevent overload
+	By          string // How to split the file: "lines", "bytes", or "tokens"
+	Size        int    // Chunk size (e.g., 10000 lines)
+	Overlap     int    // Lines/bytes to overlap between chunks for context
+	MaxChunks   int    // Limit total chunks to prevent overload
+	Deduplicate bool   // If true, remove near-duplicate chunks after splitting
 }
 
 // ChunkResult contains information about the chunking operation
 type ChunkResult struct {
-	ChunkPaths  []string // Paths to the temporary chunk files
-	TempDir     string   // Path to the temporary directory containing the chunks
-	TotalChunks int      // Total number of chunks created
+	ChunkPaths    []string // Paths to the temporary chunk files
+	TempDir       string   // Path to the temporary directory containing the chunks
+	TotalChunks   int      // Total number of chunks created
+	RemovedChunks int      // Number of duplicate chunks removed (when Deduplicate is enabled)
 }
 
 // SplitFile splits a file into chunks based on the provided configuration
@@ -60,11 +62,22 @@ func SplitFile(filePath string, config ChunkConfig) (*ChunkResult, error) {
 		return nil, err
 	}
 
-	return &ChunkResult{
+	result := &ChunkResult{
 		ChunkPaths:  chunkPaths,
 		TempDir:     tempDir,
 		TotalChunks: totalChunks,
-	}, nil
+	}
+
+	// Deduplicate if requested
+	if config.Deduplicate {
+		deduped, dedupErr := DeduplicateChunks(result)
+		if dedupErr == nil {
+			result = deduped
+		}
+		// Non-fatal: if dedup fails, continue with the original result
+	}
+
+	return result, nil
 }
 
 // CleanupChunks removes the temporary directory and all chunk files

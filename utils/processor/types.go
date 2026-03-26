@@ -72,10 +72,11 @@ type LoopIteration struct {
 
 // ChunkConfig represents the configuration for chunking a large file
 type ChunkConfig struct {
-	By        string `yaml:"by"`         // How to split the file: "lines", "bytes", or "tokens"
-	Size      int    `yaml:"size"`       // Chunk size (e.g., 10000 lines)
-	Overlap   int    `yaml:"overlap"`    // Lines/bytes to overlap between chunks for context
-	MaxChunks int    `yaml:"max_chunks"` // Limit total chunks to prevent overload
+	By          string `yaml:"by"`          // How to split the file: "lines", "bytes", or "tokens"
+	Size        int    `yaml:"size"`        // Chunk size (e.g., 10000 lines)
+	Overlap     int    `yaml:"overlap"`     // Lines/bytes to overlap between chunks for context
+	MaxChunks   int    `yaml:"max_chunks"`  // Limit total chunks to prevent overload
+	Deduplicate bool   `yaml:"deduplicate"` // If true, remove near-duplicate chunks after splitting
 }
 
 // ToolListConfig allows specifying tool allowlist/denylist at the step level
@@ -192,14 +193,17 @@ type CodebaseIndexConfig struct {
 	Use       interface{} `yaml:"use,omitempty"`       // Load from registry: string or []string
 	MaxAge    string      `yaml:"max_age,omitempty"`   // Warn if index is older than this duration (e.g., "24h")
 	Aggregate bool        `yaml:"aggregate,omitempty"` // Combine multiple indexes into single context
+	Compress  bool        `yaml:"compress,omitempty"`  // Deduplicate sections when aggregating multiple indexes
 }
 
 // QmdIntegrationConfig configures qmd integration for codebase indexing
 type QmdIntegrationConfig struct {
-	Collection string `yaml:"collection"`        // Collection name to register with qmd
-	Embed      bool   `yaml:"embed,omitempty"`   // Run qmd embed after registration
-	Context    string `yaml:"context,omitempty"` // Context description for the collection
-	Mask       string `yaml:"mask,omitempty"`    // File mask for indexing (default: index file)
+	Collection   string `yaml:"collection"`              // Collection name to register with qmd
+	Embed        bool   `yaml:"embed,omitempty"`         // Run qmd embed after registration
+	Context      string `yaml:"context,omitempty"`       // Context description for the collection
+	Mask         string `yaml:"mask,omitempty"`          // File mask for indexing (default: index file)
+	Quantize     bool   `yaml:"quantize,omitempty"`      // Enable TurboQuant vector quantization on embeddings
+	QuantizeBits int    `yaml:"quantize_bits,omitempty"` // Quantization bit width: 1-4 (default: 2)
 }
 
 // QmdSearchConfig configures qmd search step
