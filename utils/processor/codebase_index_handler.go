@@ -116,9 +116,15 @@ func (p *Processor) processCodebaseIndexFromRegistry(step Step, ci *CodebaseInde
 
 	// If aggregate mode, also create combined variable
 	if ci.Aggregate && len(allContent) > 1 {
-		aggregated := strings.Join(allContent, "\n\n---\n\n")
+		var aggregated string
+		if ci.Compress {
+			aggregated = codebaseindex.CompressAggregatedContent(allContent)
+			p.debugf("Created compressed AGGREGATED_INDEX from %d indexes", len(allContent))
+		} else {
+			aggregated = strings.Join(allContent, "\n\n---\n\n")
+			p.debugf("Created AGGREGATED_INDEX from %d indexes", len(allContent))
+		}
 		p.variables["AGGREGATED_INDEX"] = aggregated
-		p.debugf("Created AGGREGATED_INDEX from %d indexes", len(allContent))
 	}
 
 	return fmt.Sprintf("Loaded %d index(es) from registry: %v", len(loadedIndexes), loadedIndexes), nil
@@ -259,10 +265,12 @@ func (p *Processor) buildCodebaseIndexConfig(stepConfig StepConfig) *codebaseind
 		// Convert qmd integration config
 		if ci.Qmd != nil {
 			config.Qmd = &codebaseindex.QmdConfig{
-				Collection: ci.Qmd.Collection,
-				Embed:      ci.Qmd.Embed,
-				Context:    ci.Qmd.Context,
-				Mask:       ci.Qmd.Mask,
+				Collection:   ci.Qmd.Collection,
+				Embed:        ci.Qmd.Embed,
+				Context:      ci.Qmd.Context,
+				Mask:         ci.Qmd.Mask,
+				Quantize:     ci.Qmd.Quantize,
+				QuantizeBits: ci.Qmd.QuantizeBits,
 			}
 		}
 	}
