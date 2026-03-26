@@ -124,6 +124,10 @@ overridden with --model.`,
 		outputFilename := args[0]
 		userPrompt := args[1]
 
+		// If .comanda/ exists and user provided a plain filename (no path),
+		// save workflows there to keep project root clean
+		outputFilename = resolveOutputPath(outputFilename)
+
 		// Use the centralized configuration that was loaded in PersistentPreRunE
 		// No need to load it again
 
@@ -353,6 +357,26 @@ Please fix all the above errors and regenerate the workflow.`, structureErrors)
 	}
 
 	return basePrompt
+}
+
+// resolveOutputPath checks if .comanda/ exists and prefixes plain filenames with it.
+// This keeps generated workflows organized in the .comanda/ directory.
+// If user provides a path (contains / or \), we respect their choice.
+func resolveOutputPath(filename string) string {
+	// If user specified a path (contains directory separator), use as-is
+	if strings.Contains(filename, "/") || strings.Contains(filename, "\\") {
+		return filename
+	}
+
+	// Check if .comanda/ directory exists
+	comandaDir := ".comanda"
+	if info, err := os.Stat(comandaDir); err == nil && info.IsDir() {
+		// .comanda exists, save workflow there
+		return filepath.Join(comandaDir, filename)
+	}
+
+	// No .comanda directory, use current directory
+	return filename
 }
 
 // detectAvailableIndexes looks for codebase indexes in .comanda/ directory
