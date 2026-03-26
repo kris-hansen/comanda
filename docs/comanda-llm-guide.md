@@ -379,4 +379,78 @@ analyze_document:
 - Generating a workflow dynamically, then executing it
 - Tasks that genuinely require different models for different capabilities
 
+## Agentic Loops
+
+Agentic loops enable iterative, autonomous execution where an AI agent can use tools (read/write files, run commands) to complete complex tasks.
+
+**Basic Structure:**
+```yaml
+complex_task:
+  model: claude-code
+  action: "Implement the feature described in requirements.md"
+  agentic_loop:
+    max_iterations: 10
+    exit_condition: llm_decides
+    allowed_paths:
+      - ./src
+      - ./tests
+    tools: [Read, Write, Edit, Bash]
+  output: STDOUT
+```
+
+**Key Configuration:**
+- `max_iterations`: (int, default: 10) Maximum loop iterations before stopping
+- `exit_condition`: (string) When to stop - `llm_decides` (agent says DONE) or `pattern_match`
+- `allowed_paths`: (list of strings) Directories the agent can access
+- `tools`: (list of strings, optional) Tool whitelist - Read, Write, Edit, Bash, etc.
+
+### Simplified Path Configuration
+
+**If `allowed_paths` is empty or omitted**, comanda automatically infers sensible defaults:
+1. Uses the workflow file's directory (if the workflow was loaded from a file)
+2. Falls back to the current working directory
+
+**Auto-expansion:** When allowed paths are set, comanda automatically adds:
+- Output directories (from step `output` paths)
+- Common project subdirectories that exist (src, lib, test, docs, build, etc.)
+
+This means simple workflows "just work" without explicit path configuration:
+
+```yaml
+# Simple - paths auto-inferred from cwd
+refactor_code:
+  model: claude-code
+  action: "Refactor the main module for clarity"
+  agentic_loop:
+    max_iterations: 5
+    exit_condition: llm_decides
+  output: STDOUT
+```
+
+**Explicit paths** are still recommended for:
+- Production workflows (explicit is better than implicit)
+- Restricting access to specific directories
+- Cross-directory operations
+
+```yaml
+# Explicit - for production or restricted access
+secure_task:
+  model: claude-code
+  action: "Process files in the data directory only"
+  agentic_loop:
+    max_iterations: 5
+    exit_condition: llm_decides
+    allowed_paths:
+      - ./data
+      - ./output
+  output: STDOUT
+```
+
+### Error Handling
+
+When path access fails, comanda provides helpful error messages showing:
+- The path that couldn't be accessed
+- Currently allowed paths
+- A suggestion for what to add to `allowed_paths`
+
 This guide covers the core concepts and syntax of Comanda's YAML DSL, including meta-processing capabilities. LLMs should use this structure to generate valid workflow files.

@@ -298,13 +298,13 @@ func TestClaudeCodeSendPromptAgenticPathValidation(t *testing.T) {
 			name:          "invalid path",
 			allowedPaths:  []string{"/nonexistent/path/that/does/not/exist"},
 			expectError:   true,
-			errorContains: "allowed_path does not exist",
+			errorContains: "do not exist",
 		},
 		{
 			name:          "mixed valid and invalid",
 			allowedPaths:  []string{".", "/nonexistent/path"},
 			expectError:   true,
-			errorContains: "allowed_path does not exist",
+			errorContains: "do not exist",
 		},
 	}
 

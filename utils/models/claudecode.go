@@ -204,10 +204,15 @@ func (c *ClaudeCodeProvider) SendPromptAgentic(modelName string, prompt string, 
 	}
 
 	// Validate all allowed paths exist (do this first to fail fast on bad config)
+	var missingPaths []string
 	for i, path := range expandedPaths {
 		if _, err := os.Stat(path); os.IsNotExist(err) {
-			return "", fmt.Errorf("allowed_path does not exist: %s (expanded from %s)", path, allowedPaths[i])
+			missingPaths = append(missingPaths, fmt.Sprintf("%s (expanded from %s)", path, allowedPaths[i]))
 		}
+	}
+	if len(missingPaths) > 0 {
+		return "", fmt.Errorf("allowed_path(s) do not exist:\n  • %s\n\n💡 Tip: If allowed_paths is empty, comanda will auto-infer from the workflow directory or cwd",
+			strings.Join(missingPaths, "\n  • "))
 	}
 
 	// Use expanded paths from here on
