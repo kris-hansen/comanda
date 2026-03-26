@@ -312,7 +312,9 @@ func buildGeneratePrompt(dslGuide, userPrompt string, invalidModels []string, st
 
 User's request: %s
 
-CRITICAL INSTRUCTION: Your entire response must be valid YAML syntax that can be directly saved to a .yaml file. Do not include ANY text before or after the YAML content. Start your response with the first line of YAML and end with the last line of YAML.`,
+CRITICAL INSTRUCTION: Your entire response must be valid YAML syntax that can be directly saved to a .yaml file. Do not include ANY text before or after the YAML content. Start your response with the first line of YAML and end with the last line of YAML.
+
+AGENTIC LOOP OUTPUT RULE: When generating agentic_loop workflows, NEVER use "output: STDOUT". Agentic loops produce substantial work over multiple iterations that must be persisted to a file. Always use a meaningful file path like "output: ./docs/ARCHITECTURE.md" or "output: ./report.md". The output file is automatically added to allowed_paths.`,
 		dslGuide, userPrompt)
 
 	// Add available codebase indexes if any exist
