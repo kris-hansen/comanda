@@ -107,6 +107,46 @@ step_name_for_processing:
 - Database query: `input: { database: { type: "postgres", query: "SELECT * FROM users" } }`
 - No input: `input: NA`
 - Input with alias for variable: `input: path/to/file.txt as $my_var`
+
+### Codebase Indexes
+
+Comanda can generate and use codebase indexes - structured summaries of code repositories that help LLMs understand codebases without reading every file.
+
+**Index Location:**
+Codebase indexes are stored in the `.comanda/` directory at the root of a repository:
+- `.comanda/{repo_name}_INDEX.md` - The index file
+- `.comanda/{repo_name}_INDEX.md.meta.json` - Metadata about when/how the index was generated
+
+**Using Indexes in Workflows:**
+To give an LLM context about a codebase, use the index as input:
+
+```yaml
+analyze_codebase:
+  input: .comanda/myproject_INDEX.md
+  model: claude-sonnet-4-5
+  action: "Based on this codebase index, identify potential security concerns"
+  output: STDOUT
+```
+
+**Exploring the .comanda Directory:**
+For agentic workflows that need to work with code, point the agent to the `.comanda/` directory so it can discover available indexes:
+
+```yaml
+code_task:
+  model: claude-code
+  action: |
+    First, read the codebase index in .comanda/ to understand the project structure.
+    Then implement the requested feature.
+  agentic_loop:
+    max_iterations: 10
+    exit_condition: llm_decides
+    allowed_paths:
+      - .comanda
+      - ./src
+  output: STDOUT
+```
+
+**Note:** Index filenames use the repository/project name as a slug (e.g., `myproject_INDEX.md`, `comanda_INDEX.md`). When writing workflows, check what indexes exist in `.comanda/` or let the agent discover them.
 - List with aliases: `input: [file1.txt as $file1_content, file2.txt as $file2_content]`
 
 ### Chunking
