@@ -442,22 +442,35 @@ complex_task:
 
 **Important:** Agentic loop output should almost always be a **file path**, not STDOUT.
 
-- **Use a file path:** `output: ./docs/ARCHITECTURE.md` or `output: ./report.md`
-- **Avoid STDOUT:** Agentic loops produce substantial output over multiple iterations; STDOUT is inappropriate
+**Default to `.comanda/` flat paths:**
+- **Preferred:** `output: .comanda/ARCHITECTURE.md` or `output: .comanda/analysis_report.md`
+- **Avoid subdirectories** unless the user explicitly requests them (e.g., `./docs/`)
+- **Avoid STDOUT:** Agentic loops produce substantial output over multiple iterations
 
 The output file serves two purposes:
 1. It's where the agent writes its final deliverable
 2. It's automatically added to `allowed_paths` so the agent can write to it
 
 ```yaml
-# GOOD: Output to a specific file
+# GOOD: Output to .comanda/ directory (default for generated workflows)
 document_codebase:
   model: claude-code
   action: "Create comprehensive architecture documentation"
   agentic_loop:
     max_iterations: 15
     exit_condition: llm_decides
-  output: ./docs/ARCHITECTURE.md  # Agent will write here
+    allowed_paths: [.comanda]
+  output: .comanda/ARCHITECTURE.md
+
+# GOOD: Custom path when user specifies (ensure allowed_paths matches)
+document_codebase:
+  model: claude-code
+  action: "Create comprehensive architecture documentation"
+  agentic_loop:
+    max_iterations: 15
+    exit_condition: llm_decides
+    allowed_paths: [.comanda, ./docs]  # Include custom output dir
+  output: ./docs/ARCHITECTURE.md
 
 # BAD: Output to STDOUT for agentic work
 document_codebase:
