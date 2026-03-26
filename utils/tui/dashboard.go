@@ -33,6 +33,7 @@ type DashboardModel struct {
 	memoryMB      float64
 	activities    []Activity
 	outputLines   []string
+	debugLines    []string
 	status        string // "running", "paused", "complete", "error"
 	errorMsg      string
 
@@ -46,13 +47,20 @@ type DashboardModel struct {
 	reporter    *ProgressReporter
 	quitting    bool
 	verbose     bool
+	debugMode   bool
+	debugScroll int
 	maxActivity int
 	maxOutput   int
+	maxDebug    int
+	debugWriter *DebugWriter
 }
 
 type dashboardKeyMap struct {
-	Quit    key.Binding
-	Verbose key.Binding
+	Quit        key.Binding
+	Verbose     key.Binding
+	ToggleDebug key.Binding
+	ScrollUp    key.Binding
+	ScrollDown  key.Binding
 }
 
 func defaultDashboardKeyMap() dashboardKeyMap {
@@ -64,6 +72,18 @@ func defaultDashboardKeyMap() dashboardKeyMap {
 		Verbose: key.NewBinding(
 			key.WithKeys("v"),
 			key.WithHelp("v", "verbose"),
+		),
+		ToggleDebug: key.NewBinding(
+			key.WithKeys("d"),
+			key.WithHelp("d", "debug panel"),
+		),
+		ScrollUp: key.NewBinding(
+			key.WithKeys("k", "up"),
+			key.WithHelp("↑/k", "scroll up"),
+		),
+		ScrollDown: key.NewBinding(
+			key.WithKeys("j", "down"),
+			key.WithHelp("↓/j", "scroll down"),
 		),
 	}
 }
@@ -95,7 +115,22 @@ func NewDashboardModel(workflowName string, reporter *ProgressReporter) *Dashboa
 		reporter:     reporter,
 		maxActivity:  8,
 		maxOutput:    5,
+		maxDebug:     20,
 	}
+}
+
+// SetDebugWriter attaches a debug writer to capture debug/verbose output.
+func (m *DashboardModel) SetDebugWriter(w *DebugWriter) {
+	m.debugWriter = w
+	m.debugMode = true
+	w.SetOnChange(func(lines []string) {
+		m.debugLines = lines
+	})
+}
+
+// DebugLinesMsg is sent when debug lines are updated
+type DebugLinesMsg struct {
+	Lines []string
 }
 
 // Init initializes the model
@@ -135,6 +170,16 @@ func (m *DashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case key.Matches(msg, m.keymap.Verbose):
 			m.verbose = !m.verbose
+		case key.Matches(msg, m.keymap.ToggleDebug):
+			m.debugMode = !m.debugMode
+		case key.Matches(msg, m.keymap.ScrollUp):
+			if m.debugMode && m.debugScroll > 0 {
+				m.debugScroll--
+			}
+		case key.Matches(msg, m.keymap.ScrollDown):
+			if m.debugMode && m.debugScroll < len(m.debugLines)-m.maxDebug {
+				m.debugScroll++
+			}
 		}
 
 	case tea.WindowSizeMsg:
@@ -258,6 +303,11 @@ func (m *DashboardModel) View() string {
 	// Output section
 	if len(m.outputLines) > 0 || m.verbose {
 		sections = append(sections, m.renderOutput())
+	}
+
+	// Debug panel (shown when debug mode is enabled)
+	if m.debugMode && len(m.debugLines) > 0 {
+		sections = append(sections, m.renderDebugPanel())
 	}
 
 	// Footer
@@ -478,6 +528,72 @@ func (m *DashboardModel) renderOutput() string {
 	return boxStyle.Render(content.String())
 }
 
+func (m *DashboardModel) renderDebugPanel() string {
+	// Calculate available height for debug panel
+	panelHeight := m.maxDebug
+	if m.height > 0 {
+		// Use remaining space, min 10 lines
+		usedHeight := 20 // approximate header + progress + resources + activity
+		if m.verbose || len(m.outputLines) > 0 {
+			usedHeight += m.maxOutput + 3
+		}
+		available := m.height - usedHeight - 5
+		if available > 10 {
+			panelHeight = available
+		} else {
+			panelHeight = 10
+		}
+	}
+
+	boxStyle := m.theme.BoxNormal.Width(m.width - 4)
+
+	labelStyle := lipgloss.NewStyle().Bold(true).Foreground(m.theme.Secondary)
+	mutedStyle := lipgloss.NewStyle().Foreground(m.theme.Muted)
+	debugStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#9CA3AF"))
+
+	var content strings.Builder
+	content.WriteString(labelStyle.Render("DEBUG LOG"))
+
+	// Show scroll position if scrollable
+	totalLines := len(m.debugLines)
+	if totalLines > panelHeight {
+		content.WriteString(mutedStyle.Render(fmt.Sprintf(" (%d-%d of %d) ↑↓ scroll",
+			m.debugScroll+1,
+			min(m.debugScroll+panelHeight, totalLines),
+			totalLines,
+		)))
+	} else {
+		content.WriteString(mutedStyle.Render(fmt.Sprintf(" (%d lines)", totalLines)))
+	}
+	content.WriteString("\n")
+
+	if totalLines == 0 {
+		content.WriteString(mutedStyle.Italic(true).Render("  No debug output yet..."))
+	} else {
+		// Calculate visible range
+		start := m.debugScroll
+		end := start + panelHeight
+		if end > totalLines {
+			end = totalLines
+			start = end - panelHeight
+			if start < 0 {
+				start = 0
+			}
+		}
+
+		for _, line := range m.debugLines[start:end] {
+			// Truncate long lines
+			maxLen := m.width - 10
+			if len(line) > maxLen {
+				line = line[:maxLen-3] + "..."
+			}
+			content.WriteString("  " + debugStyle.Render(line) + "\n")
+		}
+	}
+
+	return boxStyle.Render(content.String())
+}
+
 func (m *DashboardModel) renderFooter() string {
 	helpStyle := lipgloss.NewStyle().
 		Foreground(m.theme.Muted).
@@ -485,7 +601,10 @@ func (m *DashboardModel) renderFooter() string {
 		Align(lipgloss.Center).
 		MarginTop(1)
 
-	keys := []string{"q quit", "v verbose"}
+	keys := []string{"q quit", "v verbose", "d debug"}
+	if m.debugMode && len(m.debugLines) > m.maxDebug {
+		keys = append(keys, "↑↓ scroll")
+	}
 	help := strings.Join(keys, "  •  ")
 
 	return helpStyle.Render(help)
@@ -510,4 +629,19 @@ func RunDashboard(workflowName string, reporter *ProgressReporter) (*DashboardMo
 	m := NewDashboardModel(workflowName, reporter)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	return m, p
+}
+
+// RunDashboardWithDebug starts the dashboard TUI with debug output capture
+func RunDashboardWithDebug(workflowName string, reporter *ProgressReporter, debugWriter *DebugWriter) (*DashboardModel, *tea.Program) {
+	m := NewDashboardModel(workflowName, reporter)
+	m.SetDebugWriter(debugWriter)
+	p := tea.NewProgram(m, tea.WithAltScreen())
+	return m, p
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

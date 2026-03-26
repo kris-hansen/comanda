@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
@@ -319,8 +320,26 @@ func runLiveProcess(args []string) {
 	watcher.Start()
 	defer watcher.Stop()
 
-	// Create and start the dashboard
-	_, program := tui.RunDashboard(workflowName, reporter)
+	// Set up debug output capture when debug/verbose mode is enabled
+	var debugWriter *tui.DebugWriter
+	var model *tui.DashboardModel
+	var program *tea.Program
+
+	if config.Debug || verbose {
+		// Create debug writer to capture log output
+		debugWriter = tui.NewDebugWriter(os.Stderr, 500)
+
+		// Redirect log output to our debug writer
+		log.SetOutput(debugWriter)
+		defer log.SetOutput(os.Stderr) // Restore on exit
+
+		// Create dashboard with debug panel
+		model, program = tui.RunDashboardWithDebug(workflowName, reporter, debugWriter)
+	} else {
+		// Standard dashboard without debug panel
+		model, program = tui.RunDashboard(workflowName, reporter)
+	}
+	_ = model // model available for future use
 
 	// Run the processor in a goroutine
 	processDone := make(chan error, 1)
