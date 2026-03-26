@@ -405,3 +405,141 @@ func TestFullGeneration(t *testing.T) {
 		t.Error("Content should have Repository Layout section")
 	}
 }
+
+func TestGenerateIncremental(t *testing.T) {
+	// Create a temp directory with some Go files
+	tmpDir := t.TempDir()
+
+	// Create initial files
+	mainGo := filepath.Join(tmpDir, "main.go")
+	os.WriteFile(mainGo, []byte(`package main
+
+func main() {
+	println("hello")
+}
+`), 0644)
+
+	utilGo := filepath.Join(tmpDir, "util.go")
+	os.WriteFile(utilGo, []byte(`package main
+
+func helper() string {
+	return "helper"
+}
+`), 0644)
+
+	// Create go.mod so it's detected as a Go project
+	goMod := filepath.Join(tmpDir, "go.mod")
+	os.WriteFile(goMod, []byte("module test\ngo 1.21\n"), 0644)
+
+	// First, generate the initial index
+	cfg := DefaultConfig()
+	cfg.Root = tmpDir
+	cfg.OutputPath = filepath.Join(tmpDir, ".comanda", "index.md")
+	cfg.OutputFormat = FormatStructured
+	os.MkdirAll(filepath.Join(tmpDir, ".comanda"), 0755)
+
+	manager, err := NewManager(cfg, false)
+	if err != nil {
+		t.Fatalf("NewManager failed: %v", err)
+	}
+
+	initialResult, err := manager.Generate()
+	if err != nil {
+		t.Fatalf("Initial Generate failed: %v", err)
+	}
+
+	if initialResult.FileCount < 2 {
+		t.Errorf("Expected at least 2 files, got %d", initialResult.FileCount)
+	}
+
+	// Now test incremental update with no changes
+	manager2, _ := NewManager(cfg, false)
+	result, wasIncremental, err := manager2.GenerateIncremental(initialResult.OutputPath)
+	if err != nil {
+		t.Fatalf("GenerateIncremental failed: %v", err)
+	}
+
+	if !wasIncremental {
+		t.Error("Expected incremental update to succeed")
+	}
+	if result.Updated {
+		t.Error("Expected Updated=false when no changes")
+	}
+
+	// Now modify a file and test incremental update
+	os.WriteFile(mainGo, []byte(`package main
+
+func main() {
+	println("hello world") // modified
+}
+`), 0644)
+
+	manager3, _ := NewManager(cfg, false)
+	result2, wasIncremental2, err := manager3.GenerateIncremental(initialResult.OutputPath)
+	if err != nil {
+		t.Fatalf("GenerateIncremental after modification failed: %v", err)
+	}
+
+	if !wasIncremental2 {
+		t.Error("Expected incremental update after modification")
+	}
+	if !result2.Updated {
+		t.Error("Expected Updated=true when files changed")
+	}
+	if result2.ContentHash == initialResult.ContentHash {
+		t.Error("Expected different content hash after modification")
+	}
+
+	// Test adding a new file
+	newFile := filepath.Join(tmpDir, "new.go")
+	os.WriteFile(newFile, []byte(`package main
+
+func newFunc() {}
+`), 0644)
+
+	manager4, _ := NewManager(cfg, false)
+	result3, wasIncremental3, err := manager4.GenerateIncremental(result2.OutputPath)
+	if err != nil {
+		t.Fatalf("GenerateIncremental after add failed: %v", err)
+	}
+
+	if !wasIncremental3 {
+		t.Error("Expected incremental update after adding file")
+	}
+	if !result3.Updated {
+		t.Error("Expected Updated=true when file added")
+	}
+	if result3.FileCount <= result2.FileCount {
+		t.Errorf("Expected more files after add, got %d vs %d", result3.FileCount, result2.FileCount)
+	}
+}
+
+func TestGenerateIncrementalFallback(t *testing.T) {
+	// Test that incremental falls back to full generation when metadata missing
+	tmpDir := t.TempDir()
+
+	mainGo := filepath.Join(tmpDir, "main.go")
+	os.WriteFile(mainGo, []byte("package main\nfunc main() {}\n"), 0644)
+	os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test\ngo 1.21\n"), 0644)
+
+	cfg := DefaultConfig()
+	cfg.Root = tmpDir
+	cfg.OutputPath = filepath.Join(tmpDir, "index.md")
+
+	// Create a fake index file without metadata
+	os.WriteFile(cfg.OutputPath, []byte("# Fake Index\n"), 0644)
+
+	manager, _ := NewManager(cfg, false)
+	result, wasIncremental, err := manager.GenerateIncremental(cfg.OutputPath)
+	if err != nil {
+		t.Fatalf("GenerateIncremental should not fail: %v", err)
+	}
+
+	// Should fall back to full generation
+	if wasIncremental {
+		t.Error("Expected fallback to full generation when metadata missing")
+	}
+	if !result.Updated {
+		t.Error("Expected Updated=true for full regeneration")
+	}
+}
