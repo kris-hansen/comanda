@@ -396,21 +396,37 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		cfg.EncryptionKey = envConfig.IndexEncryptionKey
 	}
 
-	// TODO: Implement true incremental mode
-	// For now, regenerate fully
-	if !updateFull {
-		log.Printf("Note: Incremental update not yet implemented, performing full regeneration\n")
-	}
-
-	// Create manager and regenerate
+	// Create manager
 	manager, err := codebaseindex.NewManager(cfg, verbose)
 	if err != nil {
 		return fmt.Errorf("failed to create index manager: %w", err)
 	}
 
-	result, err := manager.Generate()
-	if err != nil {
-		return fmt.Errorf("index update failed: %w", err)
+	var result *codebaseindex.Result
+
+	if updateFull {
+		// Force full regeneration
+		log.Printf("Performing full regeneration (--full flag set)\n")
+		result, err = manager.Generate()
+		if err != nil {
+			return fmt.Errorf("index update failed: %w", err)
+		}
+	} else {
+		// Try incremental update
+		var wasIncremental bool
+		result, wasIncremental, err = manager.GenerateIncremental(entry.IndexPath)
+		if err != nil {
+			return fmt.Errorf("index update failed: %w", err)
+		}
+		if !result.Updated {
+			log.Printf("\nIndex is up to date (no changes detected)\n")
+			return nil
+		}
+		if wasIncremental {
+			log.Printf("Performed incremental update\n")
+		} else {
+			log.Printf("Performed full regeneration (incremental not possible)\n")
+		}
 	}
 
 	// Update registry
