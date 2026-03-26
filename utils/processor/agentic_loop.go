@@ -53,6 +53,17 @@ func (p *Processor) processAgenticLoop(loopName string, config *AgenticLoopConfi
 func (p *Processor) processAgenticLoopWithFile(loopName string, config *AgenticLoopConfig, initialInput string, workflowFile string) (string, error) {
 	p.debugf("Starting agentic loop: %s", loopName)
 
+	// Apply intelligent path defaults if allowed_paths is empty
+	if len(config.AllowedPaths) == 0 {
+		config.AllowedPaths = p.inferDefaultAllowedPaths(workflowFile)
+		if len(config.AllowedPaths) > 0 {
+			p.debugf("Auto-inferred allowed_paths: %v", config.AllowedPaths)
+			if p.streamLog != nil && p.streamLog.IsEnabled() {
+				p.streamLog.Log("ℹ️  No allowed_paths specified, defaulting to: %v", config.AllowedPaths)
+			}
+		}
+	}
+
 	// Stream log header
 	if p.streamLog != nil && p.streamLog.IsEnabled() {
 		p.streamLog.LogSection(fmt.Sprintf("AGENTIC LOOP: %s", loopName))
@@ -66,6 +77,9 @@ func (p *Processor) processAgenticLoopWithFile(loopName string, config *AgenticL
 	// Auto-add output directories to allowed_paths so agents can write output files
 	// This prevents "permission denied" errors when output paths aren't explicitly in allowed_paths
 	config.AllowedPaths = p.expandAllowedPathsWithOutputDirs(config.AllowedPaths, config.Steps)
+
+	// Auto-expand to include common project directories that exist
+	config.AllowedPaths = p.expandWithCommonProjectDirs(config.AllowedPaths)
 
 	// Check if agentic tools are enabled and we have allowed paths
 	if len(config.AllowedPaths) > 0 {
@@ -592,4 +606,116 @@ func (p *Processor) extractOutputPath(output interface{}) string {
 	}
 
 	return outputStr
+}
+
+// inferDefaultAllowedPaths returns sensible default paths when none are specified.
+// Priority:
+// 1. Workflow file's directory (if provided)
+// 2. Current working directory
+func (p *Processor) inferDefaultAllowedPaths(workflowFile string) []string {
+	var basePath string
+
+	// If we have a workflow file, use its directory as the base
+	if workflowFile != "" {
+		absPath, err := filepath.Abs(workflowFile)
+		if err == nil {
+			basePath = filepath.Dir(absPath)
+			p.debugf("Using workflow file directory as default allowed_path: %s", basePath)
+		}
+	}
+
+	// Fall back to current working directory
+	if basePath == "" {
+		cwd, err := os.Getwd()
+		if err == nil {
+			basePath = cwd
+			p.debugf("Using current working directory as default allowed_path: %s", basePath)
+		}
+	}
+
+	if basePath == "" {
+		return nil
+	}
+
+	return []string{basePath}
+}
+
+// expandWithCommonProjectDirs adds common project subdirectories to allowed_paths
+// if they exist. This reduces friction for typical project structures.
+func (p *Processor) expandWithCommonProjectDirs(allowedPaths []string) []string {
+	if len(allowedPaths) == 0 {
+		return allowedPaths
+	}
+
+	// Common project directories that agents often need to access
+	commonDirs := []string{
+		"src", "lib", "pkg", "cmd", // Source code
+		"test", "tests", "spec", "specs", // Tests
+		"docs", "doc", "documentation", // Documentation
+		"build", "dist", "out", "output", // Build outputs
+		"scripts", "bin", "tools", // Scripts and tools
+		"config", "configs", "conf", // Configuration
+		"assets", "static", "public", // Static assets
+		"internal", "vendor", "third_party", // Dependencies
+		".github", ".gitlab", // CI/CD
+	}
+
+	// Use a set to deduplicate
+	pathSet := make(map[string]bool)
+	for _, p := range allowedPaths {
+		pathSet[p] = true
+	}
+
+	// For each base allowed path, check if common subdirs exist and add them
+	for _, basePath := range allowedPaths {
+		info, err := os.Stat(basePath)
+		if err != nil || !info.IsDir() {
+			continue
+		}
+
+		for _, subdir := range commonDirs {
+			fullPath := filepath.Join(basePath, subdir)
+			if info, err := os.Stat(fullPath); err == nil && info.IsDir() {
+				if !pathSet[fullPath] {
+					pathSet[fullPath] = true
+					p.debugf("Auto-added common project directory: %s", fullPath)
+				}
+			}
+		}
+	}
+
+	// Convert back to slice
+	result := make([]string, 0, len(pathSet))
+	for path := range pathSet {
+		result = append(result, path)
+	}
+	return result
+}
+
+// FormatPathAccessError creates a helpful error message when path access fails
+// It shows what paths were allowed and suggests what to add
+func FormatPathAccessError(failedPath string, allowedPaths []string) string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Cannot access path: %s\n", failedPath))
+	sb.WriteString("\nCurrently allowed paths:\n")
+	for _, p := range allowedPaths {
+		sb.WriteString(fmt.Sprintf("  • %s\n", p))
+	}
+
+	// Suggest what to add
+	suggestedPath := failedPath
+	if info, err := os.Stat(failedPath); err == nil && !info.IsDir() {
+		// If it's a file, suggest the parent directory
+		suggestedPath = filepath.Dir(failedPath)
+	}
+	// Clean up the path for suggestion
+	if absPath, err := filepath.Abs(suggestedPath); err == nil {
+		suggestedPath = absPath
+	}
+
+	sb.WriteString(fmt.Sprintf("\n💡 Suggestion: Add this to allowed_paths in your workflow:\n"))
+	sb.WriteString(fmt.Sprintf("  allowed_paths:\n"))
+	sb.WriteString(fmt.Sprintf("    - %s\n", suggestedPath))
+
+	return sb.String()
 }

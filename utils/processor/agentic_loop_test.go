@@ -1,6 +1,9 @@
 package processor
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -453,4 +456,88 @@ func containsHelper(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+func TestInferDefaultAllowedPaths(t *testing.T) {
+	p := &Processor{}
+
+	// Test with workflow file
+	tmpDir := t.TempDir()
+	workflowFile := filepath.Join(tmpDir, "test.yaml")
+	os.WriteFile(workflowFile, []byte("test"), 0644)
+
+	paths := p.inferDefaultAllowedPaths(workflowFile)
+	if len(paths) != 1 {
+		t.Errorf("Expected 1 path, got %d", len(paths))
+	}
+	if paths[0] != tmpDir {
+		t.Errorf("Expected %s, got %s", tmpDir, paths[0])
+	}
+
+	// Test with empty workflow file (should fall back to cwd)
+	paths = p.inferDefaultAllowedPaths("")
+	if len(paths) != 1 {
+		t.Errorf("Expected 1 path for cwd fallback, got %d", len(paths))
+	}
+}
+
+func TestExpandWithCommonProjectDirs(t *testing.T) {
+	p := &Processor{}
+
+	// Create temp dir with some common subdirs
+	tmpDir := t.TempDir()
+	os.MkdirAll(filepath.Join(tmpDir, "src"), 0755)
+	os.MkdirAll(filepath.Join(tmpDir, "test"), 0755)
+	os.MkdirAll(filepath.Join(tmpDir, "docs"), 0755)
+
+	// Expand from base path
+	result := p.expandWithCommonProjectDirs([]string{tmpDir})
+
+	// Should have original + expanded paths
+	if len(result) < 4 {
+		t.Errorf("Expected at least 4 paths (base + 3 subdirs), got %d", len(result))
+	}
+
+	// Verify specific paths are present
+	pathSet := make(map[string]bool)
+	for _, p := range result {
+		pathSet[p] = true
+	}
+
+	expectedPaths := []string{
+		tmpDir,
+		filepath.Join(tmpDir, "src"),
+		filepath.Join(tmpDir, "test"),
+		filepath.Join(tmpDir, "docs"),
+	}
+
+	for _, expected := range expectedPaths {
+		if !pathSet[expected] {
+			t.Errorf("Expected path %s not found in result", expected)
+		}
+	}
+}
+
+func TestFormatPathAccessError(t *testing.T) {
+	allowedPaths := []string{"/home/user/project/src", "/home/user/project/docs"}
+	failedPath := "/home/user/project/build/output.txt"
+
+	errMsg := FormatPathAccessError(failedPath, allowedPaths)
+
+	// Should contain the failed path
+	if !strings.Contains(errMsg, failedPath) {
+		t.Error("Error message should contain failed path")
+	}
+
+	// Should list allowed paths
+	for _, p := range allowedPaths {
+		if !strings.Contains(errMsg, p) {
+			t.Errorf("Error message should contain allowed path: %s", p)
+		}
+	}
+
+	// Should contain suggestion
+	if !strings.Contains(errMsg, "Suggestion") {
+		t.Error("Error message should contain a suggestion")
+	}
 }
