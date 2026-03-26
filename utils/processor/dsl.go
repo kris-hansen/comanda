@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -198,10 +199,17 @@ func (c *DSLConfig) UnmarshalYAML(node *yaml.Node) error {
 					return fmt.Errorf("failed to decode parallel step group '%s': %w", stepName, err)
 				}
 
-				// Convert map[string]StepConfig to []Step
+				// Convert map[string]StepConfig to []Step with deterministic ordering
+				// Sort keys to ensure consistent behavior across runs
+				keys := make([]string, 0, len(parallelSteps))
+				for k := range parallelSteps {
+					keys = append(keys, k)
+				}
+				sort.Strings(keys)
+
 				var steps []Step
-				for subStepName, subStepConfig := range parallelSteps {
-					steps = append(steps, Step{Name: subStepName, Config: subStepConfig})
+				for _, subStepName := range keys {
+					steps = append(steps, Step{Name: subStepName, Config: parallelSteps[subStepName]})
 				}
 				c.ParallelSteps[stepName] = steps
 			} else {
@@ -632,13 +640,28 @@ func (p *Processor) expandIndexReferences(text string) string {
 }
 
 // SubstituteCLIVariables replaces {{varname}} with CLI-provided values
+// Uses regex single-pass replacement to prevent cross-variable injection
+// (i.e., if a variable's value contains {{...}}, it won't be re-substituted)
 func (p *Processor) SubstituteCLIVariables(text string) string {
-	for name, value := range p.cliVariables {
-		// Support both {{varname}} and {{ varname }} syntax
-		text = strings.ReplaceAll(text, "{{"+name+"}}", value)
-		text = strings.ReplaceAll(text, "{{ "+name+" }}", value)
+	if len(p.cliVariables) == 0 {
+		return text
 	}
-	return text
+
+	// Match {{ varname }} or {{varname}} patterns
+	pattern := regexp.MustCompile(`\{\{\s*([^}]+?)\s*\}\}`)
+
+	return pattern.ReplaceAllStringFunc(text, func(match string) string {
+		// Extract variable name (strip braces and whitespace)
+		inner := strings.TrimPrefix(match, "{{")
+		inner = strings.TrimSuffix(inner, "}}")
+		varName := strings.TrimSpace(inner)
+
+		if value, ok := p.cliVariables[varName]; ok {
+			return value
+		}
+		// Leave unrecognized patterns unchanged
+		return match
+	})
 }
 
 // substituteCLIVariablesInSlice applies CLI variable substitution to all elements in a slice

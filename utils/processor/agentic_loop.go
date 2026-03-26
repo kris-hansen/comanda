@@ -494,10 +494,23 @@ func (p *Processor) processInlineAgenticLoop(step Step) (string, error) {
 	} else {
 		// Inherit model from parent step if sub-steps don't specify their own
 		parentModel := step.Config.Model
+
+		// Validate: if parent has no model, check if any sub-steps need one
+		if parentModel == nil {
+			for _, subStep := range config.Steps {
+				if subStep.Config.Model == nil && subStep.Config.Generate != nil {
+					return "", fmt.Errorf("agentic loop '%s': sub-step '%s' requires a model but none specified (and parent has no model to inherit)",
+						step.Name, subStep.Name)
+				}
+			}
+		}
+
 		for i := range config.Steps {
 			if config.Steps[i].Config.Model == nil {
 				config.Steps[i].Config.Model = parentModel
-				p.debugf("Step '%s' inherited model from parent: %v", config.Steps[i].Name, parentModel)
+				if parentModel != nil {
+					p.debugf("Step '%s' inherited model from parent: %v", config.Steps[i].Name, parentModel)
+				}
 			}
 		}
 	}
