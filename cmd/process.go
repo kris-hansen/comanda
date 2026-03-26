@@ -310,6 +310,12 @@ func runLiveProcess(args []string) {
 
 	// Create log watcher
 	watcher := tui.NewLogWatcher(tmpLogPath, reporter)
+
+	// Try to extract model from workflow for better token estimation
+	if model := extractModelFromWorkflow(workflowFile); model != "" {
+		watcher.SetModel(model)
+	}
+
 	watcher.Start()
 	defer watcher.Stop()
 
@@ -364,4 +370,39 @@ func runWorkflowWithStreamLog(workflowFile, streamLogPath string) error {
 
 	// Run processor
 	return proc.Process()
+}
+
+// extractModelFromWorkflow tries to find the model from the workflow YAML
+func extractModelFromWorkflow(workflowFile string) string {
+	yamlFile, err := os.ReadFile(workflowFile)
+	if err != nil {
+		return ""
+	}
+
+	var dslConfig processor.DSLConfig
+	if err := yaml.Unmarshal(yamlFile, &dslConfig); err != nil {
+		return ""
+	}
+
+	// Check each step for a model
+	for _, step := range dslConfig.Steps {
+		if step.Config.Model != nil {
+			// Model can be string or []string
+			switch m := step.Config.Model.(type) {
+			case string:
+				if m != "" {
+					return m
+				}
+			case []interface{}:
+				if len(m) > 0 {
+					if s, ok := m[0].(string); ok && s != "" {
+						return s
+					}
+				}
+			}
+		}
+
+	}
+
+	return ""
 }
