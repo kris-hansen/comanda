@@ -435,8 +435,41 @@ complex_task:
       - ./src
       - ./tests
     tools: [Read, Write, Edit, Bash]
-  output: STDOUT
+  output: ./implementation_report.md
 ```
+
+### Output Configuration for Agentic Loops
+
+**Important:** Agentic loop output should almost always be a **file path**, not STDOUT.
+
+- **Use a file path:** `output: ./docs/ARCHITECTURE.md` or `output: ./report.md`
+- **Avoid STDOUT:** Agentic loops produce substantial output over multiple iterations; STDOUT is inappropriate
+
+The output file serves two purposes:
+1. It's where the agent writes its final deliverable
+2. It's automatically added to `allowed_paths` so the agent can write to it
+
+```yaml
+# GOOD: Output to a specific file
+document_codebase:
+  model: claude-code
+  action: "Create comprehensive architecture documentation"
+  agentic_loop:
+    max_iterations: 15
+    exit_condition: llm_decides
+  output: ./docs/ARCHITECTURE.md  # Agent will write here
+
+# BAD: Output to STDOUT for agentic work
+document_codebase:
+  model: claude-code
+  action: "Create comprehensive architecture documentation"
+  agentic_loop:
+    max_iterations: 15
+    exit_condition: llm_decides
+  output: STDOUT  # Don't do this - agent can't persist work!
+```
+
+**Exception:** Use `output: STDOUT` only for quick, single-iteration agentic queries where you want immediate console output.
 
 **Key Configuration:**
 - `max_iterations`: (int, default: 10) Maximum loop iterations before stopping
