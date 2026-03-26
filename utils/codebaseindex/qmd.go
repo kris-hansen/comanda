@@ -22,6 +22,12 @@ type QmdConfig struct {
 
 	// File mask for indexing (default: "**/*.md")
 	Mask string `yaml:"mask"`
+
+	// Enable TurboQuant vector quantization on embeddings
+	Quantize bool `yaml:"quantize,omitempty"`
+
+	// Quantization bit width: 1-4 (default: 2)
+	QuantizeBits int `yaml:"quantize_bits,omitempty"`
 }
 
 // qmd command timeouts
@@ -113,6 +119,15 @@ func (m *Manager) registerWithQmd(indexPath string) error {
 			}
 		} else {
 			m.logf("qmd embed completed")
+		}
+
+		// Log quantization configuration for future integration
+		if m.config.Qmd.Quantize {
+			bits := m.config.Qmd.QuantizeBits
+			if bits < 1 || bits > 4 {
+				bits = 2
+			}
+			m.logf("TurboQuant quantization configured (bits=%d) for collection '%s'", bits, collectionName)
 		}
 	}
 
