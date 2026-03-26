@@ -364,20 +364,28 @@ func (m *DashboardModel) renderResources() string {
 
 	leftBox := lipgloss.NewStyle().Width(leftWidth).Render(left.String())
 
-	// Right column: Context window
+	// Right column: Context window (estimated)
 	var right strings.Builder
 	right.WriteString(labelStyle.Render("CONTEXT WINDOW"))
+
+	// Show (est.) indicator since we're estimating tokens
+	estStyle := lipgloss.NewStyle().Foreground(m.theme.Muted).Italic(true)
+	right.WriteString(estStyle.Render(" (est.)"))
 	right.WriteString("\n")
 
 	ctxBar := m.theme.ProgressBar(m.contextPct/100, 16)
-	right.WriteString(fmt.Sprintf("%s %.0f%%\n", ctxBar, m.contextPct))
+	right.WriteString(fmt.Sprintf("%s %.1f%%\n", ctxBar, m.contextPct))
 
 	if m.tokensAvail > 0 {
 		valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#E5E7EB"))
-		right.WriteString(valueStyle.Render(fmt.Sprintf("%dk / %dk tokens",
+		right.WriteString(valueStyle.Render(fmt.Sprintf("~%dk / %dk tokens",
 			m.tokensUsed/1000,
 			m.tokensAvail/1000,
 		)))
+	} else {
+		// Show placeholder when no context info yet
+		mutedStyle := lipgloss.NewStyle().Foreground(m.theme.Muted).Italic(true)
+		right.WriteString(mutedStyle.Render("awaiting model info..."))
 	}
 
 	rightBox := lipgloss.NewStyle().Width(rightWidth).Render(right.String())

@@ -11,10 +11,12 @@ import (
 
 // LogWatcher monitors a stream log file and emits progress events
 type LogWatcher struct {
-	path     string
-	reporter *ProgressReporter
-	stop     chan struct{}
-	done     chan struct{}
+	path           string
+	reporter       *ProgressReporter
+	tokenEstimator *TokenEstimator
+	stop           chan struct{}
+	done           chan struct{}
+	totalChars     int // Track total characters for token estimation
 }
 
 // Patterns for parsing stream log
@@ -24,15 +26,27 @@ var (
 	toolPattern      = regexp.MustCompile(`→ (Read|Write|Edit|Bash|execute|calling tool:) (.+)`)
 	stepPattern      = regexp.MustCompile(`(Starting|Processing|Completed|Executing) (step|loop): (.+)`)
 	errorPattern     = regexp.MustCompile(`(?i)(error|failed|exception): (.+)`)
+	modelPattern     = regexp.MustCompile(`(?i)(model|using):\s*(claude-code|claude-[^\s,]+|gpt-[^\s,]+|gemini-[^\s,]+|o[134]-[^\s,]+)`)
 )
 
 // NewLogWatcher creates a new log watcher
 func NewLogWatcher(path string, reporter *ProgressReporter) *LogWatcher {
+	// Create token estimator with default model (will update when model is detected)
+	estimator := NewTokenEstimator("claude-code", reporter)
+
 	return &LogWatcher{
-		path:     path,
-		reporter: reporter,
-		stop:     make(chan struct{}),
-		done:     make(chan struct{}),
+		path:           path,
+		reporter:       reporter,
+		tokenEstimator: estimator,
+		stop:           make(chan struct{}),
+		done:           make(chan struct{}),
+	}
+}
+
+// SetModel updates the model for token estimation
+func (w *LogWatcher) SetModel(model string) {
+	if w.tokenEstimator != nil {
+		w.tokenEstimator.SetModel(model)
 	}
 }
 
@@ -97,15 +111,27 @@ func (w *LogWatcher) parseLine(line string) {
 		return
 	}
 
+	// Track all output for token estimation (silently - don't emit event yet)
+	w.totalChars += len(line)
+
 	// Remove timestamp prefix [HH:MM:SS]
+	cleanLine := line
 	if len(line) > 10 && line[0] == '[' {
 		if idx := strings.Index(line, "]"); idx > 0 && idx < 15 {
-			line = strings.TrimSpace(line[idx+1:])
+			cleanLine = strings.TrimSpace(line[idx+1:])
+		}
+	}
+
+	// Check for model mentions to update context window (no event emitted)
+	if matches := modelPattern.FindStringSubmatch(cleanLine); matches != nil {
+		model := matches[2]
+		if w.tokenEstimator != nil {
+			w.tokenEstimator.SetModel(model)
 		}
 	}
 
 	// Check for iteration
-	if matches := iterationPattern.FindStringSubmatch(line); matches != nil {
+	if matches := iterationPattern.FindStringSubmatch(cleanLine); matches != nil {
 		current, _ := strconv.Atoi(matches[1])
 		total, _ := strconv.Atoi(matches[2])
 		loopName := matches[3]
@@ -113,8 +139,9 @@ func (w *LogWatcher) parseLine(line string) {
 		return
 	}
 
-	// Check for context usage
-	if matches := contextPattern.FindStringSubmatch(line); matches != nil {
+	// Check for context usage (if the underlying tool outputs it)
+	// This takes precedence over our estimation
+	if matches := contextPattern.FindStringSubmatch(cleanLine); matches != nil {
 		used, _ := strconv.Atoi(matches[2])
 		avail, _ := strconv.Atoi(matches[3])
 		w.reporter.TokenUpdate(used*1000, avail*1000)
@@ -122,7 +149,7 @@ func (w *LogWatcher) parseLine(line string) {
 	}
 
 	// Check for tool calls
-	if matches := toolPattern.FindStringSubmatch(line); matches != nil {
+	if matches := toolPattern.FindStringSubmatch(cleanLine); matches != nil {
 		toolName := matches[1]
 		details := matches[2]
 		w.reporter.ToolCall(toolName + ": " + details)
@@ -130,7 +157,7 @@ func (w *LogWatcher) parseLine(line string) {
 	}
 
 	// Check for step info
-	if matches := stepPattern.FindStringSubmatch(line); matches != nil {
+	if matches := stepPattern.FindStringSubmatch(cleanLine); matches != nil {
 		action := matches[1]
 		stepName := matches[3]
 		if action == "Starting" || action == "Executing" {
@@ -142,7 +169,7 @@ func (w *LogWatcher) parseLine(line string) {
 	}
 
 	// Check for errors
-	if matches := errorPattern.FindStringSubmatch(line); matches != nil {
+	if matches := errorPattern.FindStringSubmatch(cleanLine); matches != nil {
 		w.reporter.Emit(ProgressEvent{
 			Type:    "error",
 			Message: matches[2],
@@ -151,10 +178,19 @@ func (w *LogWatcher) parseLine(line string) {
 	}
 
 	// Generic output for other lines (if they seem meaningful)
-	if len(line) > 5 && !strings.HasPrefix(line, "─") && !strings.HasPrefix(line, "═") {
+	if len(cleanLine) > 5 && !strings.HasPrefix(cleanLine, "─") && !strings.HasPrefix(cleanLine, "═") {
 		// Skip decorative lines
-		if !strings.HasPrefix(line, "  ") {
-			w.reporter.Output(line)
+		if !strings.HasPrefix(cleanLine, "  ") {
+			w.reporter.Output(cleanLine)
+		}
+	}
+
+	// Track chars for token estimation (silent - added to running total)
+	if w.tokenEstimator != nil {
+		w.tokenEstimator.AddOutput(line)
+		// Emit token update every ~2000 chars to keep UI updated without flooding
+		if w.totalChars%2000 < len(line) {
+			w.tokenEstimator.EmitUpdate()
 		}
 	}
 }
