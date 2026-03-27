@@ -307,9 +307,12 @@ func resolvePath(path string) string {
 	return path
 }
 
-// buildArgsAgentic constructs command line arguments for agentic mode (no --print)
+// buildArgsAgentic constructs command line arguments for agentic mode
+// Uses -p (print mode) with --bare and explicit tool permissions for deterministic subprocess behavior
 func (c *ClaudeCodeProvider) buildArgsAgentic(modelName string, prompt string, allowedPaths []string, tools []string) []string {
-	args := []string{} // NO --print flag - enables tool use
+	// Start with -p for subprocess/one-shot mode and --bare for deterministic behavior
+	// --bare skips hooks, plugins, MCP server discovery, and OAuth
+	args := []string{"-p", "--bare"}
 
 	// Add debug file for streaming visibility into tool calls
 	if c.debugFile != "" {
@@ -335,26 +338,33 @@ func (c *ClaudeCodeProvider) buildArgsAgentic(modelName string, prompt string, a
 		args = append(args, "--add-dir", resolvedPath)
 	}
 
-	// Enable bypass permissions for non-interactive agentic use
-	// Without this, Claude Code prompts for permission which blocks non-interactive execution
-	// Three flags may be required depending on Claude Code version:
-	// --allow-dangerously-skip-permissions (enables the bypass option)
-	// --dangerously-skip-permissions (activates bypass)
-	// --permission-mode bypassPermissions (sets the mode)
+	// Permission strategy for non-interactive agentic use:
+	// In -p mode, --allowedTools is REQUIRED to pre-approve tools (otherwise Claude
+	// tries to use them and fails with "Claude requested permissions to use X").
+	// --dangerously-skip-permissions alone is not sufficient in -p mode.
 	if len(allowedPaths) > 0 {
-		args = append(args, "--allow-dangerously-skip-permissions", "--dangerously-skip-permissions", "--permission-mode", "bypassPermissions")
+		args = append(args, "--dangerously-skip-permissions")
+
+		// Always pass --allowedTools - required for -p mode to work
+		// Use specified tools or default set for agentic coding
+		var allowedTools []string
+		if len(tools) > 0 {
+			allowedTools = tools
+		} else {
+			// Default tool set: Read, Write, Edit, Glob, Grep, Bash
+			allowedTools = []string{"Read", "Write", "Edit", "Glob", "Grep", "Bash"}
+		}
+		args = append(args, "--allowedTools", strings.Join(allowedTools, ","))
 	}
 
-	// Restrict tools if specified
-	if len(tools) > 0 {
-		args = append(args, "--tools", strings.Join(tools, ","))
-	}
+	// Output as JSON for structured parsing
+	args = append(args, "--output-format", "json")
 
 	if model := c.getModelFlag(modelName); model != "" {
 		args = append(args, "--model", model)
 	}
 
-	// Add the prompt as positional argument (NOT -p which is --print mode!)
+	// Add the prompt as the final positional argument
 	args = append(args, prompt)
 
 	return args
