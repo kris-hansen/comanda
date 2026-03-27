@@ -318,7 +318,12 @@ User's request: %s
 
 CRITICAL INSTRUCTION: Your entire response must be valid YAML syntax that can be directly saved to a .yaml file. Do not include ANY text before or after the YAML content. Start your response with the first line of YAML and end with the last line of YAML.
 
-AGENTIC LOOP OUTPUT RULE: When generating agentic_loop workflows, NEVER use "output: STDOUT". Agentic loops produce substantial work over multiple iterations that must be persisted to a file. Always use a meaningful file path like "output: ./docs/ARCHITECTURE.md" or "output: ./report.md". The output file is automatically added to allowed_paths.`,
+AGENTIC LOOP OUTPUT RULE: When generating agentic_loop workflows:
+1. NEVER use "output: STDOUT" - agentic loops must persist work to files
+2. ALWAYS use flat paths in .comanda/ directory - e.g., "output: .comanda/ARCHITECTURE.md" or "output: .comanda/analysis_report.md"
+3. Do NOT create subdirectories unless the user explicitly requests them
+4. The output file is automatically added to allowed_paths
+5. If user specifies a custom path like "./docs/", use it and ensure allowed_paths includes that directory`,
 		dslGuide, userPrompt)
 
 	// Add available codebase indexes if any exist
