@@ -8,6 +8,62 @@ import (
 	"strings"
 )
 
+// Output mode constants
+const (
+	OutputModeOverwrite    = "overwrite"    // Default: overwrite existing file
+	OutputModeAppend       = "append"       // Append to existing file
+	OutputModeIncremental  = "incremental"  // Load file as context, then append new content
+)
+
+// loadIncrementalContext loads existing file content for incremental output mode.
+// Returns the file content if found, or empty string if file doesn't exist.
+// This context should be prepended to the step's input.
+func (p *Processor) loadIncrementalContext(stepConfig *StepConfig) string {
+	if stepConfig == nil || stepConfig.OutputMode != OutputModeIncremental {
+		return ""
+	}
+
+	outputs := p.NormalizeStringSlice(stepConfig.Output)
+	if len(outputs) == 0 {
+		return ""
+	}
+
+	// Get the first output file (for incremental mode, typically one output file)
+	outputPath := outputs[0]
+	if outputPath == "" || outputPath == OutputSTDOUT || outputPath == "STDOUT" {
+		return ""
+	}
+
+	// Resolve the path
+	if p.serverConfig != nil {
+		if p.runtimeDir != "" {
+			outputPath = filepath.Join(p.serverConfig.DataDir, p.runtimeDir, outputPath)
+		} else {
+			outputPath = filepath.Join(p.serverConfig.DataDir, outputPath)
+		}
+	}
+
+	// Read existing content
+	content, err := os.ReadFile(outputPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			p.debugf("Incremental mode: output file does not exist yet: %s", outputPath)
+			return ""
+		}
+		p.debugf("Incremental mode: error reading output file %s: %v", outputPath, err)
+		return ""
+	}
+
+	if len(content) == 0 {
+		return ""
+	}
+
+	p.debugf("Incremental mode: loaded %d bytes from %s", len(content), outputPath)
+
+	// Format as context block
+	return fmt.Sprintf("[EXISTING DOCUMENT - Continue from where this ends]\n%s\n[END EXISTING DOCUMENT]\n\n", string(content))
+}
+
 // min returns the minimum of two integers
 func min(a, b int) int {
 	if a < b {
@@ -18,11 +74,32 @@ func min(a, b int) int {
 
 // handleOutput processes the model's response according to the output configuration
 func (p *Processor) handleOutput(modelName string, response string, outputs []string, metrics *PerformanceMetrics) error {
-	return p.handleOutputWithToolConfig(modelName, response, outputs, metrics, nil)
+	return p.handleOutputWithOptions(modelName, response, outputs, metrics, nil, "")
 }
 
 // handleOutputWithToolConfig processes the model's response with optional tool configuration
 func (p *Processor) handleOutputWithToolConfig(modelName string, response string, outputs []string, metrics *PerformanceMetrics, toolConfig *ToolListConfig) error {
+	return p.handleOutputWithOptions(modelName, response, outputs, metrics, toolConfig, "")
+}
+
+// handleOutputWithMode processes the model's response with a specific output mode
+func (p *Processor) handleOutputWithMode(modelName string, response string, outputs []string, metrics *PerformanceMetrics, toolConfig *ToolListConfig, outputMode string) error {
+	return p.handleOutputWithOptions(modelName, response, outputs, metrics, toolConfig, outputMode)
+}
+
+// handleOutputForStep processes output using the step's configuration
+func (p *Processor) handleOutputForStep(modelName string, response string, outputs []string, metrics *PerformanceMetrics, stepConfig *StepConfig) error {
+	var toolConfig *ToolListConfig
+	var outputMode string
+	if stepConfig != nil {
+		toolConfig = stepConfig.ToolConfig
+		outputMode = stepConfig.OutputMode
+	}
+	return p.handleOutputWithOptions(modelName, response, outputs, metrics, toolConfig, outputMode)
+}
+
+// handleOutputWithOptions processes the model's response with full options
+func (p *Processor) handleOutputWithOptions(modelName string, response string, outputs []string, metrics *PerformanceMetrics, toolConfig *ToolListConfig, outputMode string) error {
 	p.debugf("[%s] Handling %d output(s)", modelName, len(outputs))
 
 	// Apply CLI variable substitution to outputs
@@ -188,17 +265,65 @@ func (p *Processor) handleOutputWithToolConfig(modelName string, response string
 				}
 			}
 
-			// Write to file
-			p.debugf("[%s] Writing response to file: %s", modelName, outputPath)
+			// Handle output mode
+			p.debugf("[%s] Writing response to file: %s (mode: %s)", modelName, outputPath, outputMode)
 			p.debugf("[%s] Response length: %d characters", modelName, len(response))
-			p.debugf("[%s] First 100 characters: %s", modelName, response[:min(100, len(response))])
-
-			if err := os.WriteFile(outputPath, []byte(response), 0644); err != nil {
-				errMsg := fmt.Sprintf("failed to write response to file %s: %v", outputPath, err)
-				p.debugf("%s", errMsg)
-				return fmt.Errorf("%s", errMsg)
+			if len(response) > 0 {
+				p.debugf("[%s] First 100 characters: %s", modelName, response[:min(100, len(response))])
 			}
-			p.debugf("[%s] Response successfully written to file: %s", modelName, outputPath)
+
+			var writeErr error
+			switch outputMode {
+			case OutputModeAppend:
+				// Append to existing file
+				f, err := os.OpenFile(outputPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+				if err != nil {
+					writeErr = fmt.Errorf("failed to open file for append %s: %w", outputPath, err)
+				} else {
+					// Add newline separator if file exists and has content
+					if info, _ := os.Stat(outputPath); info != nil && info.Size() > 0 {
+						_, _ = f.WriteString("\n")
+					}
+					_, err = f.WriteString(response)
+					f.Close()
+					if err != nil {
+						writeErr = fmt.Errorf("failed to append to file %s: %w", outputPath, err)
+					}
+				}
+				p.debugf("[%s] Response appended to file: %s", modelName, outputPath)
+
+			case OutputModeIncremental:
+				// Append to existing file (incremental mode - load happens at input processing)
+				f, err := os.OpenFile(outputPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+				if err != nil {
+					writeErr = fmt.Errorf("failed to open file for incremental write %s: %w", outputPath, err)
+				} else {
+					// Add section separator
+					if info, _ := os.Stat(outputPath); info != nil && info.Size() > 0 {
+						_, _ = f.WriteString("\n\n---\n\n")
+					}
+					_, err = f.WriteString(response)
+					f.Close()
+					if err != nil {
+						writeErr = fmt.Errorf("failed to write incrementally to file %s: %w", outputPath, err)
+					}
+				}
+				p.debugf("[%s] Response written incrementally to file: %s", modelName, outputPath)
+
+			default: // OutputModeOverwrite or empty
+				// Default: overwrite existing file
+				writeErr = os.WriteFile(outputPath, []byte(response), 0644)
+				if writeErr != nil {
+					writeErr = fmt.Errorf("failed to write response to file %s: %w", outputPath, writeErr)
+				}
+				p.debugf("[%s] Response written to file (overwrite): %s", modelName, outputPath)
+			}
+
+			if writeErr != nil {
+				errMsg := writeErr.Error()
+				p.debugf("%s", errMsg)
+				return writeErr
+			}
 
 			// Print a simple confirmation to the console
 			log.Printf("\nResponse written to file: %s\n", outputPath)

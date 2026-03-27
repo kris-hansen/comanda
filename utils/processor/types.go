@@ -109,6 +109,7 @@ type StepConfig struct {
 	Model      interface{}     `yaml:"model"`           // Can be string or []string
 	Action     interface{}     `yaml:"action"`          // Can be string or []string
 	Output     interface{}     `yaml:"output"`          // Can be string, []string, or "tool: command" / "STDOUT|command"
+	OutputMode string          `yaml:"output_mode"`     // How to write output: "overwrite" (default), "append", "incremental"
 	NextAction interface{}     `yaml:"next-action"`     // Can be string or []string
 	BatchMode  string          `yaml:"batch_mode"`      // How to process multiple files: "combined" (default) or "individual"
 	SkipErrors bool            `yaml:"skip_errors"`     // Whether to continue processing if some files fail

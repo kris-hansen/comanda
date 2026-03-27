@@ -1566,6 +1566,12 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 			}
 		}
 
+		// If incremental output mode, load existing file content as context
+		if incrementalContext := p.loadIncrementalContext(&step.Config); incrementalContext != "" {
+			substituted = incrementalContext + substituted
+			p.debugf("Injected incremental context (existing file content: %d chars)", len(incrementalContext))
+		}
+
 		// If output is a file path, inject context so agents know to output content directly.
 		// This helps agents (especially Claude Code in --print mode) understand that they
 		// should output content directly rather than attempting to write files themselves.
@@ -1713,7 +1719,7 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 
 				// Write this result to its corresponding output file
 				p.debugf("Writing file %d/%d result to output", fileIndex, totalCount)
-				if err := p.handleOutputWithToolConfig(modelNames[0], result, substitutedOutputs, metrics, step.Config.ToolConfig); err != nil {
+				if err := p.handleOutputForStep(modelNames[0], result, substitutedOutputs, metrics, &step.Config); err != nil {
 					errMsg := fmt.Sprintf("Output processing failed for file %d of step '%s': %v",
 						fileIndex, step.Name, err)
 					p.debugf("Output processing error: %s", errMsg)
@@ -1729,9 +1735,9 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 			// Standard output handling (single result or combined mode)
 			response := actionResult.CombinedResult
 
-			p.debugf("Processing regular output for step '%s': model=%s outputs=%v",
-				step.Name, modelNames[0], outputs)
-			if err := p.handleOutputWithToolConfig(modelNames[0], response, outputs, metrics, step.Config.ToolConfig); err != nil {
+			p.debugf("Processing regular output for step '%s': model=%s outputs=%v mode=%s",
+				step.Name, modelNames[0], outputs, step.Config.OutputMode)
+			if err := p.handleOutputForStep(modelNames[0], response, outputs, metrics, &step.Config); err != nil {
 				errMsg := fmt.Sprintf("Output processing failed for step '%s': %v (model=%s outputs=%v)",
 					step.Name, err, modelNames[0], outputs)
 				p.debugf("Output processing error: %s", errMsg)
