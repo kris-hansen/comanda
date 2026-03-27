@@ -337,9 +337,12 @@ func (c *ClaudeCodeProvider) buildArgsAgentic(modelName string, prompt string, a
 
 	// Enable bypass permissions for non-interactive agentic use
 	// Without this, Claude Code prompts for permission which blocks non-interactive execution
-	// Both flags are required: --dangerously-skip-permissions AND --permission-mode bypassPermissions
+	// Three flags may be required depending on Claude Code version:
+	// --allow-dangerously-skip-permissions (enables the bypass option)
+	// --dangerously-skip-permissions (activates bypass)
+	// --permission-mode bypassPermissions (sets the mode)
 	if len(allowedPaths) > 0 {
-		args = append(args, "--dangerously-skip-permissions", "--permission-mode", "bypassPermissions")
+		args = append(args, "--allow-dangerously-skip-permissions", "--dangerously-skip-permissions", "--permission-mode", "bypassPermissions")
 	}
 
 	// Restrict tools if specified
