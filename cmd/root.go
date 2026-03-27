@@ -323,7 +323,14 @@ AGENTIC LOOP OUTPUT RULE: When generating agentic_loop workflows:
 2. ALWAYS use flat paths in .comanda/ directory - e.g., "output: .comanda/ARCHITECTURE.md" or "output: .comanda/analysis_report.md"
 3. Do NOT create subdirectories unless the user explicitly requests them
 4. The output file is automatically added to allowed_paths
-5. If user specifies a custom path like "./docs/", use it and ensure allowed_paths includes that directory`,
+5. If user specifies a custom path like "./docs/", use it and ensure allowed_paths includes that directory
+
+AGENTIC LOOP PROMPT REQUIREMENTS: When writing the 'action' prompt for agentic loops:
+1. Always include explicit write instructions - tell the agent it HAS permission to write
+2. Include this near the end of the action prompt:
+   "WRITE ACCESS: You have full write permission to all paths in allowed_paths. Write your content directly to files. Do not write meta-commentary about permissions - just write the actual content."
+3. If the workflow involves multi-iteration document building, remind the agent to READ the existing file first and APPEND/UPDATE rather than asking for permission
+4. Never let the agent assume it lacks permission - be explicit that it can and should write immediately`,
 		dslGuide, userPrompt)
 
 	// Add available codebase indexes if any exist
