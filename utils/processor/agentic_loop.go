@@ -535,11 +535,38 @@ func (p *Processor) processInlineAgenticLoop(step Step) (string, error) {
 // expandAllowedPathsWithOutputDirs adds parent directories of any output file paths
 // to the allowed_paths list. This ensures agents can write to output locations
 // without requiring explicit configuration of every output directory.
+// It also creates any directories in allowed_paths that don't exist yet.
 func (p *Processor) expandAllowedPathsWithOutputDirs(allowedPaths []string, steps []Step) []string {
 	// Use a map to deduplicate paths
 	pathSet := make(map[string]bool)
 	for _, path := range allowedPaths {
 		pathSet[path] = true
+
+		// Create allowed_path directories if they don't exist
+		// This prevents permission errors when the agent tries to write to .comanda/ etc.
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			p.debugf("Warning: failed to resolve allowed_path %s: %v", path, err)
+			continue
+		}
+
+		// Check if this looks like a directory path (no extension or ends with /)
+		// or if it already exists as a directory
+		info, statErr := os.Stat(absPath)
+		isDir := (statErr == nil && info.IsDir()) ||
+			strings.HasSuffix(path, "/") ||
+			filepath.Ext(path) == ""
+
+		if isDir && os.IsNotExist(statErr) {
+			if err := os.MkdirAll(absPath, 0755); err != nil {
+				p.debugf("Warning: failed to create allowed_path directory %s: %v", absPath, err)
+			} else {
+				p.debugf("Auto-created allowed_path directory: %s", absPath)
+				if p.streamLog != nil && p.streamLog.IsEnabled() {
+					p.streamLog.Log("📁 Created directory: %s", path)
+				}
+			}
+		}
 	}
 
 	// Extract output directories from steps
