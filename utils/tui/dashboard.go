@@ -46,21 +46,24 @@ type DashboardModel struct {
 	eventChan   chan ProgressEvent
 	reporter    *ProgressReporter
 	quitting    bool
-	verbose     bool
-	debugMode   bool
-	debugScroll int
-	maxActivity int
-	maxOutput   int
-	maxDebug    int
-	debugWriter *DebugWriter
+	verbose        bool
+	debugMode      bool
+	debugScroll    int
+	outputExpanded bool
+	outputScroll   int
+	maxActivity    int
+	maxOutput      int
+	maxDebug       int
+	debugWriter    *DebugWriter
 }
 
 type dashboardKeyMap struct {
-	Quit        key.Binding
-	Verbose     key.Binding
-	ToggleDebug key.Binding
-	ScrollUp    key.Binding
-	ScrollDown  key.Binding
+	Quit         key.Binding
+	Verbose      key.Binding
+	ToggleDebug  key.Binding
+	ToggleOutput key.Binding
+	ScrollUp     key.Binding
+	ScrollDown   key.Binding
 }
 
 func defaultDashboardKeyMap() dashboardKeyMap {
@@ -76,6 +79,10 @@ func defaultDashboardKeyMap() dashboardKeyMap {
 		ToggleDebug: key.NewBinding(
 			key.WithKeys("d"),
 			key.WithHelp("d", "debug panel"),
+		),
+		ToggleOutput: key.NewBinding(
+			key.WithKeys("ctrl+o"),
+			key.WithHelp("^O", "expand output"),
 		),
 		ScrollUp: key.NewBinding(
 			key.WithKeys("k", "up"),
@@ -172,12 +179,22 @@ func (m *DashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.verbose = !m.verbose
 		case key.Matches(msg, m.keymap.ToggleDebug):
 			m.debugMode = !m.debugMode
+		case key.Matches(msg, m.keymap.ToggleOutput):
+			m.outputExpanded = !m.outputExpanded
+			m.outputScroll = 0 // Reset scroll when toggling
 		case key.Matches(msg, m.keymap.ScrollUp):
-			if m.debugMode && m.debugScroll > 0 {
+			if m.outputExpanded && m.outputScroll > 0 {
+				m.outputScroll--
+			} else if m.debugMode && m.debugScroll > 0 {
 				m.debugScroll--
 			}
 		case key.Matches(msg, m.keymap.ScrollDown):
-			if m.debugMode && m.debugScroll < len(m.debugLines)-m.maxDebug {
+			if m.outputExpanded {
+				maxScroll := len(m.outputLines) - m.getOutputPanelHeight()
+				if maxScroll > 0 && m.outputScroll < maxScroll {
+					m.outputScroll++
+				}
+			} else if m.debugMode && m.debugScroll < len(m.debugLines)-m.maxDebug {
 				m.debugScroll++
 			}
 		}
@@ -284,6 +301,15 @@ func (m *DashboardModel) View() string {
 
 	if m.width == 0 {
 		return "Loading..."
+	}
+
+	// In expanded output mode, show only header, output, and footer
+	if m.outputExpanded {
+		var sections []string
+		sections = append(sections, m.renderHeader())
+		sections = append(sections, m.renderExpandedOutput())
+		sections = append(sections, m.renderFooter())
+		return lipgloss.JoinVertical(lipgloss.Left, sections...)
 	}
 
 	var sections []string
@@ -528,6 +554,57 @@ func (m *DashboardModel) renderOutput() string {
 	return boxStyle.Render(content.String())
 }
 
+func (m *DashboardModel) renderExpandedOutput() string {
+	panelHeight := m.getOutputPanelHeight()
+	boxStyle := m.theme.BoxNormal.Width(m.width - 4).Height(panelHeight + 2)
+
+	labelStyle := lipgloss.NewStyle().Bold(true).Foreground(m.theme.Secondary)
+	mutedStyle := lipgloss.NewStyle().Foreground(m.theme.Muted)
+
+	var content strings.Builder
+	content.WriteString(labelStyle.Render("OUTPUT"))
+	content.WriteString(mutedStyle.Render(" (expanded)"))
+
+	// Show scroll position if scrollable
+	totalLines := len(m.outputLines)
+	if totalLines > panelHeight {
+		content.WriteString(mutedStyle.Render(fmt.Sprintf(" (%d-%d of %d) ↑↓ scroll",
+			m.outputScroll+1,
+			min(m.outputScroll+panelHeight, totalLines),
+			totalLines,
+		)))
+	} else {
+		content.WriteString(mutedStyle.Render(fmt.Sprintf(" (%d lines)", totalLines)))
+	}
+	content.WriteString("\n")
+
+	if totalLines == 0 {
+		content.WriteString(mutedStyle.Italic(true).Render("  No output yet..."))
+	} else {
+		// Calculate visible range
+		start := m.outputScroll
+		end := start + panelHeight
+		if end > totalLines {
+			end = totalLines
+			start = end - panelHeight
+			if start < 0 {
+				start = 0
+			}
+		}
+
+		for _, line := range m.outputLines[start:end] {
+			// Truncate long lines
+			maxLen := m.width - 10
+			if len(line) > maxLen {
+				line = line[:maxLen-3] + "..."
+			}
+			content.WriteString("  " + line + "\n")
+		}
+	}
+
+	return boxStyle.Render(content.String())
+}
+
 func (m *DashboardModel) renderDebugPanel() string {
 	// Calculate available height for debug panel
 	panelHeight := m.maxDebug
@@ -601,9 +678,14 @@ func (m *DashboardModel) renderFooter() string {
 		Align(lipgloss.Center).
 		MarginTop(1)
 
-	keys := []string{"q quit", "v verbose", "d debug"}
-	if m.debugMode && len(m.debugLines) > m.maxDebug {
-		keys = append(keys, "↑↓ scroll")
+	var keys []string
+	if m.outputExpanded {
+		keys = []string{"q quit", "^O collapse", "↑↓ scroll"}
+	} else {
+		keys = []string{"q quit", "v verbose", "d debug", "^O output"}
+		if m.debugMode && len(m.debugLines) > m.maxDebug {
+			keys = append(keys, "↑↓ scroll")
+		}
 	}
 	help := strings.Join(keys, "  •  ")
 
@@ -644,4 +726,16 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// getOutputPanelHeight returns the height of the output panel based on expanded state
+func (m *DashboardModel) getOutputPanelHeight() int {
+	if !m.outputExpanded {
+		return m.maxOutput
+	}
+	// In expanded mode, use most of the screen
+	if m.height > 10 {
+		return m.height - 8 // Leave room for header and footer
+	}
+	return 20
 }

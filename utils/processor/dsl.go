@@ -414,6 +414,11 @@ func (p *Processor) SetProgressWriter(w ProgressWriter) {
 	p.spinner.SetProgressWriter(w)
 }
 
+// DisableSpinner disables the CLI spinner (use when running in TUI mode)
+func (p *Processor) DisableSpinner() {
+	p.spinner.Disable()
+}
+
 // SetStreamLog sets up stream logging to a file for real-time monitoring
 func (p *Processor) SetStreamLog(path string) error {
 	if path == "" {
