@@ -552,6 +552,40 @@ secure_task:
   output: STDOUT
 ```
 
+### Writing Effective Agentic Prompts
+
+When writing the `action` prompt for agentic loops, be explicit about permissions to avoid agent confusion:
+
+**Always include write permission confirmation:**
+```yaml
+action: |
+  Your task: Create comprehensive documentation for this codebase.
+  
+  ...task-specific instructions...
+  
+  WRITE ACCESS: You have full write permission to all paths in allowed_paths.
+  Write your content directly to files. Do not ask for permission or write
+  meta-commentary about permissions - just write the actual content.
+```
+
+**For multi-iteration document building:**
+```yaml
+action: |
+  Iteration {{ loop.iteration }} of {{ loop.total_iterations }}.
+  
+  ...iteration-specific instructions...
+  
+  Previous work: {{ loop.previous_output }}
+  
+  IMPORTANT:
+  - READ the existing output file first to see what's already written
+  - APPEND or UPDATE sections - don't start from scratch each iteration  
+  - You have full write access - write immediately, don't ask permission
+  - If the file contains permission-related text, overwrite it with real content
+```
+
+**Why this matters:** Agents can misinterpret early errors as permission denials and enter a confused state where they write complaints about permissions instead of actual content. Explicit permission confirmation prevents this loop.
+
 ### Error Handling
 
 When path access fails, comanda provides helpful error messages showing:
