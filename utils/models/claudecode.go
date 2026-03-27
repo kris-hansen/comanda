@@ -339,14 +339,22 @@ func (c *ClaudeCodeProvider) buildArgsAgentic(modelName string, prompt string, a
 	}
 
 	// Permission strategy for non-interactive agentic use:
-	// Use full bypass mode - comanda is the control point for paths/tools
+	// In -p mode, --allowedTools is REQUIRED to pre-approve tools (otherwise Claude
+	// tries to use them and fails with "Claude requested permissions to use X").
+	// --dangerously-skip-permissions alone is not sufficient in -p mode.
 	if len(allowedPaths) > 0 {
 		args = append(args, "--dangerously-skip-permissions")
 
-		// Restrict tools if specified in YAML config
+		// Always pass --allowedTools - required for -p mode to work
+		// Use specified tools or default set for agentic coding
+		var allowedTools []string
 		if len(tools) > 0 {
-			args = append(args, "--allowedTools", strings.Join(tools, ","))
+			allowedTools = tools
+		} else {
+			// Default tool set: Read, Write, Edit, Glob, Grep, Bash
+			allowedTools = []string{"Read", "Write", "Edit", "Glob", "Grep", "Bash"}
 		}
+		args = append(args, "--allowedTools", strings.Join(allowedTools, ","))
 	}
 
 	// Output as JSON for structured parsing
