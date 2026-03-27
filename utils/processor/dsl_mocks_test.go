@@ -2,6 +2,7 @@ package processor
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/kris-hansen/comanda/utils/models"
 )
@@ -34,7 +35,9 @@ func restoreDetectProvider() {
 }
 
 // MockProvider implements the models.Provider interface for testing
+// Thread-safe for parallel test execution
 type MockProvider struct {
+	mu         sync.RWMutex
 	name       string
 	configured bool
 	verbose    bool
@@ -48,10 +51,16 @@ func NewMockProvider(name string) *MockProvider {
 }
 
 func (m *MockProvider) Name() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.name
 }
 
 func (m *MockProvider) SupportsModel(modelName string) bool {
+	m.mu.RLock()
+	providerName := m.name
+	m.mu.RUnlock()
+
 	validModels := map[string][]string{
 		"openai": {
 			"gpt-4",
@@ -66,7 +75,7 @@ func (m *MockProvider) SupportsModel(modelName string) bool {
 		},
 	}
 
-	if models, ok := validModels[m.name]; ok {
+	if models, ok := validModels[providerName]; ok {
 		for _, validModel := range models {
 			if modelName == validModel {
 				return true
@@ -80,13 +89,19 @@ func (m *MockProvider) Configure(apiKey string) error {
 	if apiKey == "" {
 		return fmt.Errorf("API key is required")
 	}
+	m.mu.Lock()
 	m.configured = true
 	m.apiKey = apiKey
+	m.mu.Unlock()
 	return nil
 }
 
 func (m *MockProvider) SendPrompt(model, prompt string) (string, error) {
-	if !m.configured {
+	m.mu.RLock()
+	configured := m.configured
+	m.mu.RUnlock()
+
+	if !configured {
 		return "", fmt.Errorf("provider not configured")
 	}
 	if !m.SupportsModel(model) {
@@ -96,7 +111,11 @@ func (m *MockProvider) SendPrompt(model, prompt string) (string, error) {
 }
 
 func (m *MockProvider) SendPromptWithFile(model, prompt string, file models.FileInput) (string, error) {
-	if !m.configured {
+	m.mu.RLock()
+	configured := m.configured
+	m.mu.RUnlock()
+
+	if !configured {
 		return "", fmt.Errorf("provider not configured")
 	}
 	if !m.SupportsModel(model) {
@@ -106,5 +125,7 @@ func (m *MockProvider) SendPromptWithFile(model, prompt string, file models.File
 }
 
 func (m *MockProvider) SetVerbose(verbose bool) {
+	m.mu.Lock()
 	m.verbose = verbose
+	m.mu.Unlock()
 }
