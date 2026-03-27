@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -113,6 +114,12 @@ Input can be provided via:
 			err = yaml.Unmarshal(yamlFile, &dslConfig)
 			if err != nil {
 				log.Printf("Error parsing YAML file %s: %v\n", file, err)
+				continue
+			}
+
+			// Check if workflow uses .comanda paths and prompt for creation if needed
+			if err := ensureComandaDirIfNeeded(&dslConfig); err != nil {
+				log.Printf("Error: %v\n", err)
 				continue
 			}
 
@@ -389,6 +396,120 @@ func runWorkflowWithStreamLog(workflowFile, streamLogPath string) error {
 
 	// Run processor
 	return proc.Process()
+}
+
+// ensureComandaDirIfNeeded checks if the workflow uses .comanda paths and
+// prompts the user to create the directory if it doesn't exist.
+func ensureComandaDirIfNeeded(dslConfig *processor.DSLConfig) error {
+	// Check if .comanda already exists
+	if _, err := os.Stat(".comanda"); err == nil {
+		return nil // Already exists, nothing to do
+	}
+
+	// Check if workflow uses .comanda paths
+	usesComanda := false
+
+	// Check regular steps
+	for _, step := range dslConfig.Steps {
+		if workflowUsesComandaPath(step.Config) {
+			usesComanda = true
+			break
+		}
+	}
+
+	// Check agentic loop steps
+	if !usesComanda {
+		for _, loopConfig := range dslConfig.Loops {
+			for _, path := range loopConfig.AllowedPaths {
+				if strings.Contains(path, ".comanda") {
+					usesComanda = true
+					break
+				}
+			}
+			if usesComanda {
+				break
+			}
+			for _, step := range loopConfig.Steps {
+				if workflowUsesComandaPath(step.Config) {
+					usesComanda = true
+					break
+				}
+			}
+			if usesComanda {
+				break
+			}
+		}
+	}
+
+	if !usesComanda {
+		return nil // Workflow doesn't use .comanda paths
+	}
+
+	// Prompt user
+	log.Printf("\nThis workflow uses .comanda/ paths, but the directory doesn't exist.\n")
+	log.Printf("Create .comanda/ directory? [Y/n]: ")
+
+	reader := bufio.NewReader(os.Stdin)
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		// If we can't read (e.g., piped input), default to yes
+		response = "y"
+	}
+	response = strings.TrimSpace(strings.ToLower(response))
+
+	if response == "" || response == "y" || response == "yes" {
+		if err := os.MkdirAll(".comanda", 0755); err != nil {
+			return fmt.Errorf("failed to create .comanda directory: %w", err)
+		}
+		log.Printf("Created .comanda/ directory\n\n")
+	} else {
+		return fmt.Errorf("workflow requires .comanda/ directory - aborting")
+	}
+
+	return nil
+}
+
+// workflowUsesComandaPath checks if a step config references .comanda paths
+func workflowUsesComandaPath(config processor.StepConfig) bool {
+	// Check output
+	if output, ok := config.Output.(string); ok {
+		if strings.Contains(output, ".comanda") {
+			return true
+		}
+	}
+
+	// Check input
+	if inputs := normalizeInput(config.Input); len(inputs) > 0 {
+		for _, input := range inputs {
+			if strings.Contains(input, ".comanda") {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// normalizeInput converts input to string slice for checking
+func normalizeInput(input interface{}) []string {
+	if input == nil {
+		return nil
+	}
+	switch v := input.(type) {
+	case string:
+		return []string{v}
+	case []interface{}:
+		result := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				result = append(result, s)
+			}
+		}
+		return result
+	case []string:
+		return v
+	}
+	return nil
 }
 
 // extractModelFromWorkflow tries to find the model from the workflow YAML
