@@ -1227,7 +1227,9 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 
 	// Create a new handler for this step to avoid conflicts in parallel processing
 	stepHandler := input.NewHandler()
+	p.mu.Lock()
 	p.handler = stepHandler
+	p.mu.Unlock()
 
 	stepInfo := &StepInfo{
 		Name:   step.Name,
@@ -1283,7 +1285,10 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 		} else if url, ok := v["url"].(string); ok {
 			// Handle scraping configuration
 			p.debugf("Scraping content from %s for step: %s", url, step.Name)
-			if err := p.handler.ProcessScrape(url, v); err != nil {
+			p.mu.Lock()
+			handler := p.handler
+			p.mu.Unlock()
+			if err := handler.ProcessScrape(url, v); err != nil {
 				return "", fmt.Errorf("failed to process scraping input: %w", err)
 			}
 		} else {
@@ -1508,9 +1513,12 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 		substituted := p.substituteVariables(action)
 
 		// If we're processing chunks, add chunk-specific placeholders
-		if chunkResult != nil && len(p.handler.GetInputs()) > 0 {
+		p.mu.Lock()
+		handlerInputs := p.handler.GetInputs()
+		p.mu.Unlock()
+		if chunkResult != nil && len(handlerInputs) > 0 {
 			// Get the current chunk index from the input path
-			currentInput := p.handler.GetInputs()[0]
+			currentInput := handlerInputs[0]
 			chunkIndex := -1
 			for i, chunkPath := range chunkResult.ChunkPaths {
 				if chunkPath == currentInput.Path {

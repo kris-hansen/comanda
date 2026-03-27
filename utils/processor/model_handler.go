@@ -240,7 +240,9 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 
 		provider.SetVerbose(p.verbose)
 		// Store provider by provider name instead of model name
+		p.mu.Lock()
 		p.providers[provider.Name()] = provider
+		p.mu.Unlock()
 		p.debugf("Model %s is supported by provider %s", modelName, provider.Name())
 	}
 	return nil
@@ -264,7 +266,15 @@ func isLocalProvider(name string) bool {
 func (p *Processor) configureProviders() error {
 	p.debugf("Configuring providers")
 
-	for providerName, provider := range p.providers {
+	// Copy providers map to avoid race conditions during iteration
+	p.mu.Lock()
+	providersCopy := make(map[string]models.Provider, len(p.providers))
+	for k, v := range p.providers {
+		providersCopy[k] = v
+	}
+	p.mu.Unlock()
+
+	for providerName, provider := range providersCopy {
 		p.debugf("Configuring provider %s", providerName)
 
 		// Handle local providers (no API key needed, use "LOCAL" configuration)
