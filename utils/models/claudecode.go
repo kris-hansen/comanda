@@ -281,8 +281,8 @@ func (c *ClaudeCodeProvider) buildArgs(modelName string, prompt string, workDir 
 		args = append(args, "--model", model)
 	}
 
-	// Add the prompt
-	args = append(args, "-p", prompt)
+	// Add the prompt as positional argument
+	args = append(args, prompt)
 
 	return args
 }
@@ -354,8 +354,8 @@ func (c *ClaudeCodeProvider) buildArgsAgentic(modelName string, prompt string, a
 		args = append(args, "--model", model)
 	}
 
-	// Add the prompt
-	args = append(args, "-p", prompt)
+	// Add the prompt as positional argument (NOT -p which is --print mode!)
+	args = append(args, prompt)
 
 	return args
 }
