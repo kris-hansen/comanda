@@ -351,7 +351,7 @@ func runLiveProcess(args []string) {
 	// Run the processor in a goroutine
 	processDone := make(chan error, 1)
 	go func() {
-		err := runWorkflowWithStreamLog(workflowFile, tmpLogPath)
+		err := runWorkflowWithStreamLog(workflowFile, tmpLogPath, true) // true = disable spinner for TUI mode
 		reporter.Complete(err)
 		processDone <- err
 	}()
@@ -369,7 +369,8 @@ func runLiveProcess(args []string) {
 }
 
 // runWorkflowWithStreamLog runs a single workflow with stream logging
-func runWorkflowWithStreamLog(workflowFile, streamLogPath string) error {
+// If disableSpinner is true, the CLI spinner is disabled (for TUI mode)
+func runWorkflowWithStreamLog(workflowFile, streamLogPath string, disableSpinner ...bool) error {
 	// Read YAML file
 	yamlFile, err := os.ReadFile(workflowFile)
 	if err != nil {
@@ -387,6 +388,11 @@ func runWorkflowWithStreamLog(workflowFile, streamLogPath string) error {
 	cliVars := parseVarsFlags(varsFlags, "")
 
 	proc := processor.NewProcessor(&dslConfig, envConfig, serverConfig, verbose, runtimeDir, cliVars)
+
+	// Disable spinner if requested (TUI mode handles progress display)
+	if len(disableSpinner) > 0 && disableSpinner[0] {
+		proc.DisableSpinner()
+	}
 
 	// Set up stream logging
 	if err := proc.SetStreamLog(streamLogPath); err != nil {
