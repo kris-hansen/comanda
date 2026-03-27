@@ -561,6 +561,16 @@ func (p *Processor) expandAllowedPathsWithOutputDirs(allowedPaths []string, step
 				pathSet[absDir] = true
 				p.debugf("Auto-added output directory to allowed_paths: %s (from output: %s)", absDir, outputPath)
 			}
+
+			// Create the output directory if it doesn't exist
+			// This prevents permission errors when the agent tries to write
+			if _, err := os.Stat(absDir); os.IsNotExist(err) {
+				if err := os.MkdirAll(absDir, 0755); err != nil {
+					p.debugf("Warning: failed to create output directory %s: %v", absDir, err)
+				} else {
+					p.debugf("Auto-created output directory: %s", absDir)
+				}
+			}
 		}
 	}
 
