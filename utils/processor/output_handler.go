@@ -10,9 +10,9 @@ import (
 
 // Output mode constants
 const (
-	OutputModeOverwrite    = "overwrite"    // Default: overwrite existing file
-	OutputModeAppend       = "append"       // Append to existing file
-	OutputModeIncremental  = "incremental"  // Load file as context, then append new content
+	OutputModeOverwrite   = "overwrite"   // Default: overwrite existing file
+	OutputModeAppend      = "append"      // Append to existing file
+	OutputModeIncremental = "incremental" // Load file as context, then append new content
 )
 
 // loadIncrementalContext loads existing file content for incremental output mode.

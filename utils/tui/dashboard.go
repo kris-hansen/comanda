@@ -37,15 +37,15 @@ type DashboardModel struct {
 	status        string // "running", "paused", "complete", "error"
 	errorMsg      string
 
-	spinner     spinner.Model
-	width       int
-	height      int
-	theme       *Theme
-	keymap      dashboardKeyMap
-	startTime   time.Time
-	eventChan   chan ProgressEvent
-	reporter    *ProgressReporter
-	quitting    bool
+	spinner        spinner.Model
+	width          int
+	height         int
+	theme          *Theme
+	keymap         dashboardKeyMap
+	startTime      time.Time
+	eventChan      chan ProgressEvent
+	reporter       *ProgressReporter
+	quitting       bool
 	verbose        bool
 	debugMode      bool
 	debugScroll    int
