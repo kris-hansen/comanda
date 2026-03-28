@@ -190,9 +190,57 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 			}
 		}
 
-		// If we have file inputs, use SendPromptWithFile
+		// If we have file inputs, use SendPromptWithFile (or SendPromptAgentic in agentic mode)
 		if len(fileInputs) > 0 {
 			if len(fileInputs) == 1 {
+				// In agentic mode, read the file content and use SendPromptAgentic
+				// This ensures the correct working directory is used instead of the file's temp directory
+				if isAgenticMode {
+					if claudeCode, ok := configuredProvider.(*models.ClaudeCodeProvider); ok {
+						p.debugf("Using agentic mode with Claude Code for single file input")
+						// Read file content
+						fileContent, err := fileutil.SafeReadFile(fileInputs[0].Path)
+						if err != nil {
+							return nil, fmt.Errorf("failed to read file %s: %w", fileInputs[0].Path, err)
+						}
+						// Combine file content with action
+						combinedPrompt := fmt.Sprintf("File: %s\n\n```\n%s\n```\n\nTask: %s",
+							fileInputs[0].Path, string(fileContent), action)
+
+						// Pass stream log path to claude-code for debug visibility
+						streamLogPath := p.GetStreamLogPath()
+						var debugWatcher *DebugWatcher
+						if streamLogPath != "" {
+							debugPath := streamLogPath + ".claude-debug"
+							p.debugf("Setting claude-code debug file: %s", debugPath)
+							claudeCode.SetDebugFile(debugPath)
+							if p.streamLog != nil {
+								debugWatcher = NewDebugWatcher(debugPath, p.streamLog)
+								debugWatcher.Start()
+							}
+						}
+						// Set native worktree if provider supports it
+						worktreeName := p.getCurrentStepWorktree()
+						if worktreeName != "" && p.providerSupportsWorktrees("claude-code") {
+							p.debugf("Using native worktree support: %s", worktreeName)
+							claudeCode.SetWorktree(worktreeName)
+							defer claudeCode.ClearWorktree()
+						}
+						result, err := claudeCode.SendPromptAgentic(modelName, combinedPrompt,
+							agenticConfig.AllowedPaths, agenticConfig.Tools, p.getEffectiveWorkDir())
+						if debugWatcher != nil {
+							debugWatcher.Stop()
+						}
+						if err != nil {
+							return nil, err
+						}
+						return &ActionResult{
+							CombinedResult:       result,
+							HasIndividualResults: false,
+						}, nil
+					}
+				}
+				// Non-agentic mode: use SendPromptWithFile as before
 				result, err := configuredProvider.SendPromptWithFile(modelName, action, fileInputs[0])
 				if err != nil {
 					return nil, err
