@@ -132,10 +132,31 @@ Input can be provided via:
 				Enabled: false, // Disable server mode for CLI processing
 			}
 
+			// Default runtimeDir to workflow file's directory if not specified
+			// This ensures Claude Code runs in the project directory, not a temp folder
+			effectiveRuntimeDir := runtimeDir
+			if effectiveRuntimeDir == "" {
+				effectiveRuntimeDir = filepath.Dir(file)
+				if effectiveRuntimeDir == "." {
+					// Get absolute path for current directory
+					if cwd, err := os.Getwd(); err == nil {
+						effectiveRuntimeDir = cwd
+					}
+				} else {
+					// Resolve to absolute path
+					if absPath, err := filepath.Abs(effectiveRuntimeDir); err == nil {
+						effectiveRuntimeDir = absPath
+					}
+				}
+				if verbose {
+					log.Printf("[DEBUG] No --runtime-dir specified, using workflow directory: %s\n", effectiveRuntimeDir)
+				}
+			}
+
 			// Parse CLI variables
 			cliVars := parseVarsFlags(varsFlags, stdinData)
 
-			proc := processor.NewProcessor(&dslConfig, envConfig, serverConfig, verbose, runtimeDir, cliVars)
+			proc := processor.NewProcessor(&dslConfig, envConfig, serverConfig, verbose, effectiveRuntimeDir, cliVars)
 
 			// Set up stream logging if requested
 			if streamLogFile != "" {
@@ -387,7 +408,22 @@ func runWorkflowWithStreamLog(workflowFile, streamLogPath string, disableSpinner
 	serverConfig := &config.ServerConfig{Enabled: false}
 	cliVars := parseVarsFlags(varsFlags, "")
 
-	proc := processor.NewProcessor(&dslConfig, envConfig, serverConfig, verbose, runtimeDir, cliVars)
+	// Default runtimeDir to workflow file's directory if not specified
+	effectiveRuntimeDir := runtimeDir
+	if effectiveRuntimeDir == "" {
+		effectiveRuntimeDir = filepath.Dir(workflowFile)
+		if effectiveRuntimeDir == "." {
+			if cwd, err := os.Getwd(); err == nil {
+				effectiveRuntimeDir = cwd
+			}
+		} else {
+			if absPath, err := filepath.Abs(effectiveRuntimeDir); err == nil {
+				effectiveRuntimeDir = absPath
+			}
+		}
+	}
+
+	proc := processor.NewProcessor(&dslConfig, envConfig, serverConfig, verbose, effectiveRuntimeDir, cliVars)
 
 	// Disable spinner if requested (TUI mode handles progress display)
 	if len(disableSpinner) > 0 && disableSpinner[0] {
