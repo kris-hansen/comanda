@@ -312,7 +312,7 @@ func resolvePath(path string) string {
 func (c *ClaudeCodeProvider) buildArgsAgentic(modelName string, prompt string, allowedPaths []string, tools []string) []string {
 	// Start with -p for subprocess/one-shot mode and --bare for deterministic behavior
 	// --bare skips hooks, plugins, MCP server discovery, and OAuth
-	args := []string{"-p", "--bare"}
+	args := []string{"-p"}
 
 	// Add debug file for streaming visibility into tool calls
 	if c.debugFile != "" {
