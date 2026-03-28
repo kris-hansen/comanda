@@ -310,9 +310,9 @@ func resolvePath(path string) string {
 // buildArgsAgentic constructs command line arguments for agentic mode
 // Uses -p (print mode) with --bare and explicit tool permissions for deterministic subprocess behavior
 func (c *ClaudeCodeProvider) buildArgsAgentic(modelName string, prompt string, allowedPaths []string, tools []string) []string {
-	// Start with -p for subprocess/one-shot mode and --bare for deterministic behavior
-	// --bare skips hooks, plugins, MCP server discovery, and OAuth
-	args := []string{"-p", "--bare"}
+	// Start with -p for subprocess/one-shot mode and for subprocess mode
+	// Note: --bare was removed as it breaks auth on some Claude Code versions
+	args := []string{"-p"}
 
 	// Add debug file for streaming visibility into tool calls
 	if c.debugFile != "" {
