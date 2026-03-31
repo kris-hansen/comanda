@@ -1,0 +1,42 @@
+# Zero-Day Dependency Scanner
+# Scans dependencies for known vulnerabilities using OSV.dev API
+# Usage: cat package.json | comanda process zeroday-scanner.yaml
+
+parse-deps:
+  input: STDIN
+  model: grok-4-1-fast-non-reasoning
+  action: |
+    Extract all dependencies from this file as a JSON array.
+    Each item must have: name, version, ecosystem (npm, PyPI, Go, crates.io, etc.)
+    Output ONLY valid JSON, no explanation.
+    Example: [{"name": "lodash", "version": "4.17.21", "ecosystem": "npm"}]
+  output: ./deps.json
+
+query-osv:
+  input: ./deps.json
+  model: NA
+  tool_config:
+    allowlist: [curl, jq]
+    timeout: 120
+  action: NA
+  output: "tool: jq -c '.[]' | while IFS= read -r pkg; do name=$(echo \"$pkg\" | jq -r '.name'); ver=$(echo \"$pkg\" | jq -r '.version'); eco=$(echo \"$pkg\" | jq -r '.ecosystem'); curl -s https://api.osv.dev/v1/query -H 'Content-Type: application/json' -d \"{\\\"package\\\":{\\\"name\\\":\\\"$name\\\",\\\"ecosystem\\\":\\\"$eco\\\"},\\\"version\\\":\\\"$ver\\\"}\" | jq --arg pkg \"$name@$ver\" '{package: $pkg, vulns: [.vulns[]? | {id, summary, severity: .severity[0].type, score: .severity[0].score, fixed: .affected[0].ranges[0].events[1].fixed}]}'; done | jq -s '[.[] | select(.vulns | length > 0)]' | tee ./vulns.json"
+
+generate-report:
+  input: ./vulns.json
+  model: grok-4-1-fast-non-reasoning
+  action: |
+    Analyze this OSV.dev vulnerability data and create a security report.
+    
+    For each vulnerability found:
+    - Package name and version
+    - CVE/GHSA ID
+    - Severity (CRITICAL/HIGH/MEDIUM/LOW)
+    - Brief description
+    - Fixed version (if available)
+    - Remediation command
+    
+    Format with clear sections. Use emoji for severity:
+    🔴 CRITICAL, 🟠 HIGH, 🟡 MEDIUM, 🟢 LOW
+    
+    If no vulnerabilities found, say "✅ No known vulnerabilities detected"
+  output: STDOUT
