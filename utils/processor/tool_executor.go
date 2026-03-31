@@ -92,7 +92,6 @@ var DefaultDenylist = []string{
 
 	// Dangerous utilities
 	"wget",
-	"curl",
 	"ssh",
 	"scp",
 	"sftp",
@@ -205,6 +204,9 @@ var DefaultAllowlist = []string{
 	"xxd",
 	"od",
 	"hexdump",
+
+	// HTTP client (read-only API calls)
+	"curl",
 
 	// Find (read-only)
 	"find",

@@ -333,7 +333,7 @@ func TestIsToolOutput(t *testing.T) {
 func TestDefaultDenylist(t *testing.T) {
 	// Ensure critical dangerous commands are in the denylist
 	dangerousCommands := []string{
-		"rm", "sudo", "bash", "sh", "chmod", "curl", "wget",
+		"rm", "sudo", "bash", "sh", "chmod", "wget",
 	}
 
 	for _, cmd := range dangerousCommands {
@@ -353,7 +353,7 @@ func TestDefaultDenylist(t *testing.T) {
 func TestDefaultAllowlist(t *testing.T) {
 	// Ensure safe commands are in the allowlist
 	safeCommands := []string{
-		"ls", "cat", "grep", "jq", "bd", "echo", "date",
+		"ls", "cat", "grep", "jq", "bd", "echo", "date", "curl",
 	}
 
 	for _, cmd := range safeCommands {
