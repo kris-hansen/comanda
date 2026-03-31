@@ -8,11 +8,11 @@ import (
 
 func TestSplitFrontmatter(t *testing.T) {
 	tests := []struct {
-		name       string
-		input      string
-		wantFM     string
-		wantBody   string
-		wantErr    bool
+		name     string
+		input    string
+		wantFM   string
+		wantBody string
+		wantErr  bool
 	}{
 		{
 			name: "basic frontmatter",
@@ -150,8 +150,8 @@ func TestParseSkillUserInvocable(t *testing.T) {
 func TestSubstituteVariables(t *testing.T) {
 	body := "Hello ${USER_INPUT}, today is ${TIMESTAMP}. Dir: ${COMANDA_SKILL_DIR}"
 	vars := map[string]string{
-		"USER_INPUT":       "world",
-		"TIMESTAMP":        "2025-01-01T00:00:00Z",
+		"USER_INPUT":        "world",
+		"TIMESTAMP":         "2025-01-01T00:00:00Z",
 		"COMANDA_SKILL_DIR": "/tmp/skills",
 	}
 
