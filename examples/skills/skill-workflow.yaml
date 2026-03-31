@@ -1,0 +1,18 @@
+# Example: Using skills in a Comanda workflow
+#
+# This workflow demonstrates how to invoke skills as steps.
+# Skills are loaded from: ~/.comanda/skills/, .comanda/skills/, or bundled skills/
+#
+# Prerequisites:
+#   - A skill named "summarize" must exist in one of the skill directories
+#   - Configure a model in your comanda config (comanda configure)
+#
+# Usage:
+#   comanda process -f examples/skills/skill-workflow.yaml
+
+summarize-readme:
+  skill: summarize
+  input: README.md
+  args:
+    length: short
+  output: STDOUT

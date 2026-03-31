@@ -133,6 +133,8 @@ type StepConfig struct {
 	AgenticLoop   *AgenticLoopConfig   `yaml:"agentic_loop,omitempty"`   // Inline agentic loop configuration
 	CodebaseIndex *CodebaseIndexConfig `yaml:"codebase_index,omitempty"` // Codebase indexing configuration
 	QmdSearch     *QmdSearchConfig     `yaml:"qmd_search,omitempty"`     // qmd search configuration
+	Skill         string               `yaml:"skill,omitempty"`          // Skill name to invoke
+	SkillArgs     map[string]string    `yaml:"args,omitempty"`           // Named arguments for skill invocation
 
 	// Worktree fields
 	Worktree     string `yaml:"worktree,omitempty"`      // Run step in a specific worktree by name

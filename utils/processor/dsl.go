@@ -1216,6 +1216,12 @@ func (p *Processor) tryDispatchSpecialStep(step Step, isParallel bool, parallelI
 		return result, true, err
 	}
 
+	// Handle skill step
+	if step.Config.Skill != "" {
+		result, err := p.processSkillStep(step, isParallel, parallelID, metrics, startTime)
+		return result, true, err
+	}
+
 	return "", false, nil
 }
 
