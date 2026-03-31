@@ -16,6 +16,12 @@ type ToolConfig struct {
 	// If empty, all non-denied commands are allowed (use with caution)
 	Allowlist []string `yaml:"allowlist"`
 
+	// AllowlistOverride contains commands that should be allowed even if they're
+	// in the default denylist. Use with caution - these commands are blocked by
+	// default for security reasons. Only use this when you trust the workflow.
+	// Example: ["curl", "wget"] to enable HTTP requests in a trusted workflow.
+	AllowlistOverride []string `yaml:"allowlist_override"`
+
 	// Denylist of command names that are explicitly denied
 	// These take precedence over the allowlist
 	Denylist []string `yaml:"denylist"`
@@ -242,6 +248,7 @@ type ToolExecutor struct {
 // Step-level config takes precedence: if step specifies an allowlist, it's used.
 // Global allowlist is additive to the defaults.
 // Denylists are always merged (additive).
+// AllowlistOverride is merged (additive) to allow overriding default denylist.
 // Step timeout overrides global timeout if specified.
 func MergeToolConfigs(globalConfig *ToolConfig, stepConfig *ToolConfig) *ToolConfig {
 	result := &ToolConfig{}
@@ -249,6 +256,7 @@ func MergeToolConfigs(globalConfig *ToolConfig, stepConfig *ToolConfig) *ToolCon
 	// Start with global config values if present
 	if globalConfig != nil {
 		result.Allowlist = append(result.Allowlist, globalConfig.Allowlist...)
+		result.AllowlistOverride = append(result.AllowlistOverride, globalConfig.AllowlistOverride...)
 		result.Denylist = append(result.Denylist, globalConfig.Denylist...)
 		result.Timeout = globalConfig.Timeout
 	}
@@ -259,6 +267,8 @@ func MergeToolConfigs(globalConfig *ToolConfig, stepConfig *ToolConfig) *ToolCon
 		if len(stepConfig.Allowlist) > 0 {
 			result.Allowlist = stepConfig.Allowlist
 		}
+		// AllowlistOverride is always additive
+		result.AllowlistOverride = append(result.AllowlistOverride, stepConfig.AllowlistOverride...)
 		// Denylist is always additive
 		result.Denylist = append(result.Denylist, stepConfig.Denylist...)
 		// Step timeout takes precedence if specified
@@ -289,9 +299,17 @@ func NewToolExecutor(config *ToolConfig, verbose bool, debugFunc func(format str
 		debugFunc: debugFunc,
 	}
 
-	// Build denylist (always include defaults)
+	// Build set of override commands (these bypass the default denylist)
+	overrideSet := make(map[string]bool)
+	for _, cmd := range config.AllowlistOverride {
+		overrideSet[cmd] = true
+	}
+
+	// Build denylist (include defaults, but skip overridden commands)
 	for _, cmd := range DefaultDenylist {
-		te.denylist[cmd] = true
+		if !overrideSet[cmd] {
+			te.denylist[cmd] = true
+		}
 	}
 	// Add user-specified denylist
 	for _, cmd := range config.Denylist {
@@ -309,6 +327,10 @@ func NewToolExecutor(config *ToolConfig, verbose bool, debugFunc func(format str
 		for _, cmd := range DefaultAllowlist {
 			te.allowlist[cmd] = true
 		}
+	}
+	// Add override commands to allowlist
+	for _, cmd := range config.AllowlistOverride {
+		te.allowlist[cmd] = true
 	}
 
 	return te

@@ -81,9 +81,10 @@ type ChunkConfig struct {
 
 // ToolListConfig allows specifying tool allowlist/denylist at the step level
 type ToolListConfig struct {
-	Allowlist []string `yaml:"allowlist"` // Commands explicitly allowed
-	Denylist  []string `yaml:"denylist"`  // Commands explicitly denied (takes precedence)
-	Timeout   int      `yaml:"timeout"`   // Timeout in seconds for tool execution
+	Allowlist         []string `yaml:"allowlist"`          // Commands explicitly allowed
+	AllowlistOverride []string `yaml:"allowlist_override"` // Commands to allow even if in default denylist (use with caution)
+	Denylist          []string `yaml:"denylist"`           // Commands explicitly denied (takes precedence)
+	Timeout           int      `yaml:"timeout"`            // Timeout in seconds for tool execution
 }
 
 // WorktreeConfig defines Git worktrees for parallel Claude Code execution

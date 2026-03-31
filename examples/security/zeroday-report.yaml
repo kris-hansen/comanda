@@ -1,0 +1,45 @@
+# OSV Vulnerability Report Generator
+# Input: Compact JSON from osv-query.sh (post-processed)
+#
+# For real-time scanning:
+#   echo '[{"name":"pkg","version":"1.0","ecosystem":"npm"}]' | \
+#     ./osv-query.sh | jq -c '{scan_time,count:(.dependencies|length),vulns:[...]}' | \
+#     comanda process zeroday-report.yaml
+
+generate-report:
+  input: STDIN
+  model: grok-4-1-fast-reasoning
+  action: |
+    Generate a vulnerability report from this OSV.dev scan data.
+    
+    Input format:
+    - scan_time: ISO timestamp
+    - count: number of packages scanned
+    - vulns: array of {pkg, issues:[{id, summary}]}
+    
+    For each vulnerability, look up severity from the CVE/GHSA ID if possible.
+    
+    Output:
+    ════════════════════════════════════════════════════════════════════
+    🔒 REAL-TIME VULNERABILITY SCAN (OSV.dev)
+    ════════════════════════════════════════════════════════════════════
+    Scan Time: [scan_time]
+    Packages: [count] | Vulnerabilities: [total issues]
+    
+    🟠 VULNERABILITIES FOUND
+    ─────────────────────────────────────────────────────────────────
+    • [id]: [pkg]
+      [summary]
+      Fix: npm install [package]@latest
+    
+    [repeat for each]
+    
+    ...or "✅ No vulnerabilities found"
+    
+    📋 QUICK FIX
+    ─────────────────────────────────────────────────────────────────
+    npm update [packages]
+    ════════════════════════════════════════════════════════════════════
+    
+    {{ .Input }}
+  output: STDOUT

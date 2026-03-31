@@ -120,6 +120,38 @@ func TestToolExecutorIsAllowed(t *testing.T) {
 			allowed:   false,
 			errSubstr: "denylist",
 		},
+		{
+			name:      "curl denied by default",
+			config:    nil,
+			command:   "curl https://api.example.com",
+			allowed:   false,
+			errSubstr: "denylist",
+		},
+		{
+			name:    "allowlist_override enables curl",
+			config:  &ToolConfig{AllowlistOverride: []string{"curl"}},
+			command: "curl https://api.example.com",
+			allowed: true,
+		},
+		{
+			name:    "allowlist_override enables wget",
+			config:  &ToolConfig{AllowlistOverride: []string{"wget"}},
+			command: "wget https://example.com/file.txt",
+			allowed: true,
+		},
+		{
+			name:    "allowlist_override multiple commands",
+			config:  &ToolConfig{AllowlistOverride: []string{"curl", "wget", "bash"}},
+			command: "bash -c 'echo test'",
+			allowed: true,
+		},
+		{
+			name:      "allowlist_override does not affect other denied commands",
+			config:    &ToolConfig{AllowlistOverride: []string{"curl"}},
+			command:   "rm -rf /",
+			allowed:   false,
+			errSubstr: "denylist",
+		},
 	}
 
 	for _, tt := range tests {

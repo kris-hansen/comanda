@@ -1,0 +1,76 @@
+# Real-Time Zero-Day Vulnerability Scanner
+# Queries live OSV.dev API for real vulnerability data
+#
+# Usage:
+#   cat package.json | comanda process examples/security/zeroday-realtime.yaml
+#   cat go.mod | comanda process examples/security/zeroday-realtime.yaml
+#   cat requirements.txt | comanda process examples/security/zeroday-realtime.yaml
+#
+# NOTE: Requires running the OSV query script separately or using the
+# simpler zeroday-scanner.yaml that uses model knowledge instead.
+#
+# For real-time scanning, run manually:
+#   cat deps.json | ./examples/security/osv-query.sh | comanda process examples/security/zeroday-report.yaml
+
+# Step 1: Parse dependencies into clean JSON
+parse-deps:
+  input: STDIN
+  model: grok-4-1-fast-non-reasoning
+  action: |
+    Parse this dependency file and extract all packages with versions.
+    
+    Output ONLY a valid JSON array, nothing else:
+    [{"name": "package-name", "version": "1.2.3", "ecosystem": "npm"}]
+    
+    Ecosystem mapping:
+    - package.json → npm
+    - go.mod/go.sum → Go  
+    - requirements.txt/pyproject.toml → PyPI
+    - Cargo.toml/Cargo.lock → crates.io
+    
+    {{ .Input }}
+  output: STDOUT
+
+# Step 2: Generate security report (using model knowledge as fallback)
+# For real OSV data, pipe through osv-query.sh first
+generate-report:
+  input: STDIN
+  model: grok-4-1-fast-reasoning
+  action: |
+    You have a list of dependencies. Research and report vulnerabilities.
+    
+    For EACH package:
+    1. Check NVD, GHSA, OSV databases (use your knowledge)
+    2. Note any recent security incidents or supply chain attacks
+    3. Flag suspicious version patterns or deprecated packages
+    
+    Format:
+    ════════════════════════════════════════════════════════════════════
+    🔒 VULNERABILITY SCAN
+    ════════════════════════════════════════════════════════════════════
+    Packages: [count]
+    
+    🔴 CRITICAL (CVSS >= 9.0)
+    ─────────────────────────────────────────────────────────────────
+    [CVE-XXXX: package@version - description] or "None"
+    
+    🟠 HIGH (CVSS 7.0-8.9)
+    ─────────────────────────────────────────────────────────────────
+    [list or "None"]
+    
+    🟡 MEDIUM (CVSS 4.0-6.9)
+    ─────────────────────────────────────────────────────────────────
+    [list or "None"]
+    
+    🟢 LOW / INFO
+    ─────────────────────────────────────────────────────────────────
+    [list or "None"]
+    
+    📋 REMEDIATION
+    ─────────────────────────────────────────────────────────────────
+    [upgrade commands]
+    ════════════════════════════════════════════════════════════════════
+    
+    Dependencies:
+    {{ .Input }}
+  output: STDOUT

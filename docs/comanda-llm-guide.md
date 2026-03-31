@@ -294,11 +294,27 @@ step_name:
   model: NA
   tool_config:
     allowlist: [ls, cat, grep, jq]  # Override default allowlist
-    denylist: [rm]                  # Additional commands to block
+    allowlist_override: [curl]       # Allow specific blocked commands (use with caution!)
+    denylist: [rm]                   # Additional commands to block
     timeout: 60                      # Timeout in seconds (default: 30)
   action: NA
   output: STDOUT
 ```
+
+**Overriding the default denylist:**
+Some workflows need access to commands blocked by default (e.g., `curl` for API calls).
+Use `allowlist_override` to explicitly enable these:
+```yaml
+api-query:
+  input: "tool: curl -s https://api.example.com/data"
+  model: NA
+  tool_config:
+    allowlist_override: [curl]
+    timeout: 30
+  action: NA
+  output: STDOUT
+```
+⚠️ **Security note:** Only use `allowlist_override` with trusted workflows.
 
 ## Variables
 - Definition: `input: data.txt as $initial_data`

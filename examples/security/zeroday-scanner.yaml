@@ -1,0 +1,35 @@
+# Zero-Day Vulnerability Scanner
+# Analyzes dependency files for known and emerging security vulnerabilities
+# using xAI's Grok model with real-time threat intelligence.
+#
+# Usage:
+#   cat go.mod | comanda process examples/security/zeroday-scanner.yaml
+#   cat package.json | comanda process examples/security/zeroday-scanner.yaml
+#   cat requirements.txt | comanda process examples/security/zeroday-scanner.yaml
+#
+# Supports: go.mod, go.sum, package.json, package-lock.json, requirements.txt,
+#           Cargo.toml, Cargo.lock, pyproject.toml, pom.xml, build.gradle
+
+analyze-dependencies:
+  input: STDIN
+  model: grok-4-1-fast-reasoning
+  action: |
+    Analyze this dependency file for security vulnerabilities.
+    
+    For EACH dependency listed, research and report:
+    1. Known CVEs from NVD, GHSA, OSV, Snyk
+    2. Recent supply chain attacks or compromises (check real-time sources)
+    3. Whether a newer patched version exists
+    4. Any suspicious patterns (typosquatting, unusual versions, recent ownership changes)
+
+    Output a structured vulnerability report with severity levels:
+    - 🔴 CRITICAL: Active exploits, supply chain attacks, RCE vulnerabilities
+    - 🟠 HIGH: CVSS >= 7.0
+    - 🟡 MEDIUM: CVSS 4.0-6.9
+    - 🟢 LOW/INFO: Minor issues, outdated but not vulnerable
+
+    Include specific CVE IDs, affected versions, and remediation commands where applicable.
+
+    Dependency file:
+    {{ .Input }}
+  output: STDOUT

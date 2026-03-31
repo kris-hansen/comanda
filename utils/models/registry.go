@@ -92,12 +92,30 @@ func (r *ModelRegistry) initializeDefaultModels() {
 		"o4-mini",
 	})
 
-	// X.AI models
+	// X.AI models (updated March 2026)
 	r.RegisterModels("xai", []string{
+		// Grok 4.20 series (latest flagship)
+		"grok-4.20-0309-reasoning",
+		"grok-4.20-0309-non-reasoning",
+		"grok-4.20-multi-agent-0309",
+		// Grok 4.1 Fast series (budget-friendly)
+		"grok-4-1-fast-reasoning",
+		"grok-4-1-fast-non-reasoning",
+		// Image/Video generation
+		"grok-imagine-image-pro",
+		"grok-imagine-image",
+		"grok-imagine-video",
+		// Legacy
 		"grok-beta",
 		"grok-vision-beta",
 		"grok-4",
 		"grok-4-heavy",
+	})
+	r.RegisterFamilies("xai", []string{
+		"grok-4.20",
+		"grok-4-1-fast",
+		"grok-imagine",
+		"grok-",
 	})
 
 	// Deepseek models
