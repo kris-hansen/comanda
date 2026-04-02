@@ -419,6 +419,11 @@ func (p *Processor) DisableSpinner() {
 	p.spinner.Disable()
 }
 
+// DisableProgressDisplay disables the progress display output (use when running in TUI mode)
+func (p *Processor) DisableProgressDisplay() {
+	p.progressDisplay.SetEnabled(false)
+}
+
 // SetStreamLog sets up stream logging to a file for real-time monitoring
 func (p *Processor) SetStreamLog(path string) error {
 	if path == "" {

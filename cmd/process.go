@@ -425,9 +425,10 @@ func runWorkflowWithStreamLog(workflowFile, streamLogPath string, disableSpinner
 
 	proc := processor.NewProcessor(&dslConfig, envConfig, serverConfig, verbose, effectiveRuntimeDir, cliVars)
 
-	// Disable spinner if requested (TUI mode handles progress display)
+	// Disable spinner and progress display if requested (TUI mode handles progress display)
 	if len(disableSpinner) > 0 && disableSpinner[0] {
 		proc.DisableSpinner()
+		proc.DisableProgressDisplay()
 	}
 
 	// Set up stream logging
