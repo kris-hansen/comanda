@@ -173,6 +173,37 @@ func (r *ModelRegistry) initializeDefaultModels() {
 	r.RegisterFamilies("openai-codex", []string{
 		"openai-codex",
 	})
+
+	// AWS Bedrock models (via Converse API)
+	// Use bedrock/ prefix to explicitly route to Bedrock
+	r.RegisterModels("bedrock", []string{
+		// Anthropic Claude models on Bedrock
+		"bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0",
+		"bedrock/anthropic.claude-3-5-haiku-20241022-v1:0",
+		"bedrock/anthropic.claude-3-opus-20240229-v1:0",
+		"bedrock/anthropic.claude-3-sonnet-20240229-v1:0",
+		"bedrock/anthropic.claude-3-haiku-20240307-v1:0",
+		"bedrock/us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+		"bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0",
+		"bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0",
+		// Amazon Nova models
+		"bedrock/us.amazon.nova-pro-v1:0",
+		"bedrock/us.amazon.nova-lite-v1:0",
+		"bedrock/us.amazon.nova-micro-v1:0",
+		// Meta Llama models
+		"bedrock/us.meta.llama3-2-90b-instruct-v1:0",
+		"bedrock/us.meta.llama3-2-11b-instruct-v1:0",
+		"bedrock/us.meta.llama3-2-3b-instruct-v1:0",
+		"bedrock/us.meta.llama3-2-1b-instruct-v1:0",
+	})
+	r.RegisterFamilies("bedrock", []string{
+		"bedrock/anthropic.claude",
+		"bedrock/us.anthropic.claude",
+		"bedrock/us.amazon.nova",
+		"bedrock/amazon.nova",
+		"bedrock/us.meta.llama",
+		"bedrock/meta.llama",
+	})
 }
 
 // RegisterModels adds models to the registry for a specific provider

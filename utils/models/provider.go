@@ -268,6 +268,18 @@ func defaultDetectProvider(modelName string) Provider {
 		return nil
 	}
 
+	// Check AWS Bedrock (explicit bedrock/ prefix)
+	bedrockProvider := NewBedrockProvider()
+	if bedrockProvider.SupportsModel(modelName) {
+		// Check if AWS credentials are available
+		if IsBedrockAvailable() {
+			config.DebugLog("[Provider] Found Bedrock provider for model %s", modelName)
+			return bedrockProvider
+		}
+		config.DebugLog("[Provider] Model %s requires AWS Bedrock but credentials not configured", modelName)
+		return nil
+	}
+
 	// Order third-party providers from most specific to most general
 	providers := []Provider{
 		NewGoogleProvider(),    // Handles gemini- models
