@@ -316,6 +316,13 @@ func buildGeneratePrompt(dslGuide, userPrompt string, invalidModels []string, st
 
 User's request: %s
 
+WORKFLOW TYPE — DECIDE BEFORE GENERATING:
+Classify the request before writing any YAML. Use this decision tree:
+1. Does the task require iterating an unknown number of times until a quality condition is met (e.g., "keep fixing until tests pass")? → Use an AGENTIC LOOP.
+2. Otherwise → Use a LINEAR WORKFLOW (named steps that each run once).
+
+LINEAR WORKFLOW is the default. If the request mentions named input files, reference documents to consult, and/or a defined output format or output file, it is ALWAYS a linear workflow — never an agentic loop.
+
 CRITICAL INSTRUCTION: Your entire response must be valid YAML syntax that can be directly saved to a .yaml file. Do not include ANY text before or after the YAML content. Start your response with the first line of YAML and end with the last line of YAML.
 
 AGENTIC LOOP OUTPUT RULE: When generating agentic_loop workflows:
