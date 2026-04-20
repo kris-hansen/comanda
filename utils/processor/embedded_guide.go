@@ -323,11 +323,19 @@ step_name_for_processing:
 
 Agentic loops enable iterative LLM processing until an exit condition is met. This is powerful for tasks that require refinement, multi-step reasoning, or autonomous decision-making.
 
-**When to use agentic loops:**
-- Iterative code improvement (analyze → fix → verify cycles)
-- Multi-step planning and execution
-- Tasks where the LLM decides when work is complete
-- Refinement workflows (draft → improve → finalize)
+**⚠️ DEFAULT TO LINEAR WORKFLOWS. Use agentic loops ONLY when true iteration is required.**
+
+**When to use agentic loops (ONLY for genuine iteration):**
+- Iterative code improvement where quality gates determine completion (analyze → fix → verify until tests pass)
+- Tasks where the number of iterations is genuinely unknown and the LLM must decide when done
+- Autonomous retry loops driven by external feedback (e.g., test failures, validator output)
+
+**When NOT to use agentic loops — use linear steps instead:**
+- Reading named input files, consulting reference documents, writing to a specified output — ALWAYS linear
+- Any "read A, consult B, process C, write output.md" pattern — LINEAR, not agentic
+- Workflows with defined inputs and a specified output format — use linear steps
+- Document analysis, report generation, financial analysis, credit underwriting, data extraction — linear workflows
+- When all steps are known in advance and each executes exactly once — use linear steps
 
 ### Inline Syntax (Single-Step Loop)
 
@@ -1468,13 +1476,20 @@ analyze_document:
 - Using tool commands to pre-process data before LLM analysis
 - Generating a workflow dynamically, then executing it
 - Tasks that genuinely require different models for different capabilities
-- **Agentic loops** for iterative refinement, planning, or autonomous decision-making
 
-**When to use Agentic Loops:**
-- Code improvement cycles (analyze → fix → verify)
-- Planning and execution workflows
-- Tasks where quality depends on iteration
-- When the LLM should decide when work is complete
+**⚠️ DEFAULT TO LINEAR WORKFLOWS. Agentic loops are the rare exception.**
+
+**When to use Agentic Loops (ONLY for genuine iteration):**
+- Code improvement cycles where quality gates determine completion (analyze → fix → verify until tests pass)
+- Tasks where the number of iterations is genuinely unknown and the LLM must decide when done
+- Autonomous retry loops driven by external feedback (e.g., test failures, validator output)
+
+**When NOT to use Agentic Loops — use linear steps instead:**
+- Reading named input files, consulting reference documents, writing to a specified output — this is ALWAYS linear
+- Any "read A, consult B, process C, write output.md" pattern — LINEAR, not agentic
+- Workflows with defined inputs and a specified output format — use linear steps, not loops
+- Document analysis, report generation, financial analysis, data extraction — linear workflows
+- When all steps are known in advance and each executes exactly once — use linear steps
 
 This guide covers the core concepts and syntax of Comanda's YAML DSL, including meta-processing capabilities. LLMs should use this structure to generate valid workflow files.`
 
@@ -1672,11 +1687,19 @@ step_name_for_processing:
 
 Agentic loops enable iterative LLM processing until an exit condition is met. This is powerful for tasks that require refinement, multi-step reasoning, or autonomous decision-making.
 
-**When to use agentic loops:**
-- Iterative code improvement (analyze → fix → verify cycles)
-- Multi-step planning and execution
-- Tasks where the LLM decides when work is complete
-- Refinement workflows (draft → improve → finalize)
+**⚠️ DEFAULT TO LINEAR WORKFLOWS. Use agentic loops ONLY when true iteration is required.**
+
+**When to use agentic loops (ONLY for genuine iteration):**
+- Iterative code improvement where quality gates determine completion (analyze → fix → verify until tests pass)
+- Tasks where the number of iterations is genuinely unknown and the LLM must decide when done
+- Autonomous retry loops driven by external feedback (e.g., test failures, validator output)
+
+**When NOT to use agentic loops — use linear steps instead:**
+- Reading named input files, consulting reference documents, writing to a specified output — ALWAYS linear
+- Any "read A, consult B, process C, write output.md" pattern — LINEAR, not agentic
+- Workflows with defined inputs and a specified output format — use linear steps
+- Document analysis, report generation, financial analysis, credit underwriting, data extraction — linear workflows
+- When all steps are known in advance and each executes exactly once — use linear steps
 
 ### Inline Syntax (Single-Step Loop)
 
@@ -3201,12 +3224,19 @@ analyze_document:
 - Using tool commands to pre-process data before LLM analysis
 - Generating a workflow dynamically, then executing it
 - Tasks that genuinely require different models for different capabilities
-- **Agentic loops** for iterative refinement, planning, or autonomous decision-making
 
-**When to use Agentic Loops:**
-- Code improvement cycles (analyze → fix → verify)
-- Planning and execution workflows
-- Tasks where quality depends on iteration
-- When the LLM should decide when work is complete
+**⚠️ DEFAULT TO LINEAR WORKFLOWS. Agentic loops are the rare exception.**
+
+**When to use Agentic Loops (ONLY for genuine iteration):**
+- Code improvement cycles where quality gates determine completion (analyze → fix → verify until tests pass)
+- Tasks where the number of iterations is genuinely unknown and the LLM must decide when done
+- Autonomous retry loops driven by external feedback (e.g., test failures, validator output)
+
+**When NOT to use Agentic Loops — use linear steps instead:**
+- Reading named input files, consulting reference documents, writing to a specified output — this is ALWAYS linear
+- Any "read A, consult B, process C, write output.md" pattern — LINEAR, not agentic
+- Workflows with defined inputs and a specified output format — use linear steps, not loops
+- Document analysis, report generation, financial analysis, data extraction — linear workflows
+- When all steps are known in advance and each executes exactly once — use linear steps
 
 This guide covers the core concepts and syntax of Comanda's YAML DSL, including meta-processing capabilities. LLMs should use this structure to generate valid workflow files.`
