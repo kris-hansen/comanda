@@ -24,6 +24,12 @@ agentic-loop:
     max_iterations: 10
     timeout_seconds: 0
     checkpoint_interval: 2
+    prompt_improvement:
+      enabled: true
+      instructions: |
+        Refine the next iteration's prompt using the latest result.
+        Keep the goal the same, preserve effective tactics, and make the next
+        prompt more specific about what to inspect or change.
 
     # Multiple quality gates
     quality_gates:
@@ -57,6 +63,7 @@ agentic-loop:
 
           Current iteration: {{ loop.iteration }}/{{ loop.total_iterations }}
           Elapsed: {{ loop.elapsed_seconds }} seconds
+          Current refined prompt: {{ loop.current_prompt }}
 
           Instructions:
           1. Read files in ./src or ./lib (if they exist)

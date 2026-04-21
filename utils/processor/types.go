@@ -34,14 +34,15 @@ func resolvePathAtParseTime(path string) string {
 
 // AgenticLoopConfig represents the configuration for an agentic loop
 type AgenticLoopConfig struct {
-	MaxIterations  int      `yaml:"max_iterations"`          // Maximum iterations before stopping (default: 10)
-	TimeoutSeconds int      `yaml:"timeout_seconds"`         // Total timeout in seconds (default: 0 = no timeout)
-	ExitCondition  string   `yaml:"exit_condition"`          // Exit condition: llm_decides, pattern_match
-	ExitPattern    string   `yaml:"exit_pattern"`            // Regex pattern for pattern_match exit condition
-	ContextWindow  int      `yaml:"context_window"`          // Number of past iterations to include in context (default: 5)
-	Steps          []Step   `yaml:"steps,omitempty"`         // Sub-steps to execute within each iteration
-	AllowedPaths   []string `yaml:"allowed_paths,omitempty"` // Directories for agentic tool access
-	Tools          []string `yaml:"tools,omitempty"`         // Optional tool whitelist (Read, Write, Edit, Bash, etc.)
+	MaxIterations     int                      `yaml:"max_iterations"`               // Maximum iterations before stopping (default: 10)
+	TimeoutSeconds    int                      `yaml:"timeout_seconds"`              // Total timeout in seconds (default: 0 = no timeout)
+	ExitCondition     string                   `yaml:"exit_condition"`               // Exit condition: llm_decides, pattern_match
+	ExitPattern       string                   `yaml:"exit_pattern"`                 // Regex pattern for pattern_match exit condition
+	ContextWindow     int                      `yaml:"context_window"`               // Number of past iterations to include in context (default: 5)
+	Steps             []Step                   `yaml:"steps,omitempty"`              // Sub-steps to execute within each iteration
+	AllowedPaths      []string                 `yaml:"allowed_paths,omitempty"`      // Directories for agentic tool access
+	Tools             []string                 `yaml:"tools,omitempty"`              // Optional tool whitelist (Read, Write, Edit, Bash, etc.)
+	PromptImprovement *PromptImprovementConfig `yaml:"prompt_improvement,omitempty"` // Optional prompt refinement between iterations
 
 	// State persistence & quality gates
 	Name               string              `yaml:"name,omitempty"`                // Loop name (required for stateful loops)
@@ -55,12 +56,20 @@ type AgenticLoopConfig struct {
 	OutputState string   `yaml:"output_state,omitempty"` // Variable to export for dependent loops
 }
 
+// PromptImprovementConfig controls automatic prompt refinement between iterations.
+type PromptImprovementConfig struct {
+	Enabled      bool   `yaml:"enabled,omitempty"`      // Defaults to true when the block is present
+	Model        string `yaml:"model,omitempty"`        // Optional model override for prompt refinement
+	Instructions string `yaml:"instructions,omitempty"` // Optional custom guidance for how to improve the next prompt
+}
+
 // LoopContext holds runtime state for an agentic loop
 type LoopContext struct {
-	Iteration      int             // Current iteration number (1-based)
-	PreviousOutput string          // Output from previous iteration
-	History        []LoopIteration // History of all iterations
-	StartTime      time.Time       // When the loop started
+	Iteration      int               // Current iteration number (1-based)
+	PreviousOutput string            // Output from previous iteration
+	History        []LoopIteration   // History of all iterations
+	StartTime      time.Time         // When the loop started
+	CurrentActions map[string]string // Current prompt/action for each loop step
 }
 
 // LoopIteration represents a single iteration's state
