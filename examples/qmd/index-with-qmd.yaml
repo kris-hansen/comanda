@@ -12,8 +12,8 @@
 #   qmd search "your query" -c myproject
 
 index-codebase:
-  type: codebase-index
-  config:
+  step_type: codebase-index
+  codebase_index:
     root: .
     output:
       store: repo
@@ -32,6 +32,6 @@ summary:
       qmd search "your query" -c myproject
     
     Or use qmd-search in your workflows.
-  model: echo
+  model: NA
   action: Display summary
   output: STDOUT

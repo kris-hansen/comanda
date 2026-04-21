@@ -83,10 +83,20 @@ func ValidateWorkflowStructure(yamlContent string) ValidationResult {
 		return result
 	}
 
-	// Validate each step
+	// Validate each top-level entry
 	for stepName, stepValue := range workflow {
 		// Skip special top-level keys
 		if stepName == "agentic-loop" || stepName == "loops" || stepName == "execute_loops" || stepName == "workflow" {
+			continue
+		}
+
+		if stepName == "defer" || stepName == "steps" {
+			result.Errors = append(result.Errors, validateStepCollection(stepName, stepValue)...)
+			continue
+		}
+
+		if isStepCollection(stepValue) {
+			result.Errors = append(result.Errors, validateStepCollection(stepName, stepValue)...)
 			continue
 		}
 
@@ -134,7 +144,7 @@ func checkRawYAMLMistakes(content string) []ValidationError {
 
 		// Check for hyphen misuse in step fields (common mistake)
 		// Pattern: "  - input:" or "  - model:" etc. at wrong indentation
-		if regexp.MustCompile(`^\s{2,4}-\s+(input|model|action|output|type):`).MatchString(line) {
+		if regexp.MustCompile(`^\s{2,4}-\s+(input|model|action|output):`).MatchString(line) {
 			// Check if this looks like it should be a key-value, not a list item
 			errors = append(errors, ValidationError{
 				Line:    lineNum,
@@ -189,6 +199,8 @@ func validateStep(stepName string, stepValue interface{}) []ValidationError {
 	hasProcess := stepMap["process"] != nil
 	hasAgenticLoop := stepMap["agentic_loop"] != nil
 	hasCodebaseIndex := stepMap["codebase_index"] != nil || stepMap["step_type"] == "codebase-index"
+	hasQmdSearch := stepMap["qmd_search"] != nil || stepMap["type"] == "qmd-search"
+	hasSkill := stepMap["skill"] != nil
 
 	// Check for mixed step types
 	typeCount := 0
@@ -201,10 +213,16 @@ func validateStep(stepName string, stepValue interface{}) []ValidationError {
 	if hasCodebaseIndex {
 		typeCount++
 	}
+	if hasQmdSearch {
+		typeCount++
+	}
+	if hasSkill {
+		typeCount++
+	}
 	if typeCount > 1 {
 		errors = append(errors, ValidationError{
 			Field:   stepName,
-			Message: "Step mixes multiple types (generate/process/codebase_index)",
+			Message: "Step mixes multiple types (generate/process/codebase_index/qmd_search/skill)",
 			Fix:     "A step can only be one type. Split into separate steps if needed.",
 		})
 	}
@@ -217,6 +235,10 @@ func validateStep(stepName string, stepValue interface{}) []ValidationError {
 	} else if hasCodebaseIndex {
 		// Codebase index steps don't need input/model/action/output
 		errors = append(errors, validateCodebaseIndexStep(stepName, stepMap)...)
+	} else if hasQmdSearch {
+		errors = append(errors, validateQmdSearchStep(stepName, stepMap)...)
+	} else if hasSkill {
+		errors = append(errors, validateSkillStep(stepName, stepMap)...)
 	} else {
 		// Standard step (with or without agentic_loop)
 		errors = append(errors, validateStandardStep(stepName, stepMap, hasAgenticLoop)...)
@@ -225,12 +247,67 @@ func validateStep(stepName string, stepValue interface{}) []ValidationError {
 	return errors
 }
 
+func isStepCollection(stepValue interface{}) bool {
+	stepMap, ok := stepValue.(map[string]interface{})
+	if !ok || len(stepMap) == 0 {
+		return false
+	}
+
+	for _, child := range stepMap {
+		childMap, ok := child.(map[string]interface{})
+		if !ok {
+			return false
+		}
+		if !looksLikeStepDefinition(childMap) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func validateStepCollection(groupName string, groupValue interface{}) []ValidationError {
+	groupMap, ok := groupValue.(map[string]interface{})
+	if !ok {
+		return []ValidationError{{
+			Field:   groupName,
+			Message: "Step collection must be a map of named steps",
+			Fix:     "Define each nested step as 'name: { input: ..., model: ..., action: ..., output: ... }'.",
+		}}
+	}
+
+	var errors []ValidationError
+	for stepName, stepValue := range groupMap {
+		errors = append(errors, validateStep(stepName, stepValue)...)
+	}
+	return errors
+}
+
+func looksLikeStepDefinition(stepMap map[string]interface{}) bool {
+	stepKeys := []string{
+		"input", "model", "action", "output", "generate", "process",
+		"type", "agentic_loop", "codebase_index", "step_type", "qmd_search", "skill",
+	}
+
+	for _, key := range stepKeys {
+		if _, ok := stepMap[key]; ok {
+			return true
+		}
+	}
+
+	return false
+}
+
 // validateStandardStep validates a standard processing step
 func validateStandardStep(stepName string, stepMap map[string]interface{}, hasAgenticLoop bool) []ValidationError {
 	var errors []ValidationError
+	isResponsesStep := stepMap["type"] == "openai-responses"
 
 	// Required fields for standard steps
-	requiredFields := []string{"input", "model", "action", "output"}
+	requiredFields := []string{"input", "model", "output"}
+	if !isResponsesStep {
+		requiredFields = append(requiredFields, "action")
+	}
 
 	for _, field := range requiredFields {
 		if _, ok := stepMap[field]; !ok {
@@ -239,6 +316,18 @@ func validateStandardStep(stepName string, stepMap map[string]interface{}, hasAg
 				Message: fmt.Sprintf("Missing required field '%s'", field),
 				Fix:     fmt.Sprintf("Add '%s:' to the step. Use 'NA' if not applicable.", field),
 			})
+		}
+	}
+
+	if isResponsesStep {
+		if _, hasAction := stepMap["action"]; !hasAction {
+			if _, hasInstructions := stepMap["instructions"]; !hasInstructions {
+				errors = append(errors, ValidationError{
+					Field:   stepName,
+					Message: "Missing required field 'action' or 'instructions'",
+					Fix:     "Add either 'action:' or 'instructions:' to the OpenAI responses step.",
+				})
+			}
 		}
 	}
 
@@ -351,6 +440,81 @@ func validateCodebaseIndexStep(stepName string, stepMap map[string]interface{}) 
 					Fix:     "Set root to a directory path string, e.g., 'root: ./src'",
 				})
 			}
+		}
+	}
+
+	return errors
+}
+
+// validateQmdSearchStep validates a qmd-search step
+func validateQmdSearchStep(stepName string, stepMap map[string]interface{}) []ValidationError {
+	var errors []ValidationError
+
+	qmdSearch, ok := stepMap["qmd_search"].(map[string]interface{})
+	if !ok {
+		errors = append(errors, ValidationError{
+			Field:   stepName,
+			Message: "'qmd_search' must be a map/object",
+			Fix:     "Define qmd_search as: qmd_search:\n    query: \"...\"",
+		})
+		return errors
+	}
+
+	if _, ok := qmdSearch["query"]; !ok {
+		errors = append(errors, ValidationError{
+			Field:   stepName,
+			Message: "qmd_search block missing required 'query' field",
+			Fix:     "Add 'query:' with the search text or variable to look up.",
+		})
+	}
+
+	if output, ok := stepMap["output"]; ok {
+		errors = append(errors, validateOutputField(stepName, output)...)
+	} else {
+		errors = append(errors, ValidationError{
+			Field:   stepName,
+			Message: "Missing required field 'output'",
+			Fix:     "Add 'output:' to capture the search results for later steps or STDOUT.",
+		})
+	}
+
+	return errors
+}
+
+// validateSkillStep validates a skill step
+func validateSkillStep(stepName string, stepMap map[string]interface{}) []ValidationError {
+	var errors []ValidationError
+
+	skillName, ok := stepMap["skill"].(string)
+	if !ok || strings.TrimSpace(skillName) == "" {
+		errors = append(errors, ValidationError{
+			Field:   stepName,
+			Message: "skill must be a non-empty string",
+			Fix:     "Set 'skill:' to the name of an installed skill, e.g. 'skill: summarize'.",
+		})
+	}
+
+	if input, ok := stepMap["input"]; ok {
+		errors = append(errors, validateInputField(stepName, input)...)
+	}
+
+	if output, ok := stepMap["output"]; ok {
+		errors = append(errors, validateOutputField(stepName, output)...)
+	} else {
+		errors = append(errors, ValidationError{
+			Field:   stepName,
+			Message: "Missing required field 'output'",
+			Fix:     "Add 'output:' to capture the rendered skill result or use STDOUT.",
+		})
+	}
+
+	if args, ok := stepMap["args"]; ok {
+		if _, ok := args.(map[string]interface{}); !ok {
+			errors = append(errors, ValidationError{
+				Field:   stepName,
+				Message: "args must be a map/object",
+				Fix:     "Define args as key/value pairs under 'args:'.",
+			})
 		}
 	}
 
@@ -483,6 +647,8 @@ func validateLoopsBlock(loopsValue interface{}) []ValidationError {
 				Message: "Loop missing required 'steps' block",
 				Fix:     "Add 'steps:' with one or more step definitions.",
 			})
+		} else {
+			errors = append(errors, validateLoopSteps(loopName, loopMap["steps"])...)
 		}
 
 		// Validate depends_on references exist (if we can)
@@ -499,6 +665,40 @@ func validateLoopsBlock(loopsValue interface{}) []ValidationError {
 				}
 			}
 		}
+	}
+
+	return errors
+}
+
+func validateLoopSteps(loopName string, stepsValue interface{}) []ValidationError {
+	var errors []ValidationError
+
+	switch steps := stepsValue.(type) {
+	case map[string]interface{}:
+		for stepName, stepValue := range steps {
+			errors = append(errors, validateStep(stepName, stepValue)...)
+		}
+	case []interface{}:
+		for index, item := range steps {
+			stepDef, ok := item.(map[string]interface{})
+			if !ok || len(stepDef) != 1 {
+				errors = append(errors, ValidationError{
+					Field:   loopName,
+					Message: fmt.Sprintf("Loop step %d must be a single-entry map", index+1),
+					Fix:     "Use list-style loop steps like '- step_name: { ... }'.",
+				})
+				continue
+			}
+			for stepName, stepValue := range stepDef {
+				errors = append(errors, validateStep(stepName, stepValue)...)
+			}
+		}
+	default:
+		errors = append(errors, ValidationError{
+			Field:   loopName,
+			Message: "Loop steps must be a map or list of named steps",
+			Fix:     "Define steps as either 'steps: { step_name: ... }' or a list of single-entry maps.",
+		})
 	}
 
 	return errors
@@ -557,6 +757,24 @@ func validateOutputField(stepName string, output interface{}) []ValidationError 
 				Fix:     "Provide an output destination like 'STDOUT' or a filename.",
 			})
 		}
+	case []interface{}:
+		if len(v) == 0 {
+			errors = append(errors, ValidationError{
+				Field:   stepName,
+				Message: "output list is empty",
+				Fix:     "Provide at least one output destination such as 'STDOUT' or a filename.",
+			})
+		}
+		for i, item := range v {
+			outputItem, ok := item.(string)
+			if !ok || outputItem == "" {
+				errors = append(errors, ValidationError{
+					Field:   stepName,
+					Message: fmt.Sprintf("output list item %d is not a non-empty string", i),
+					Fix:     "Output list items should be strings such as 'STDOUT', variables, or file paths.",
+				})
+			}
+		}
 	case map[string]interface{}:
 		// Valid: complex output like {database: ...}
 	default:
@@ -568,6 +786,125 @@ func validateOutputField(stepName string, output interface{}) []ValidationError 
 	}
 
 	return errors
+}
+
+func collectStepOutputs(stepMap map[string]interface{}, stepName string, outputFiles map[string]string) {
+	switch output := stepMap["output"].(type) {
+	case string:
+		if strings.HasPrefix(output, "$") {
+			return
+		}
+		if output != OutputSTDOUT && output != InputSTDIN {
+			outputFiles[output] = stepName
+		}
+	case []interface{}:
+		for _, item := range output {
+			outputStr, ok := item.(string)
+			if !ok {
+				continue
+			}
+			if outputStr == OutputSTDOUT || outputStr == InputSTDIN || strings.HasPrefix(outputStr, "$") {
+				continue
+			}
+			if outputStr != OutputSTDOUT && outputStr != InputSTDIN {
+				outputFiles[outputStr] = stepName
+			}
+		}
+	}
+}
+
+func collectStepVariables(stepMap map[string]interface{}, stepName string, exportedVars map[string]string) {
+	switch output := stepMap["output"].(type) {
+	case string:
+		if strings.HasPrefix(output, "$") {
+			exportedVars[strings.TrimPrefix(output, "$")] = stepName
+		}
+	case []interface{}:
+		for _, item := range output {
+			outputStr, ok := item.(string)
+			if ok && strings.HasPrefix(outputStr, "$") {
+				exportedVars[strings.TrimPrefix(outputStr, "$")] = stepName
+			}
+		}
+	}
+}
+
+func validateStepVariableRefs(stepName string, stepMap map[string]interface{}, exportedVars map[string]string) []ValidationError {
+	var errors []ValidationError
+	varRefRegex := regexp.MustCompile(`\$([A-Z_][A-Z0-9_]*)`)
+
+	checkRefs := func(fieldName string, value string) {
+		matches := varRefRegex.FindAllStringSubmatch(value, -1)
+		for _, match := range matches {
+			varName := match[1]
+			if fieldName == "action" && (strings.HasPrefix(varName, "LOOP") || varName == InputSTDIN || varName == OutputSTDOUT) {
+				continue
+			}
+			if _, exists := exportedVars[varName]; !exists {
+				messagePrefix := "References"
+				if fieldName == "action" {
+					messagePrefix = "Action references"
+				}
+				if fieldName == "action" {
+					if strings.Contains(varName, "_") && !strings.HasSuffix(varName, "_INDEX") {
+						continue
+					}
+				}
+				errors = append(errors, ValidationError{
+					Field:   stepName,
+					Message: fmt.Sprintf("%s variable $%s but no prior step exports it", messagePrefix, varName),
+					Fix:     fmt.Sprintf("Ensure a prior step or loop sets 'output_state: $%s', or use a codebase-index step that exports this variable.", varName),
+				})
+			}
+		}
+	}
+
+	switch input := stepMap["input"].(type) {
+	case string:
+		checkRefs("input", input)
+	case []interface{}:
+		for _, item := range input {
+			if inputStr, ok := item.(string); ok {
+				checkRefs("input", inputStr)
+			}
+		}
+	}
+
+	switch action := stepMap["action"].(type) {
+	case string:
+		checkRefs("action", action)
+	case []interface{}:
+		for _, item := range action {
+			if actionStr, ok := item.(string); ok {
+				checkRefs("action", actionStr)
+			}
+		}
+	}
+
+	return errors
+}
+
+func forEachLoopStep(stepsValue interface{}, fn func(stepName string, stepMap map[string]interface{})) {
+	switch steps := stepsValue.(type) {
+	case map[string]interface{}:
+		for stepName, stepDef := range steps {
+			if stepMap, ok := stepDef.(map[string]interface{}); ok {
+				fn(stepName, stepMap)
+			}
+		}
+	case []interface{}:
+		for _, item := range steps {
+			stepDef, ok := item.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			for stepName, stepValue := range stepDef {
+				if stepMap, ok := stepValue.(map[string]interface{}); ok {
+					fn(stepName, stepMap)
+				}
+			}
+		}
+	}
 }
 
 // validateExecuteLoopsIgnoredSteps checks for top-level steps that will be ignored when execute_loops is present
@@ -648,12 +985,8 @@ func validateStepChaining(workflow map[string]interface{}) []ValidationError {
 						}
 					}
 
-					// Check for file outputs
-					if output, ok := stepMap["output"].(string); ok {
-						if output != OutputSTDOUT && output != InputSTDIN && !strings.HasPrefix(output, "$") {
-							outputFiles[output] = stepName
-						}
-					}
+					collectStepOutputs(stepMap, stepName, outputFiles)
+					collectStepVariables(stepMap, stepName, exportedVars)
 				}
 			}
 		}
@@ -663,6 +996,18 @@ func validateStepChaining(workflow map[string]interface{}) []ValidationError {
 	if _, hasExecuteLoops := workflow["execute_loops"]; !hasExecuteLoops {
 		for stepName, stepDef := range workflow {
 			if stepName == "loops" || stepName == "execute_loops" || stepName == "workflow" || stepName == "agentic-loop" {
+				continue
+			}
+			if isStepCollection(stepDef) {
+				groupMap := stepDef.(map[string]interface{})
+				for nestedName, nestedDef := range groupMap {
+					nestedStepMap, ok := nestedDef.(map[string]interface{})
+					if !ok {
+						continue
+					}
+					collectStepOutputs(nestedStepMap, nestedName, outputFiles)
+					collectStepVariables(nestedStepMap, nestedName, exportedVars)
+				}
 				continue
 			}
 			stepMap, ok := stepDef.(map[string]interface{})
@@ -687,57 +1032,12 @@ func validateStepChaining(workflow map[string]interface{}) []ValidationError {
 				}
 			}
 
-			// Check for file outputs
-			if output, ok := stepMap["output"].(string); ok {
-				if output != OutputSTDOUT && output != InputSTDIN && !strings.HasPrefix(output, "$") {
-					outputFiles[output] = stepName
-				}
-			}
+			collectStepOutputs(stepMap, stepName, outputFiles)
+			collectStepVariables(stepMap, stepName, exportedVars)
 		}
 	}
 
 	// Now validate that inputs reference valid exports
-	varRefRegex := regexp.MustCompile(`\$([A-Z_][A-Z0-9_]*)`)
-
-	validateInputRefs := func(stepName string, stepMap map[string]interface{}) {
-		// Check input field for variable references
-		if input, ok := stepMap["input"].(string); ok {
-			matches := varRefRegex.FindAllStringSubmatch(input, -1)
-			for _, match := range matches {
-				varName := match[1]
-				if _, exists := exportedVars[varName]; !exists {
-					errors = append(errors, ValidationError{
-						Field:   stepName,
-						Message: fmt.Sprintf("References variable $%s but no prior step exports it", varName),
-						Fix:     fmt.Sprintf("Ensure a prior step or loop sets 'output_state: $%s', or use a codebase-index step that exports this variable.", varName),
-					})
-				}
-			}
-		}
-
-		// Check action field for variable references
-		if action, ok := stepMap["action"].(string); ok {
-			matches := varRefRegex.FindAllStringSubmatch(action, -1)
-			for _, match := range matches {
-				varName := match[1]
-				// Skip loop template variables
-				if strings.HasPrefix(varName, "LOOP") || varName == InputSTDIN || varName == OutputSTDOUT {
-					continue
-				}
-				if _, exists := exportedVars[varName]; !exists {
-					// Only warn if it looks like a workflow variable (not env var)
-					if !strings.Contains(varName, "_") || strings.HasSuffix(varName, "_INDEX") {
-						errors = append(errors, ValidationError{
-							Field:   stepName,
-							Message: fmt.Sprintf("Action references variable $%s but no prior step exports it", varName),
-							Fix:     fmt.Sprintf("Ensure a prior step or loop sets 'output_state: $%s', or this variable comes from a codebase-index step.", varName),
-						})
-					}
-				}
-			}
-		}
-	}
-
 	// Validate loops
 	if loops, ok := workflow["loops"].(map[string]interface{}); ok {
 		for loopName, loopDef := range loops {
@@ -745,13 +1045,9 @@ func validateStepChaining(workflow map[string]interface{}) []ValidationError {
 			if !ok {
 				continue
 			}
-			if steps, ok := loopMap["steps"].(map[string]interface{}); ok {
-				for stepName, stepDef := range steps {
-					if stepMap, ok := stepDef.(map[string]interface{}); ok {
-						validateInputRefs(fmt.Sprintf("%s.%s", loopName, stepName), stepMap)
-					}
-				}
-			}
+			forEachLoopStep(loopMap["steps"], func(stepName string, stepMap map[string]interface{}) {
+				errors = append(errors, validateStepVariableRefs(fmt.Sprintf("%s.%s", loopName, stepName), stepMap, exportedVars)...)
+			})
 		}
 	}
 
@@ -761,8 +1057,17 @@ func validateStepChaining(workflow map[string]interface{}) []ValidationError {
 			if stepName == "loops" || stepName == "execute_loops" || stepName == "workflow" || stepName == "agentic-loop" {
 				continue
 			}
-			if stepMap, ok := stepDef.(map[string]interface{}); ok {
-				validateInputRefs(stepName, stepMap)
+			if stepMap, ok := stepDef.(map[string]interface{}); ok && !isStepCollection(stepMap) {
+				errors = append(errors, validateStepVariableRefs(stepName, stepMap, exportedVars)...)
+			} else if isStepCollection(stepDef) {
+				groupMap := stepDef.(map[string]interface{})
+				for nestedName, nestedDef := range groupMap {
+					nestedStepMap, ok := nestedDef.(map[string]interface{})
+					if !ok {
+						continue
+					}
+					errors = append(errors, validateStepVariableRefs(nestedName, nestedStepMap, exportedVars)...)
+				}
 			}
 		}
 	}

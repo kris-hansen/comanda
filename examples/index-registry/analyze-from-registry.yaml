@@ -7,20 +7,20 @@
 # Usage:
 #   comanda process examples/index-registry/analyze-from-registry.yaml
 
-steps:
-  # Load a single index from registry
-  load_single:
-    codebase_index:
-      use: comanda                    # Load 'comanda' index from registry
-    model: skip                        # No LLM needed for this step
+# Load a single index from registry
+load_single:
+  step_type: codebase-index
+  codebase_index:
+    use: comanda
 
-  # Analyze the loaded codebase
-  analyze:
-    input: |
-      Here is a codebase index:
-      
-      ${COMANDA_INDEX}
-      
-      Summarize the architecture and key components.
-    model: anthropic/claude-sonnet
-    output: analysis.md
+# Analyze the loaded codebase
+analyze:
+  input: |
+    Here is a codebase index:
+    
+    ${COMANDA_INDEX}
+    
+    Summarize the architecture and key components.
+  model: anthropic/claude-sonnet
+  action: Summarize the architecture and key components in the loaded registry index.
+  output: analysis.md

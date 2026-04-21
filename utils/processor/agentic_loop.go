@@ -6,8 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
+
+	"github.com/kris-hansen/comanda/utils/models"
 )
 
 // Default values for agentic loop safety
@@ -212,13 +215,14 @@ func (p *Processor) processAgenticLoopWithFile(loopName string, config *AgenticL
 		}
 
 		// Set loop template variables
-		p.setLoopVariables(loopCtx, maxIterations)
+		p.ensureLoopPromptState(loopCtx, config.Steps)
+		p.setLoopVariables(loopCtx, config.Steps, maxIterations)
 
 		// Build iteration input with context
 		iterationInput := p.buildIterationContext(loopCtx, contextWindow)
 
 		// Execute the loop steps
-		output, err := p.executeLoopSteps(config.Steps, iterationInput)
+		output, err := p.executeLoopSteps(loopCtx, config, config.Steps, iterationInput)
 		if err != nil {
 			finalErr = fmt.Errorf("error in agentic loop '%s' iteration %d: %w", loopName, loopCtx.Iteration, err)
 			// Stream log error
@@ -328,6 +332,7 @@ func (p *Processor) createNewLoopContext(initialInput string) *LoopContext {
 		PreviousOutput: initialInput,
 		History:        make([]LoopIteration, 0),
 		StartTime:      time.Now(),
+		CurrentActions: make(map[string]string),
 	}
 }
 
@@ -342,12 +347,25 @@ func (p *Processor) getLoopStateDir() string {
 	return filepath.Join(homeDir, ".comanda", "loop-states")
 }
 
-// setLoopVariables sets template variables for the current loop iteration
-func (p *Processor) setLoopVariables(loopCtx *LoopContext, maxIterations int) {
-	p.variables["loop.iteration"] = fmt.Sprintf("%d", loopCtx.Iteration)
-	p.variables["loop.previous_output"] = loopCtx.PreviousOutput
-	p.variables["loop.total_iterations"] = fmt.Sprintf("%d", maxIterations)
-	p.variables["loop.elapsed_seconds"] = fmt.Sprintf("%.0f", time.Since(loopCtx.StartTime).Seconds())
+// setLoopVariables sets template variables for the current loop iteration.
+func (p *Processor) setLoopVariables(loopCtx *LoopContext, steps []Step, maxIterations int) {
+	loopVars := map[string]string{
+		"loop.iteration":        fmt.Sprintf("%d", loopCtx.Iteration),
+		"loop.previous_output":  loopCtx.PreviousOutput,
+		"loop.total_iterations": fmt.Sprintf("%d", maxIterations),
+		"loop.elapsed_seconds":  fmt.Sprintf("%.0f", time.Since(loopCtx.StartTime).Seconds()),
+	}
+
+	if currentPrompt := p.primaryLoopPrompt(loopCtx, steps); currentPrompt != "" {
+		loopVars["loop.current_prompt"] = currentPrompt
+	}
+
+	for name, value := range loopVars {
+		p.variables[name] = value
+		if p.cliVariables != nil {
+			p.cliVariables[name] = value
+		}
+	}
 }
 
 // buildIterationContext constructs the input for an iteration with historical context
@@ -375,8 +393,8 @@ func (p *Processor) buildIterationContext(loopCtx *LoopContext, contextWindow in
 	return sb.String()
 }
 
-// executeLoopSteps runs the sub-steps within an agentic loop iteration
-func (p *Processor) executeLoopSteps(steps []Step, input string) (string, error) {
+// executeLoopSteps runs the sub-steps within an agentic loop iteration.
+func (p *Processor) executeLoopSteps(loopCtx *LoopContext, loopConfig *AgenticLoopConfig, steps []Step, input string) (string, error) {
 	var output string
 
 	// If no sub-steps, return error
@@ -388,19 +406,25 @@ func (p *Processor) executeLoopSteps(steps []Step, input string) (string, error)
 	p.lastOutput = input
 
 	for i, step := range steps {
+		stepKey := loopStepKey(step, i)
+		stepToExecute := step
+		if currentAction, ok := loopCtx.CurrentActions[stepKey]; ok && currentAction != "" {
+			stepToExecute.Config.Action = currentAction
+		}
+
 		// Log step start
 		if p.streamLog != nil {
-			stepName := step.Name
+			stepName := stepToExecute.Name
 			if stepName == "" {
 				stepName = fmt.Sprintf("step-%d", i+1)
 			}
-			model := fmt.Sprintf("%v", step.Config.Model)
+			model := fmt.Sprintf("%v", stepToExecute.Config.Model)
 			if model == "" || model == "<nil>" {
 				model = "(default)"
 			}
 			p.streamLog.Log("→ Starting %s [model: %s]", stepName, model)
-			if step.Config.Action != nil {
-				p.streamLog.Log("  Action: %v", step.Config.Action)
+			if stepToExecute.Config.Action != nil {
+				p.streamLog.Log("  Action: %v", stepToExecute.Config.Action)
 			}
 			inputPreview := p.lastOutput
 			if len(inputPreview) > 200 {
@@ -410,7 +434,7 @@ func (p *Processor) executeLoopSteps(steps []Step, input string) (string, error)
 		}
 
 		stepStart := time.Now()
-		result, err := p.processStep(step, false, "")
+		result, err := p.processStep(stepToExecute, false, "")
 
 		// Log step completion
 		if p.streamLog != nil {
@@ -432,9 +456,167 @@ func (p *Processor) executeLoopSteps(steps []Step, input string) (string, error)
 		}
 		output = result
 		p.lastOutput = result
+
+		if err := p.refineLoopStepPrompt(loopCtx, loopConfig, stepToExecute, stepKey, result); err != nil {
+			return "", err
+		}
 	}
 
 	return output, nil
+}
+
+func (p *Processor) ensureLoopPromptState(loopCtx *LoopContext, steps []Step) {
+	if loopCtx.CurrentActions == nil {
+		loopCtx.CurrentActions = make(map[string]string, len(steps))
+	}
+	for i, step := range steps {
+		stepKey := loopStepKey(step, i)
+		if _, exists := loopCtx.CurrentActions[stepKey]; exists {
+			continue
+		}
+		if action := firstStepAction(step); action != "" {
+			loopCtx.CurrentActions[stepKey] = action
+		}
+	}
+}
+
+func loopStepKey(step Step, idx int) string {
+	if step.Name != "" {
+		return step.Name
+	}
+	return fmt.Sprintf("step-%d", idx+1)
+}
+
+func firstStepAction(step Step) string {
+	switch action := step.Config.Action.(type) {
+	case string:
+		return strings.TrimSpace(action)
+	case []string:
+		if len(action) > 0 {
+			return strings.TrimSpace(action[0])
+		}
+	case []interface{}:
+		if len(action) > 0 {
+			if text, ok := action[0].(string); ok {
+				return strings.TrimSpace(text)
+			}
+		}
+	}
+	return ""
+}
+
+func (p *Processor) primaryLoopPrompt(loopCtx *LoopContext, steps []Step) string {
+	for i, step := range steps {
+		if prompt := loopCtx.CurrentActions[loopStepKey(step, i)]; prompt != "" {
+			return prompt
+		}
+	}
+
+	keys := make([]string, 0, len(loopCtx.CurrentActions))
+	for key := range loopCtx.CurrentActions {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	for _, key := range keys {
+		if loopCtx.CurrentActions[key] != "" {
+			return loopCtx.CurrentActions[key]
+		}
+	}
+	return ""
+}
+
+func (p *Processor) refineLoopStepPrompt(loopCtx *LoopContext, loopConfig *AgenticLoopConfig, step Step, stepKey, latestResult string) error {
+	if !p.isPromptImprovementEnabled(loopConfig, step) {
+		return nil
+	}
+
+	currentAction := loopCtx.CurrentActions[stepKey]
+	if currentAction == "" {
+		currentAction = firstStepAction(step)
+	}
+	if currentAction == "" {
+		return nil
+	}
+
+	modelNames := p.NormalizeStringSlice(step.Config.Model)
+	modelName := p.promptImprovementModel(loopConfig, modelNames)
+	if modelName == "" || modelName == "NA" {
+		return nil
+	}
+
+	provider := models.DetectProvider(modelName)
+	if provider == nil {
+		return fmt.Errorf("provider not found for prompt improvement model: %s", modelName)
+	}
+	configuredProvider := p.providers[provider.Name()]
+	if configuredProvider == nil {
+		return fmt.Errorf("provider %s not configured", provider.Name())
+	}
+
+	instructions := p.promptImprovementInstructions(loopConfig, step)
+	refinementPrompt := fmt.Sprintf(`You are refining the prompt for the next iteration of an agentic loop.
+
+Return ONLY the improved prompt text to use next. Do not include commentary, markdown fences, or explanations.
+
+Current iteration: %d
+Current prompt:
+---
+%s
+---
+
+Latest result:
+---
+%s
+---
+
+Additional guidance:
+%s`, loopCtx.Iteration, currentAction, latestResult, instructions)
+
+	improvedAction, err := configuredProvider.SendPrompt(modelName, refinementPrompt)
+	if err != nil {
+		return fmt.Errorf("failed to refine loop prompt for step '%s': %w", stepKey, err)
+	}
+
+	improvedAction = strings.TrimSpace(improvedAction)
+	if improvedAction != "" {
+		loopCtx.CurrentActions[stepKey] = improvedAction
+		if p.streamLog != nil {
+			p.streamLog.Log("↻ Refined prompt for %s", stepKey)
+		}
+	}
+
+	return nil
+}
+
+func (p *Processor) isPromptImprovementEnabled(loopConfig *AgenticLoopConfig, step Step) bool {
+	if loopConfig != nil && loopConfig.PromptImprovement != nil {
+		if loopConfig.PromptImprovement.Enabled || loopConfig.PromptImprovement.Model != "" || loopConfig.PromptImprovement.Instructions != "" {
+			return true
+		}
+		return true
+	}
+
+	return len(p.NormalizeStringSlice(step.Config.NextAction)) > 0
+}
+
+func (p *Processor) promptImprovementModel(loopConfig *AgenticLoopConfig, stepModels []string) string {
+	if loopConfig != nil && loopConfig.PromptImprovement != nil && loopConfig.PromptImprovement.Model != "" {
+		return loopConfig.PromptImprovement.Model
+	}
+	if len(stepModels) > 0 {
+		return stepModels[0]
+	}
+	return ""
+}
+
+func (p *Processor) promptImprovementInstructions(loopConfig *AgenticLoopConfig, step Step) string {
+	if nextActions := p.NormalizeStringSlice(step.Config.NextAction); len(nextActions) > 0 {
+		return strings.Join(nextActions, "\n")
+	}
+	if loopConfig != nil && loopConfig.PromptImprovement != nil && strings.TrimSpace(loopConfig.PromptImprovement.Instructions) != "" {
+		return loopConfig.PromptImprovement.Instructions
+	}
+	return "Make the next prompt more specific, preserve the user's goal, incorporate what worked, avoid what failed, and increase the chance of a stronger next iteration."
 }
 
 // checkExitCondition determines if the loop should exit

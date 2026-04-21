@@ -6,11 +6,14 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/kris-hansen/comanda/utils/models"
 )
 
 func TestCheckExitCondition_LLMDecides(t *testing.T) {
 	p := &Processor{
-		variables: make(map[string]string),
+		variables:    make(map[string]string),
+		cliVariables: make(map[string]string),
 	}
 
 	tests := []struct {
@@ -221,7 +224,8 @@ func TestBuildIterationContext(t *testing.T) {
 
 func TestSetLoopVariables(t *testing.T) {
 	p := &Processor{
-		variables: make(map[string]string),
+		variables:    make(map[string]string),
+		cliVariables: make(map[string]string),
 	}
 
 	loopCtx := &LoopContext{
@@ -230,7 +234,10 @@ func TestSetLoopVariables(t *testing.T) {
 		StartTime:      time.Now().Add(-10 * time.Second),
 	}
 
-	p.setLoopVariables(loopCtx, 10)
+	steps := []Step{{Name: "analyze", Config: StepConfig{Action: "initial prompt"}}}
+	loopCtx.CurrentActions = map[string]string{"analyze": "refined prompt"}
+
+	p.setLoopVariables(loopCtx, steps, 10)
 
 	if p.variables["loop.iteration"] != "3" {
 		t.Errorf("loop.iteration = %q, want %q", p.variables["loop.iteration"], "3")
@@ -242,6 +249,14 @@ func TestSetLoopVariables(t *testing.T) {
 
 	if p.variables["loop.total_iterations"] != "10" {
 		t.Errorf("loop.total_iterations = %q, want %q", p.variables["loop.total_iterations"], "10")
+	}
+
+	if p.variables["loop.current_prompt"] != "refined prompt" {
+		t.Errorf("loop.current_prompt = %q, want %q", p.variables["loop.current_prompt"], "refined prompt")
+	}
+
+	if p.cliVariables["loop.iteration"] != "3" {
+		t.Errorf("cli loop.iteration = %q, want %q", p.cliVariables["loop.iteration"], "3")
 	}
 
 	// Elapsed seconds should be approximately 10
@@ -277,9 +292,60 @@ func TestExecuteLoopSteps_NoSteps(t *testing.T) {
 		variables: make(map[string]string),
 	}
 
-	_, err := p.executeLoopSteps([]Step{}, "input")
+	loopCtx := &LoopContext{CurrentActions: make(map[string]string)}
+	_, err := p.executeLoopSteps(loopCtx, &AgenticLoopConfig{}, []Step{}, "input")
 	if err == nil {
 		t.Error("executeLoopSteps() should return error for empty steps")
+	}
+}
+
+func TestRefineLoopStepPrompt_UpdatesCurrentAction(t *testing.T) {
+	mockProvider := &CustomMockProvider{
+		MockProvider: *NewMockProvider("openai"),
+		responses: map[string]string{
+			"refining the prompt for the next iteration": "Improved prompt for iteration 2",
+		},
+	}
+	if err := mockProvider.Configure("test-key"); err != nil {
+		t.Fatalf("Configure() failed: %v", err)
+	}
+
+	originalDetect := models.DetectProvider
+	models.DetectProvider = func(modelName string) models.Provider {
+		return mockProvider
+	}
+	defer func() { models.DetectProvider = originalDetect }()
+
+	p := &Processor{
+		variables:    make(map[string]string),
+		cliVariables: make(map[string]string),
+		providers: map[string]models.Provider{
+			"openai": mockProvider,
+		},
+	}
+
+	loopCtx := &LoopContext{
+		Iteration:      1,
+		PreviousOutput: "initial result",
+		CurrentActions: map[string]string{"improve": "Initial prompt"},
+	}
+	loopConfig := &AgenticLoopConfig{
+		PromptImprovement: &PromptImprovementConfig{Enabled: true},
+	}
+	step := Step{
+		Name: "improve",
+		Config: StepConfig{
+			Model:  "gpt-4o-mini",
+			Action: "Initial prompt",
+		},
+	}
+
+	if err := p.refineLoopStepPrompt(loopCtx, loopConfig, step, "improve", "latest output"); err != nil {
+		t.Fatalf("refineLoopStepPrompt() failed: %v", err)
+	}
+
+	if got := loopCtx.CurrentActions["improve"]; got != "Improved prompt for iteration 2" {
+		t.Fatalf("current action = %q, want %q", got, "Improved prompt for iteration 2")
 	}
 }
 

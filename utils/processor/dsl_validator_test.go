@@ -290,6 +290,54 @@ index_repo:
 	}
 }
 
+func TestValidateWorkflowStructure_ValidQmdSearchStep(t *testing.T) {
+	yaml := `
+search:
+  type: qmd-search
+  qmd_search:
+    query: "error handling"
+    collection: docs
+  output: CONTEXT
+`
+	result := ValidateWorkflowStructure(yaml)
+	if !result.Valid {
+		t.Errorf("Expected valid qmd-search step, got errors: %s", result.ErrorSummary())
+	}
+}
+
+func TestValidateWorkflowStructure_ValidSkillStep(t *testing.T) {
+	yaml := `
+summarize_readme:
+  skill: summarize
+  input: README.md
+  args:
+    length: short
+  output: STDOUT
+`
+	result := ValidateWorkflowStructure(yaml)
+	if !result.Valid {
+		t.Errorf("Expected valid skill step, got errors: %s", result.ErrorSummary())
+	}
+}
+
+func TestValidateWorkflowStructure_OutputSequenceAllowed(t *testing.T) {
+	yaml := `
+step_one:
+  input:
+    - NA
+  model:
+    - gpt-4o-mini
+  action:
+    - write a summary
+  output:
+    - result.txt
+`
+	result := ValidateWorkflowStructure(yaml)
+	if !result.Valid {
+		t.Errorf("Expected output sequence to be valid, got errors: %s", result.ErrorSummary())
+	}
+}
+
 func TestValidateWorkflowStructure_ValidLoopsBlock(t *testing.T) {
 	yaml := `
 loops:
@@ -321,6 +369,40 @@ execute_loops:
 	result := ValidateWorkflowStructure(yaml)
 	if !result.Valid {
 		t.Errorf("Expected valid loops block, got errors: %s", result.ErrorSummary())
+	}
+}
+
+func TestValidateWorkflowStructure_ValidListStyleLoopSteps(t *testing.T) {
+	yaml := `
+loops:
+  task-a:
+    name: task-a
+    max_iterations: 2
+    steps:
+      - execute:
+          input: NA
+          model: claude-code
+          action: "Do task A"
+          output: STDOUT
+
+  task-b:
+    name: task-b
+    depends_on: [task-a]
+    max_iterations: 1
+    steps:
+      - execute:
+          input: STDIN
+          model: claude-code
+          action: "Do task B"
+          output: STDOUT
+
+execute_loops:
+  - task-a
+  - task-b
+`
+	result := ValidateWorkflowStructure(yaml)
+	if !result.Valid {
+		t.Errorf("Expected valid list-style loop steps, got errors: %s", result.ErrorSummary())
 	}
 }
 

@@ -2,6 +2,7 @@ package processor
 
 import (
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -238,12 +239,12 @@ func (g *DependencyGraph) findCycle() []string {
 				}
 			} else if recStack[dep] {
 				// Found cycle, reconstruct it
-				cycle := []string{dep}
-				current := node
-				for current != dep {
-					cycle = append([]string{current}, cycle...)
-					current = parent[current]
+				cycle := []string{node}
+				for current := parent[node]; current != dep; current = parent[current] {
+					cycle = append(cycle, current)
 				}
+				slices.Reverse(cycle)
+				cycle = append([]string{dep}, cycle...)
 				cycle = append(cycle, dep) // Close the cycle
 				return cycle
 			}

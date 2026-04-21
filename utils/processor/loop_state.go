@@ -20,6 +20,7 @@ type LoopState struct {
 	LastUpdateTime     time.Time           `json:"last_update_time"`
 	PreviousOutput     string              `json:"previous_output"`
 	History            []LoopIteration     `json:"history"`
+	CurrentActions     map[string]string   `json:"current_actions,omitempty"`
 	Variables          map[string]string   `json:"variables"`
 	Status             string              `json:"status"` // running, paused, completed, failed
 	ExitCondition      string              `json:"exit_condition"`
@@ -248,6 +249,7 @@ func loopStateFromContext(ctx *LoopContext, name string, config *AgenticLoopConf
 		LastUpdateTime:   time.Now(),
 		PreviousOutput:   ctx.PreviousOutput,
 		History:          ctx.History,
+		CurrentActions:   ctx.CurrentActions,
 		Variables:        variables,
 		Status:           "running",
 		ExitCondition:    config.ExitCondition,
@@ -264,6 +266,7 @@ func stateToLoopContext(state *LoopState) *LoopContext {
 		PreviousOutput: state.PreviousOutput,
 		History:        state.History,
 		StartTime:      state.StartTime,
+		CurrentActions: state.CurrentActions,
 	}
 }
 
