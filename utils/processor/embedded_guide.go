@@ -410,6 +410,7 @@ agentic-loop:
 
 **Quality Gates (Automated Validation):**
 - ` + "`quality_gates`" + `: (list, optional) Automated checks to run after each iteration. Each gate validates loop output and can trigger retry/abort/skip actions.
+- ` + "`prompt_improvement`" + `: (map, optional) Automatically refine the next iteration's prompt from the latest result.
 
 **Quality Gate Configuration:**
 ` + "```yaml" + `
@@ -447,6 +448,7 @@ quality_gates:
 - ` + "`{{ loop.previous_output }}`" + `: Output from previous iteration
 - ` + "`{{ loop.total_iterations }}`" + `: Maximum allowed iterations
 - ` + "`{{ loop.elapsed_seconds }}`" + `: Seconds since loop started
+- ` + "`{{ loop.current_prompt }}`" + `: The refined prompt that will be used for the next iteration
 
 **Example: Agentic Code Exploration**
 ` + "```yaml" + `

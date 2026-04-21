@@ -509,6 +509,7 @@ document_codebase:
 - `exit_condition`: (string) When to stop - `llm_decides` (agent says DONE) or `pattern_match`
 - `allowed_paths`: (list of strings) Directories the agent can access
 - `tools`: (list of strings, optional) Tool whitelist - Read, Write, Edit, Bash, etc.
+- `prompt_improvement`: (map, optional) Automatically refine the next iteration's prompt based on the latest result
 
 ### Simplified Path Configuration
 
@@ -583,6 +584,20 @@ action: |
   - You have full write access - write immediately, don't ask permission
   - If the file contains permission-related text, overwrite it with real content
 ```
+
+**For self-improving prompt loops:**
+```yaml
+agentic_loop:
+  max_iterations: 5
+  prompt_improvement:
+    enabled: true
+    instructions: |
+      Tighten the next prompt using the latest result.
+      Keep the user's goal, preserve what worked, and make the next prompt
+      more specific and actionable.
+```
+
+This stores the refined prompt for the next pass and exposes it as `{{ loop.current_prompt }}` alongside `{{ loop.previous_output }}`.
 
 **Why this matters:** Agents can misinterpret early errors as permission denials and enter a confused state where they write complaints about permissions instead of actual content. Explicit permission confirmation prevents this loop.
 
