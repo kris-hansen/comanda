@@ -488,12 +488,12 @@ overridden with --model.`,
 		outputFilename := inputFilename
 		fmt.Printf("Overwrite %s? (y/n): ", inputFilename)
 		var answer string
-		fmt.Scanln(&answer)
+		_, _ = fmt.Scanln(&answer)
 		answer = strings.TrimSpace(strings.ToLower(answer))
 
 		if answer != "y" && answer != "yes" {
 			fmt.Print("Enter new filename: ")
-			fmt.Scanln(&outputFilename)
+			_, _ = fmt.Scanln(&outputFilename)
 			outputFilename = strings.TrimSpace(outputFilename)
 			if outputFilename == "" {
 				return fmt.Errorf("no filename provided, aborting")
