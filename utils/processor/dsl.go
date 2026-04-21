@@ -287,21 +287,38 @@ func (c *DSLConfig) parseAgenticLoopBlock(node *yaml.Node) error {
 
 	// Parse steps if present
 	if stepsNode != nil {
-		if stepsNode.Kind != yaml.MappingNode {
-			return fmt.Errorf("agentic-loop steps must be a mapping")
-		}
+		switch stepsNode.Kind {
+		case yaml.MappingNode:
+			for i := 0; i < len(stepsNode.Content); i += 2 {
+				keyNode := stepsNode.Content[i]
+				valueNode := stepsNode.Content[i+1]
+				stepName := keyNode.Value
 
-		for i := 0; i < len(stepsNode.Content); i += 2 {
-			keyNode := stepsNode.Content[i]
-			valueNode := stepsNode.Content[i+1]
-			stepName := keyNode.Value
+				var stepConfig StepConfig
+				if err := valueNode.Decode(&stepConfig); err != nil {
+					return fmt.Errorf("failed to decode agentic loop step '%s': %w", stepName, err)
+				}
 
-			var stepConfig StepConfig
-			if err := valueNode.Decode(&stepConfig); err != nil {
-				return fmt.Errorf("failed to decode agentic loop step '%s': %w", stepName, err)
+				loopConfig.Steps = append(loopConfig.Steps, Step{Name: stepName, Config: stepConfig})
 			}
+		case yaml.SequenceNode:
+			for _, item := range stepsNode.Content {
+				if item.Kind != yaml.MappingNode || len(item.Content) != 2 {
+					return fmt.Errorf("agentic-loop list steps must be single-entry mappings")
+				}
 
-			loopConfig.Steps = append(loopConfig.Steps, Step{Name: stepName, Config: stepConfig})
+				stepName := item.Content[0].Value
+				valueNode := item.Content[1]
+
+				var stepConfig StepConfig
+				if err := valueNode.Decode(&stepConfig); err != nil {
+					return fmt.Errorf("failed to decode agentic loop step '%s': %w", stepName, err)
+				}
+
+				loopConfig.Steps = append(loopConfig.Steps, Step{Name: stepName, Config: stepConfig})
+			}
+		default:
+			return fmt.Errorf("agentic-loop steps must be a mapping or sequence")
 		}
 	}
 

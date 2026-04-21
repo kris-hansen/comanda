@@ -35,7 +35,7 @@ analyze_spec:
     - Break it down into discrete implementable tasks
     - Each task should be approximately 1000 lines of code or less
     - For each task identify type (feature, task, or bug), title, and description
-    - Output as JSON array with format [{"type": "feature|task|bug", "title": "...", "description": "..."}]
+    - 'Output as JSON array with format [{"type": "feature|task|bug", "title": "...", "description": "..."}]'
     - Keep titles concise (under 80 characters)
     - Keep descriptions to 2-3 sentences
     - Order tasks by implementation dependency (foundational first)

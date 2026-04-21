@@ -10,38 +10,39 @@
 # Usage:
 #   comanda process examples/index-registry/multi-codebase-analysis.yaml
 
-steps:
-  # Load multiple indexes from registry
-  load_codebases:
-    codebase_index:
-      use: [comanda, clawdbot]        # Load multiple indexes
-      aggregate: true                  # Combine into AGGREGATED_INDEX
-      max_age: 24h                     # Warn if indexes are stale
-    model: skip
+# Load multiple indexes from registry
+load_codebases:
+  step_type: codebase-index
+  codebase_index:
+    use: [comanda, clawdbot]
+    aggregate: true
+    max_age: 24h
 
-  # Compare the codebases
-  compare:
-    input: |
-      I have code context from two projects:
-      
-      ## Comanda
-      ${COMANDA_INDEX}
-      
-      ## Clawdbot  
-      ${CLAWDBOT_INDEX}
-      
-      Compare the architecture patterns used in these two projects.
-      What are the similarities and differences?
-    model: anthropic/claude-sonnet
-    output: comparison.md
+# Compare the codebases
+compare:
+  input: |
+    I have code context from two projects:
+    
+    ## Comanda
+    ${COMANDA_INDEX}
+    
+    ## Clawdbot  
+    ${CLAWDBOT_INDEX}
+    
+    Compare the architecture patterns used in these two projects.
+    What are the similarities and differences?
+  model: anthropic/claude-sonnet
+  action: Compare the architecture patterns in the two loaded codebase indexes.
+  output: comparison.md
 
-  # Or use the aggregated index
-  aggregate_analysis:
-    input: |
-      Here are multiple codebase indexes:
-      
-      ${AGGREGATED_INDEX}
-      
-      How might these projects integrate or work together?
-    model: anthropic/claude-sonnet
-    output: integration-ideas.md
+# Or use the aggregated index
+aggregate_analysis:
+  input: |
+    Here are multiple codebase indexes:
+    
+    ${AGGREGATED_INDEX}
+    
+    How might these projects integrate or work together?
+  model: anthropic/claude-sonnet
+  action: Explain how the aggregated codebases could integrate or work together.
+  output: integration-ideas.md
