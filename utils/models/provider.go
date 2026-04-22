@@ -195,6 +195,18 @@ func isModelAvailableOnVLLM(modelName string) bool {
 	return false
 }
 
+func isLlamaCPPModelAvailable(modelName string) bool {
+	provider := NewLlamaCPPProvider()
+	if !provider.SupportsModel(modelName) {
+		return false
+	}
+	if _, err := provider.resolveModelPath(modelName); err != nil {
+		config.DebugLog("[Provider] llama.cpp model not available: %v", err)
+		return false
+	}
+	return true
+}
+
 // DetectProviderFunc is the type for the provider detection function
 type DetectProviderFunc func(modelName string) Provider
 
@@ -226,6 +238,21 @@ func defaultDetectProvider(modelName string) Provider {
 			config.DebugLog("[Provider] Found local vLLM provider for model %s", modelName)
 			return vllmProvider
 		}
+	}
+
+	// Check llama.cpp
+	llamaCPPProvider := NewLlamaCPPProvider()
+	if llamaCPPProvider.SupportsModel(modelName) {
+		if !IsLlamaCPPAvailable() {
+			config.DebugLog("[Provider] Model %s requires llama.cpp but llama-cli was not found", modelName)
+			return nil
+		}
+		if isLlamaCPPModelAvailable(modelName) {
+			config.DebugLog("[Provider] Found local llama.cpp provider for model %s", modelName)
+			return llamaCPPProvider
+		}
+		config.DebugLog("[Provider] Model %s looks like llama.cpp/GGUF but the file was not found", modelName)
+		return nil
 	}
 
 	// Check Claude Code (local CLI)

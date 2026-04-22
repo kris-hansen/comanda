@@ -1935,7 +1935,7 @@ IMPORTANT: When specifying models in the generated YAML, you MUST use one of the
 	// }
 
 	// Assuming provider is already configured via configureProviders() or similar mechanism
-	generatedResponse, err := provider.SendPrompt(genModelName, fullPrompt)
+	generatedResponse, err := provider.SendPrompt(p.resolveModelTarget(genModelName), fullPrompt)
 	if err != nil {
 		return "", fmt.Errorf("LLM execution failed for generate step '%s' with model '%s': %w", step.Name, genModelName, err)
 	}
@@ -2183,14 +2183,39 @@ func (p *Processor) validateGeneratedWorkflow(yamlContent string) error {
 		p.debugf("Checking if model '%s' in generated workflow is valid", modelName)
 
 		// Check if provider exists for this model
-		provider := models.DetectProvider(modelName)
+		resolvedModelName := p.resolveModelTarget(modelName)
+		provider := models.DetectProvider(resolvedModelName)
 		if provider == nil {
-			invalidModels = append(invalidModels, fmt.Sprintf("%s (no provider found)", modelName))
-			continue
+			if providerName, _, err := p.resolveConfiguredModel(modelName); err == nil {
+				switch providerName {
+				case "openai":
+					provider = models.NewOpenAIProvider()
+				case "anthropic":
+					provider = models.NewAnthropicProvider()
+				case "google":
+					provider = models.NewGoogleProvider()
+				case "xai":
+					provider = models.NewXAIProvider()
+				case "deepseek":
+					provider = models.NewDeepseekProvider()
+				case "moonshot":
+					provider = models.NewMoonshotProvider()
+				case "ollama":
+					provider = models.NewOllamaProvider()
+				case "vllm":
+					provider = models.NewVLLMProvider()
+				case "llama.cpp":
+					provider = models.NewLlamaCPPProvider()
+				}
+			}
+			if provider == nil {
+				invalidModels = append(invalidModels, fmt.Sprintf("%s (no provider found)", modelName))
+				continue
+			}
 		}
 
 		// Check if provider supports this model
-		if !provider.SupportsModel(modelName) {
+		if !provider.SupportsModel(resolvedModelName) {
 			invalidModels = append(invalidModels, fmt.Sprintf("%s (not supported by %s)", modelName, provider.Name()))
 			continue
 		}
@@ -2272,52 +2297,53 @@ func (p *Processor) handleDeferredStep() error {
 
 // getProviderForModel retrieves a model provider based on the model name
 func (p *Processor) getProviderForModel(modelName string) (models.Provider, error) {
+	resolvedModelName := p.resolveModelTarget(modelName)
+
 	// First, check if the provider is already initialized
 	for _, provider := range p.providers {
-		if provider.SupportsModel(modelName) {
+		if provider.SupportsModel(resolvedModelName) {
 			return provider, nil
 		}
 	}
 
-	// If not initialized, find the provider in the environment configuration
-	for providerName, providerConfig := range p.envConfig.Providers {
-		for _, model := range providerConfig.Models {
-			if model.Name == modelName {
-				// Initialize the provider if it's not already in the map
-				if _, ok := p.providers[providerName]; !ok {
-					var newProvider models.Provider
-					switch providerName {
-					case "openai":
-						newProvider = models.NewOpenAIProvider()
-					case "anthropic":
-						newProvider = models.NewAnthropicProvider()
-					case "google":
-						newProvider = models.NewGoogleProvider()
-					case "xai":
-						newProvider = models.NewXAIProvider()
-					case "deepseek":
-						newProvider = models.NewDeepseekProvider()
-					case "moonshot":
-						newProvider = models.NewMoonshotProvider()
-					case "ollama":
-						newProvider = models.NewOllamaProvider()
-					case "vllm":
-						newProvider = models.NewVLLMProvider()
-					default:
-						return nil, fmt.Errorf("unknown provider: %s", providerName)
-					}
-					if err := newProvider.Configure(providerConfig.APIKey); err != nil {
-						return nil, fmt.Errorf("failed to configure provider %s: %w", providerName, err)
-					}
-					newProvider.SetVerbose(p.verbose)
-					p.providers[providerName] = newProvider
-				}
-				return p.providers[providerName], nil
-			}
+	providerName, _, err := p.resolveConfiguredModel(modelName)
+	if err != nil {
+		return nil, fmt.Errorf("no provider configured or found for model %s", modelName)
+	}
+	providerConfig := p.envConfig.Providers[providerName]
+
+	if _, ok := p.providers[providerName]; !ok {
+		var newProvider models.Provider
+		switch providerName {
+		case "openai":
+			newProvider = models.NewOpenAIProvider()
+		case "anthropic":
+			newProvider = models.NewAnthropicProvider()
+		case "google":
+			newProvider = models.NewGoogleProvider()
+		case "xai":
+			newProvider = models.NewXAIProvider()
+		case "deepseek":
+			newProvider = models.NewDeepseekProvider()
+		case "moonshot":
+			newProvider = models.NewMoonshotProvider()
+		case "ollama":
+			newProvider = models.NewOllamaProvider()
+		case "vllm":
+			newProvider = models.NewVLLMProvider()
+		case "llama.cpp":
+			newProvider = models.NewLlamaCPPProvider()
+		default:
+			return nil, fmt.Errorf("unknown provider: %s", providerName)
 		}
+		if err := newProvider.Configure(providerConfig.APIKey); err != nil {
+			return nil, fmt.Errorf("failed to configure provider %s: %w", providerName, err)
+		}
+		newProvider.SetVerbose(p.verbose)
+		p.providers[providerName] = newProvider
 	}
 
-	return nil, fmt.Errorf("no provider configured or found for model %s", modelName)
+	return p.providers[providerName], nil
 }
 
 // processPreLoopSteps processes all steps (sequential, parallel, agentic loops) before multi-loop orchestration.

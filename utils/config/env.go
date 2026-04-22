@@ -46,9 +46,10 @@ type DatabaseConfig struct {
 
 // Model represents a single model configuration
 type Model struct {
-	Name  string      `yaml:"name"`
-	Type  string      `yaml:"type"`
-	Modes []ModelMode `yaml:"modes"`
+	Name   string      `yaml:"name"`
+	Target string      `yaml:"target,omitempty"`
+	Type   string      `yaml:"type"`
+	Modes  []ModelMode `yaml:"modes"`
 }
 
 // Provider represents a provider's configuration
@@ -543,10 +544,32 @@ func (c *EnvConfig) AddModelToProvider(providerName string, model Model) error {
 		return fmt.Errorf("provider %s not found", providerName)
 	}
 
-	// Check if model already exists
+	model.Name = strings.TrimSpace(model.Name)
+	model.Target = strings.TrimSpace(model.Target)
+	if model.Name == "" {
+		return fmt.Errorf("model name is required")
+	}
+	if model.Target == "" {
+		model.Target = model.Name
+	}
+
+	// Enforce globally unique configured names so aliases remain unambiguous.
+	for existingProviderName, existingProvider := range c.Providers {
+		for _, existingModel := range existingProvider.Models {
+			if existingModel.Name == model.Name {
+				return fmt.Errorf("model %s already exists for provider %s", model.Name, existingProviderName)
+			}
+		}
+	}
+
+	// Check if model target already exists for this provider.
 	for _, m := range provider.Models {
-		if m.Name == model.Name {
-			return fmt.Errorf("model %s already exists for provider %s", model.Name, providerName)
+		existingTarget := m.Target
+		if existingTarget == "" {
+			existingTarget = m.Name
+		}
+		if existingTarget == model.Target {
+			return fmt.Errorf("model target %s already exists for provider %s", model.Target, providerName)
 		}
 	}
 
@@ -572,14 +595,19 @@ func (c *EnvConfig) GetModelConfig(providerName, modelName string) (*Model, erro
 	var baseMatches []*Model
 
 	for _, model := range provider.Models {
+		target := model.Target
+		if target == "" {
+			target = model.Name
+		}
+
 		// Check for exact match first
-		if model.Name == modelName {
+		if model.Name == modelName || target == modelName {
 			exactMatch = &model
 			break
 		}
 
 		// Check if this model matches the base name (before any tag)
-		modelBaseName := strings.Split(model.Name, ":")[0]
+		modelBaseName := strings.Split(target, ":")[0]
 		if modelBaseName == modelName {
 			baseMatches = append(baseMatches, &model)
 		}
@@ -605,6 +633,39 @@ func (c *EnvConfig) GetModelConfig(providerName, modelName string) (*Model, erro
 	}
 
 	return nil, fmt.Errorf("model %s not found for provider %s", modelName, providerName)
+}
+
+// ResolveConfiguredModel finds a configured model by its user-facing name across all providers.
+func (c *EnvConfig) ResolveConfiguredModel(modelName string) (string, *Model, error) {
+	var matchedProvider string
+	var matchedModel *Model
+
+	for providerName, provider := range c.Providers {
+		for _, model := range provider.Models {
+			target := model.Target
+			if target == "" {
+				target = model.Name
+			}
+
+			if model.Name == modelName || target == modelName {
+				if matchedModel != nil {
+					return "", nil, fmt.Errorf("ambiguous configured model %s", modelName)
+				}
+				modelCopy := model
+				if modelCopy.Target == "" {
+					modelCopy.Target = modelCopy.Name
+				}
+				matchedProvider = providerName
+				matchedModel = &modelCopy
+			}
+		}
+	}
+
+	if matchedModel == nil {
+		return "", nil, fmt.Errorf("configured model %s not found", modelName)
+	}
+
+	return matchedProvider, matchedModel, nil
 }
 
 // UpdateAPIKey updates the API key for a specific provider
