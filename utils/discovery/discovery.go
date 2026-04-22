@@ -52,7 +52,7 @@ func GetLlamaCPPModels() ([]string, error) {
 	for _, root := range roots {
 		err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 			if err != nil {
-				return nil
+				return err
 			}
 			if d.IsDir() {
 				return nil
@@ -62,7 +62,7 @@ func GetLlamaCPPModels() ([]string, error) {
 			}
 			absPath, err := filepath.Abs(path)
 			if err != nil {
-				return nil
+				return err
 			}
 			if !seen[absPath] {
 				seen[absPath] = true
