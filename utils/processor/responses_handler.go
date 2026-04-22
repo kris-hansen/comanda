@@ -371,17 +371,18 @@ func (p *Processor) processResponsesStep(step Step, isParallel bool, parallelID 
 		return "", fmt.Errorf("no model specified for openai-responses step")
 	}
 	modelName := modelNames[0]
+	resolvedModelName := p.resolveModelTarget(modelName)
 
 	// Get the OpenAI provider
-	provider := models.DetectProvider(modelName)
+	provider := models.DetectProvider(resolvedModelName)
 	if provider == nil || provider.Name() != "openai" {
 		return "", fmt.Errorf("openai-responses step requires an OpenAI model, got: %s", modelName)
 	}
 
 	// Check if this is a model that requires the responses API
-	isResponsesAPIModel := strings.HasPrefix(modelName, "o1-pro") ||
-		strings.HasPrefix(modelName, "o3-") ||
-		strings.HasPrefix(modelName, "o4-")
+	isResponsesAPIModel := strings.HasPrefix(resolvedModelName, "o1-pro") ||
+		strings.HasPrefix(resolvedModelName, "o3-") ||
+		strings.HasPrefix(resolvedModelName, "o4-")
 
 	// Log a warning if a model requires the responses API but doesn't have a response format
 	if isResponsesAPIModel && step.Config.ResponseFormat == nil {
@@ -488,7 +489,7 @@ func (p *Processor) processResponsesStep(step Step, isParallel bool, parallelID 
 
 	// Create ResponsesConfig
 	config := models.ResponsesConfig{
-		Model:              modelName,
+		Model:              resolvedModelName,
 		Input:              prompt,
 		Instructions:       step.Config.Instructions,
 		PreviousResponseID: step.Config.PreviousResponseID,

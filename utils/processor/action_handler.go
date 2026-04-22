@@ -38,6 +38,7 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 
 	// For now, use the first model specified
 	modelName := modelNames[0]
+	resolvedModelName := p.resolveModelTarget(modelName)
 
 	// Special case: if model is NA, return the input content directly
 	if modelName == "NA" {
@@ -59,7 +60,7 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 	}
 
 	// Get provider by detecting it from the model name
-	provider := models.DetectProvider(modelName)
+	provider := models.DetectProvider(resolvedModelName)
 	if provider == nil {
 		return nil, fmt.Errorf("provider not found for model: %s", modelName)
 	}
@@ -70,7 +71,7 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 		return nil, fmt.Errorf("provider %s not configured", provider.Name())
 	}
 
-	p.debugf("Using model %s with provider %s", modelName, configuredProvider.Name())
+	p.debugf("Using model %s (resolved to %s) with provider %s", modelName, resolvedModelName, configuredProvider.Name())
 	p.debugf("Processing %d action(s)", len(actions))
 
 	// Check if we're in agentic mode (have allowed paths set in agentic loop)
@@ -134,7 +135,7 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 					}, nil
 				}
 			}
-			result, err := configuredProvider.SendPrompt(modelName, action)
+			result, err := configuredProvider.SendPrompt(resolvedModelName, action)
 			if err != nil {
 				return nil, err
 			}
@@ -226,7 +227,7 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 							claudeCode.SetWorktree(worktreeName)
 							defer claudeCode.ClearWorktree()
 						}
-						result, err := claudeCode.SendPromptAgentic(modelName, combinedPrompt,
+						result, err := claudeCode.SendPromptAgentic(resolvedModelName, combinedPrompt,
 							agenticConfig.AllowedPaths, agenticConfig.Tools, p.getEffectiveWorkDir())
 						if debugWatcher != nil {
 							debugWatcher.Stop()
@@ -241,7 +242,7 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 					}
 				}
 				// Non-agentic mode: use SendPromptWithFile as before
-				result, err := configuredProvider.SendPromptWithFile(modelName, action, fileInputs[0])
+				result, err := configuredProvider.SendPromptWithFile(resolvedModelName, action, fileInputs[0])
 				if err != nil {
 					return nil, err
 				}
@@ -270,7 +271,7 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 					combinedPrompt += fmt.Sprintf("File %d (%s):\n%s\n\n", i+1, file.Path, string(content))
 				}
 				combinedPrompt += fmt.Sprintf("\nAction: %s", action)
-				result, err := configuredProvider.SendPrompt(modelName, combinedPrompt)
+				result, err := configuredProvider.SendPrompt(resolvedModelName, combinedPrompt)
 				if err != nil {
 					return nil, err
 				}
@@ -293,7 +294,7 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 				// Build a clean prompt that discourages metadata wrapping
 				// Detect output format from action to provide appropriate instructions
 				// Try to process each file individually
-				result, err := configuredProvider.SendPromptWithFile(modelName,
+				result, err := configuredProvider.SendPromptWithFile(resolvedModelName,
 					fmt.Sprintf("%sFor this file: %s", PromptPrefix, action), file)
 
 				if err != nil {
@@ -358,7 +359,7 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 						claudeCode.SetWorktree(worktreeName)
 						defer claudeCode.ClearWorktree()
 					}
-					result, err := claudeCode.SendPromptAgentic(modelName, combinedPrompt,
+					result, err := claudeCode.SendPromptAgentic(resolvedModelName, combinedPrompt,
 						agenticConfig.AllowedPaths, agenticConfig.Tools, p.getEffectiveWorkDir())
 					// Stop the debug watcher
 					if debugWatcher != nil {
@@ -374,7 +375,7 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 				}
 			}
 
-			result, err := configuredProvider.SendPrompt(modelName, combinedPrompt)
+			result, err := configuredProvider.SendPrompt(resolvedModelName, combinedPrompt)
 			if err != nil {
 				return nil, err
 			}

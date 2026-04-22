@@ -188,8 +188,15 @@ overridden with --model.`,
 
 		dslGuide := processor.GetEmbeddedLLMGuideWithModels(availableModels)
 
+		resolvedGenerationModel := modelForGeneration
+		if envConfig != nil {
+			if _, configuredModel, err := envConfig.ResolveConfiguredModel(modelForGeneration); err == nil && configuredModel != nil && configuredModel.Target != "" {
+				resolvedGenerationModel = configuredModel.Target
+			}
+		}
+
 		// Get the provider
-		provider := models.DetectProvider(modelForGeneration)
+		provider := models.DetectProvider(resolvedGenerationModel)
 		if provider == nil {
 			return fmt.Errorf("could not detect provider for model: %s", modelForGeneration)
 		}
@@ -243,7 +250,7 @@ overridden with --model.`,
 			spinner.Start(spinnerMsg)
 
 			// Call the LLM
-			generatedResponse, err := provider.SendPrompt(modelForGeneration, prompt)
+			generatedResponse, err := provider.SendPrompt(resolvedGenerationModel, prompt)
 			spinner.Stop()
 			if err != nil {
 				return fmt.Errorf("LLM execution failed for model '%s': %w", modelForGeneration, err)
@@ -391,8 +398,15 @@ overridden with --model.`,
 
 		dslGuide := processor.GetEmbeddedLLMGuideWithModels(availableModels)
 
+		resolvedGenerationModel := modelForGeneration
+		if envConfig != nil {
+			if _, configuredModel, err := envConfig.ResolveConfiguredModel(modelForGeneration); err == nil && configuredModel != nil && configuredModel.Target != "" {
+				resolvedGenerationModel = configuredModel.Target
+			}
+		}
+
 		// Get the provider
-		provider := models.DetectProvider(modelForGeneration)
+		provider := models.DetectProvider(resolvedGenerationModel)
 		if provider == nil {
 			return fmt.Errorf("could not detect provider for model: %s", modelForGeneration)
 		}
@@ -437,7 +451,7 @@ overridden with --model.`,
 			}
 			spinner.Start(spinnerMsg)
 
-			generatedResponse, err := provider.SendPrompt(modelForGeneration, prompt)
+			generatedResponse, err := provider.SendPrompt(resolvedGenerationModel, prompt)
 			spinner.Stop()
 			if err != nil {
 				return fmt.Errorf("LLM execution failed for model '%s': %w", modelForGeneration, err)
