@@ -233,9 +233,10 @@ func (sw *sseWriter) SendData(data string) (n int, err error) {
 
 // ConfiguredModel represents a model as configured within Comanda
 type ConfiguredModel struct {
-	Name  string          `json:"name"`
-	Type  string          `json:"type"`  // e.g., "local", "external"
-	Modes []cfg.ModelMode `json:"modes"` // Use alias cfg
+	Name   string          `json:"name"`
+	Target string          `json:"target,omitempty"`
+	Type   string          `json:"type"`  // e.g., "local", "external"
+	Modes  []cfg.ModelMode `json:"modes"` // Use alias cfg
 }
 
 // AvailableModel represents a model available from the provider's service
@@ -260,8 +261,9 @@ type ConfiguredModelListResponse struct {
 
 // AddModelRequest is the request body for adding a model to a provider's configuration
 type AddModelRequest struct {
-	Name  string          `json:"name"`
-	Modes []cfg.ModelMode `json:"modes"` // Use alias cfg
+	Name   string          `json:"name"`
+	Target string          `json:"target,omitempty"`
+	Modes  []cfg.ModelMode `json:"modes"` // Use alias cfg
 }
 
 // UpdateModelRequest is the request body for updating a configured model's modes

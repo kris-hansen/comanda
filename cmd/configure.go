@@ -17,6 +17,7 @@ import (
 
 	"github.com/kris-hansen/comanda/utils/config"
 	"github.com/kris-hansen/comanda/utils/database"
+	"github.com/kris-hansen/comanda/utils/discovery"
 	"github.com/kris-hansen/comanda/utils/models"
 	openai "github.com/sashabaranov/go-openai"
 	"github.com/spf13/cobra"
@@ -291,6 +292,10 @@ type VLLMModel struct {
 	OwnedBy string `json:"owned_by"`
 }
 
+func getLlamaCPPModels() ([]string, error) {
+	return discovery.GetLlamaCPPModels()
+}
+
 func getVLLMModels() ([]VLLMModel, error) {
 	endpoint := "http://localhost:8000"
 	resp, err := http.Get(endpoint + "/v1/models")
@@ -322,6 +327,20 @@ func checkVLLMInstalled() bool {
 	}
 	defer resp.Body.Close()
 	return resp.StatusCode == http.StatusOK
+}
+
+func checkLlamaCPPInstalled() bool {
+	return models.IsLlamaCPPAvailable()
+}
+
+func promptForModelAlias(reader *bufio.Reader, target string) string {
+	log.Printf("Alias for model '%s' (press Enter to use as-is): ", target)
+	alias, _ := reader.ReadString('\n')
+	alias = strings.TrimSpace(alias)
+	if alias == "" {
+		return target
+	}
+	return alias
 }
 
 func validatePassword(password string) error {
@@ -922,15 +941,15 @@ func configureAPIProvider(reader *bufio.Reader, envConfig *config.EnvConfig) {
 	}
 }
 
-// configureLocalProvider handles adding local providers (Ollama, vLLM)
+// configureLocalProvider handles adding local providers (Ollama, vLLM, llama.cpp)
 func configureLocalProvider(reader *bufio.Reader, envConfig *config.EnvConfig) {
-	log.Printf("\nAvailable local providers: ollama, vllm\n")
+	log.Printf("\nAvailable local providers: ollama, vllm, llama.cpp\n")
 	log.Printf("Enter provider name: ")
 	provider, _ := reader.ReadString('\n')
 	provider = strings.TrimSpace(provider)
 
-	if provider != "ollama" && provider != "vllm" {
-		log.Printf("Invalid provider. Choose 'ollama' or 'vllm'\n")
+	if provider != "ollama" && provider != "vllm" && provider != "llama.cpp" {
+		log.Printf("Invalid provider. Choose 'ollama', 'vllm', or 'llama.cpp'\n")
 		return
 	}
 
@@ -940,6 +959,11 @@ func configureLocalProvider(reader *bufio.Reader, envConfig *config.EnvConfig) {
 	}
 	if provider == "vllm" && !checkVLLMInstalled() {
 		log.Printf("Error: vLLM server is not running.\n")
+		return
+	}
+	if provider == "llama.cpp" && !checkLlamaCPPInstalled() {
+		log.Printf("Error: llama.cpp CLI is not installed or not in PATH.\n")
+		log.Printf("Install llama.cpp or set LLAMA_CPP_BINARY to your llama-cli path.\n")
 		return
 	}
 
@@ -958,7 +982,7 @@ func configureLocalProvider(reader *bufio.Reader, envConfig *config.EnvConfig) {
 		for _, m := range ollamaModels {
 			modelNames = append(modelNames, m.Name)
 		}
-	} else {
+	} else if provider == "vllm" {
 		vllmModels, err := getVLLMModels()
 		if err != nil {
 			log.Printf("Error fetching vLLM models: %v\n", err)
@@ -967,6 +991,25 @@ func configureLocalProvider(reader *bufio.Reader, envConfig *config.EnvConfig) {
 		for _, m := range vllmModels {
 			modelNames = append(modelNames, m.ID)
 		}
+	} else {
+		ggufModels, err := getLlamaCPPModels()
+		if err != nil {
+			log.Printf("Error discovering llama.cpp GGUF models: %v\n", err)
+			return
+		}
+		modelNames = append(modelNames, ggufModels...)
+	}
+
+	if provider == "llama.cpp" && len(modelNames) == 0 {
+		log.Printf("No GGUF models found via LLAMA_CPP_MODEL_DIR or LLAMA_CPP_MODEL_DIRS.\n")
+		log.Printf("Enter path to a .gguf model file: ")
+		modelPath, _ := reader.ReadString('\n')
+		modelPath = strings.TrimSpace(modelPath)
+		if modelPath == "" {
+			log.Printf("No model path provided.\n")
+			return
+		}
+		modelNames = []string{modelPath}
 	}
 
 	if len(modelNames) == 0 {
@@ -981,15 +1024,16 @@ func configureLocalProvider(reader *bufio.Reader, envConfig *config.EnvConfig) {
 	}
 
 	for _, modelName := range selectedModels {
+		alias := promptForModelAlias(reader, modelName)
 		modes, err := promptForModes(reader, modelName)
 		if err != nil {
 			continue
 		}
-		newModel := config.Model{Name: modelName, Type: "local", Modes: modes}
+		newModel := config.Model{Name: alias, Target: modelName, Type: "local", Modes: modes}
 		if err := envConfig.AddModelToProvider(provider, newModel); err != nil {
 			log.Printf("Error adding model %s: %v\n", modelName, err)
 		} else {
-			log.Printf("%s Added model: %s\n", greenCheckmark, modelName)
+			log.Printf("%s Added model: %s\n", greenCheckmark, alias)
 		}
 	}
 }
@@ -1811,12 +1855,12 @@ Flag Groups:
 				log.Printf("\n")
 				log.Printf("Available provider types:\n")
 				log.Printf("  API-based:   openai, anthropic, google, xai, deepseek, moonshot\n")
-				log.Printf("  Local:       ollama, vllm\n")
+				log.Printf("  Local:       ollama, vllm, llama.cpp\n")
 				log.Printf("  CLI Agents:  claude-code, gemini-cli, openai-codex\n")
 				log.Printf("\nEnter provider: ")
 				provider, _ = reader.ReadString('\n')
 				provider = strings.TrimSpace(provider)
-				validProviders := []string{"openai", "anthropic", "ollama", "vllm", "google", "xai", "deepseek", "moonshot", "claude-code", "gemini-cli", "openai-codex"}
+				validProviders := []string{"openai", "anthropic", "ollama", "vllm", "llama.cpp", "google", "xai", "deepseek", "moonshot", "claude-code", "gemini-cli", "openai-codex"}
 				isValid := false
 				for _, vp := range validProviders {
 					if provider == vp {
@@ -1840,6 +1884,12 @@ Flag Groups:
 			if provider == "vllm" {
 				if !checkVLLMInstalled() {
 					log.Printf("Error: vLLM server is not running. Please start vLLM server and try again.")
+					return
+				}
+			}
+			if provider == "llama.cpp" {
+				if !checkLlamaCPPInstalled() {
+					log.Printf("Error: llama.cpp CLI is not installed or not in PATH. Install llama.cpp or set LLAMA_CPP_BINARY.")
 					return
 				}
 			}
@@ -1879,13 +1929,13 @@ Flag Groups:
 			existingProvider, err := envConfig.GetProviderConfig(provider)
 			var apiKey string
 			if err != nil {
-				if provider != "ollama" && provider != "vllm" {
+				if provider != "ollama" && provider != "vllm" && provider != "llama.cpp" {
 					// Only prompt for API key if not local providers
 					log.Printf("Enter API key: ")
 					apiKey, _ = reader.ReadString('\n')
 					apiKey = strings.TrimSpace(apiKey)
 				} else {
-					// For local providers (ollama, vllm), use "LOCAL" as the API key
+					// For local providers (ollama, vllm, llama.cpp), use "LOCAL" as the API key
 					apiKey = "LOCAL"
 				}
 				existingProvider = &config.Provider{
@@ -2031,15 +2081,39 @@ Flag Groups:
 					log.Printf("Error selecting models: %v\n", err)
 					return
 				}
+
+			case "llama.cpp":
+				modelNames, err := getLlamaCPPModels()
+				if err != nil {
+					log.Printf("Error discovering llama.cpp GGUF models: %v\n", err)
+					return
+				}
+				if len(modelNames) == 0 {
+					log.Printf("No GGUF models found via LLAMA_CPP_MODEL_DIR or LLAMA_CPP_MODEL_DIRS.\n")
+					log.Printf("Enter path to a .gguf model file: ")
+					modelPath, _ := reader.ReadString('\n')
+					modelPath = strings.TrimSpace(modelPath)
+					if modelPath == "" {
+						log.Printf("No model path provided.")
+						return
+					}
+					modelNames = []string{modelPath}
+				}
+				selectedModels, err = promptForModelSelection(modelNames)
+				if err != nil {
+					log.Printf("Error selecting models: %v\n", err)
+					return
+				}
 			}
 
 			// Add new models to provider
 			modelType := "external"
-			if provider == "ollama" || provider == "vllm" {
+			if provider == "ollama" || provider == "vllm" || provider == "llama.cpp" {
 				modelType = "local"
 			}
 
 			for _, modelName := range selectedModels {
+				alias := promptForModelAlias(reader, modelName)
 				// Prompt for modes for each model
 				modes, err := promptForModes(reader, modelName)
 				if err != nil {
@@ -2048,9 +2122,10 @@ Flag Groups:
 				}
 
 				newModel := config.Model{
-					Name:  modelName,
-					Type:  modelType,
-					Modes: modes,
+					Name:   alias,
+					Target: modelName,
+					Type:   modelType,
+					Modes:  modes,
 				}
 
 				if err := envConfig.AddModelToProvider(provider, newModel); err != nil {
@@ -2271,6 +2346,9 @@ func listConfiguration() {
 		}
 		for _, model := range provider.Models {
 			log.Printf("  - %s (%s)\n", model.Name, model.Type)
+			if model.Target != "" && model.Target != model.Name {
+				log.Printf("    Target: %s\n", model.Target)
+			}
 			if len(model.Modes) > 0 {
 				modeStr := make([]string, len(model.Modes))
 				for i, mode := range model.Modes {

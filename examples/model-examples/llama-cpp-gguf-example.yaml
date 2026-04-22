@@ -1,0 +1,19 @@
+# Example: run a local GGUF model through llama.cpp
+#
+# Requirements:
+#   - llama.cpp installed with `llama-cli` available, or set LLAMA_CPP_BINARY
+#   - a local GGUF file on disk
+#
+# Usage:
+#   comanda process examples/model-examples/llama-cpp-gguf-example.yaml \
+#     --vars gguf_path=/absolute/path/to/model.gguf < prompt.txt
+#
+# Or configure an alias first with `comanda configure` and replace `{{gguf_path}}`
+# below with something short like `qwen-local`.
+
+summarize_with_llama_cpp:
+  input: STDIN
+  model: "{{gguf_path}}"
+  action: |
+    Summarize the input in 5 concise bullet points.
+  output: STDOUT

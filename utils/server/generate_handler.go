@@ -96,8 +96,15 @@ func (s *Server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 
 	dslGuide := processor.GetEmbeddedLLMGuideWithModels(availableModels)
 
+	resolvedGenerationModel := modelForGeneration
+	if s.envConfig != nil {
+		if _, configuredModel, err := s.envConfig.ResolveConfiguredModel(modelForGeneration); err == nil && configuredModel != nil && configuredModel.Target != "" {
+			resolvedGenerationModel = configuredModel.Target
+		}
+	}
+
 	// Get the provider
-	provider := models.DetectProvider(modelForGeneration)
+	provider := models.DetectProvider(resolvedGenerationModel)
 	if provider == nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(GenerateResponse{
@@ -135,7 +142,7 @@ func (s *Server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 
 		// Call the LLM
 		config.DebugLog("Sending prompt to LLM (attempt %d): model=%s, prompt_length=%d", attempt, modelForGeneration, len(prompt))
-		generatedResponse, err := provider.SendPrompt(modelForGeneration, prompt)
+		generatedResponse, err := provider.SendPrompt(resolvedGenerationModel, prompt)
 		if err != nil {
 			config.VerboseLog("LLM execution failed: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)

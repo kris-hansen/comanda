@@ -275,3 +275,110 @@ func TestIsAgenticToolsAllowed(t *testing.T) {
 		})
 	}
 }
+
+func TestAddModelToProviderStoresTargetAndResolvesAlias(t *testing.T) {
+	cfg := &EnvConfig{
+		Providers: map[string]*Provider{
+			"llama.cpp": {
+				APIKey: "LOCAL",
+			},
+			"openai": {
+				APIKey: "test-key",
+			},
+		},
+	}
+
+	err := cfg.AddModelToProvider("llama.cpp", Model{
+		Name:   "qwen-local",
+		Target: "/models/Qwen2.5-7B-Instruct-Q4_K_M.gguf",
+		Type:   "local",
+		Modes:  []ModelMode{TextMode},
+	})
+	if err != nil {
+		t.Fatalf("AddModelToProvider() error = %v", err)
+	}
+
+	providerName, model, err := cfg.ResolveConfiguredModel("qwen-local")
+	if err != nil {
+		t.Fatalf("ResolveConfiguredModel() error = %v", err)
+	}
+
+	if providerName != "llama.cpp" {
+		t.Fatalf("ResolveConfiguredModel() provider = %s, want llama.cpp", providerName)
+	}
+
+	if model.Target != "/models/Qwen2.5-7B-Instruct-Q4_K_M.gguf" {
+		t.Fatalf("ResolveConfiguredModel() target = %s", model.Target)
+	}
+
+	modelConfig, err := cfg.GetModelConfig("llama.cpp", "qwen-local")
+	if err != nil {
+		t.Fatalf("GetModelConfig() error = %v", err)
+	}
+
+	if modelConfig.Target != "/models/Qwen2.5-7B-Instruct-Q4_K_M.gguf" {
+		t.Fatalf("GetModelConfig() target = %s", modelConfig.Target)
+	}
+}
+
+func TestAddModelToProviderRejectsDuplicateAliasAcrossProviders(t *testing.T) {
+	cfg := &EnvConfig{
+		Providers: map[string]*Provider{
+			"llama.cpp": {
+				APIKey: "LOCAL",
+			},
+			"ollama": {
+				APIKey: "LOCAL",
+			},
+		},
+	}
+
+	if err := cfg.AddModelToProvider("llama.cpp", Model{
+		Name:   "local-qwen",
+		Target: "/models/qwen.gguf",
+		Type:   "local",
+		Modes:  []ModelMode{TextMode},
+	}); err != nil {
+		t.Fatalf("first AddModelToProvider() error = %v", err)
+	}
+
+	err := cfg.AddModelToProvider("ollama", Model{
+		Name:   "local-qwen",
+		Target: "qwen2.5:7b",
+		Type:   "local",
+		Modes:  []ModelMode{TextMode},
+	})
+	if err == nil {
+		t.Fatal("expected duplicate alias error, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("duplicate alias error = %v, want already exists", err)
+	}
+}
+
+func TestResolveConfiguredModelFallsBackToNameAsTarget(t *testing.T) {
+	cfg := &EnvConfig{
+		Providers: map[string]*Provider{
+			"openai": {
+				APIKey: "test-key",
+				Models: []Model{
+					{Name: "gpt-5-mini", Type: "api", Modes: []ModelMode{TextMode}},
+				},
+			},
+		},
+	}
+
+	providerName, model, err := cfg.ResolveConfiguredModel("gpt-5-mini")
+	if err != nil {
+		t.Fatalf("ResolveConfiguredModel() error = %v", err)
+	}
+
+	if providerName != "openai" {
+		t.Fatalf("ResolveConfiguredModel() provider = %s, want openai", providerName)
+	}
+
+	if model.Target != "gpt-5-mini" {
+		t.Fatalf("ResolveConfiguredModel() target = %s, want gpt-5-mini", model.Target)
+	}
+}

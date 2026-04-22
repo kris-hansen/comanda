@@ -42,6 +42,7 @@ func (s *Server) handleGetProviders(w http.ResponseWriter, r *http.Request) {
 		{"xai", models.NewXAIProvider()},
 		{"ollama", models.NewOllamaProvider()},
 		{"vllm", models.NewVLLMProvider()},
+		{"llama.cpp", models.NewLlamaCPPProvider()},
 	}
 
 	// Get provider configurations
@@ -80,9 +81,10 @@ func (s *Server) handleGetConfiguredModels(w http.ResponseWriter, r *http.Reques
 	configuredModels := make([]ConfiguredModel, len(providerConfig.Models))
 	for i, m := range providerConfig.Models {
 		configuredModels[i] = ConfiguredModel{
-			Name:  m.Name,
-			Type:  m.Type,
-			Modes: m.Modes,
+			Name:   m.Name,
+			Target: m.Target,
+			Type:   m.Type,
+			Modes:  m.Modes,
 		}
 	}
 
@@ -105,7 +107,7 @@ func (s *Server) handleGetAvailableModels(w http.ResponseWriter, r *http.Request
 	apiKey := ""
 	if err == nil { // Provider exists, get its key
 		apiKey = providerConfig.APIKey
-	} else if providerName != "ollama" && providerName != "vllm" && providerName != "anthropic" && providerName != "google" && providerName != "xai" && providerName != "deepseek" {
+	} else if providerName != "ollama" && providerName != "vllm" && providerName != "llama.cpp" && providerName != "anthropic" && providerName != "google" && providerName != "xai" && providerName != "deepseek" {
 		// If provider doesn't exist and requires a key, we can't proceed
 		sendJSONError(w, http.StatusBadRequest, fmt.Sprintf("Provider '%s' not configured or requires an API key to list models", providerName))
 		return
@@ -162,14 +164,15 @@ func (s *Server) handleAddModel(w http.ResponseWriter, r *http.Request, provider
 
 	// Determine model type
 	modelType := "external"
-	if providerName == "ollama" || providerName == "vllm" {
+	if providerName == "ollama" || providerName == "vllm" || providerName == "llama.cpp" {
 		modelType = "local"
 	}
 
 	newModel := config.Model{
-		Name:  req.Name,
-		Type:  modelType,
-		Modes: req.Modes,
+		Name:   req.Name,
+		Target: req.Target,
+		Type:   modelType,
+		Modes:  req.Modes,
 	}
 
 	// Add model to config
@@ -322,6 +325,8 @@ func (s *Server) handleValidateProvider(w http.ResponseWriter, r *http.Request) 
 		provider = models.NewOllamaProvider()
 	case "vllm":
 		provider = models.NewVLLMProvider()
+	case "llama.cpp":
+		provider = models.NewLlamaCPPProvider()
 	default:
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{
@@ -406,6 +411,8 @@ func (s *Server) handleUpdateProvider(w http.ResponseWriter, r *http.Request) {
 			provider = models.NewOllamaProvider()
 		case "vllm":
 			provider = models.NewVLLMProvider()
+		case "llama.cpp":
+			provider = models.NewLlamaCPPProvider()
 		default:
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]string{
@@ -429,8 +436,9 @@ func (s *Server) handleUpdateProvider(w http.ResponseWriter, r *http.Request) {
 	if len(req.Models) > 0 {
 		for _, modelName := range req.Models {
 			model := config.Model{
-				Name:  modelName,
-				Modes: []config.ModelMode{config.TextMode}, // Default to text mode
+				Name:   modelName,
+				Target: modelName,
+				Modes:  []config.ModelMode{config.TextMode}, // Default to text mode
 			}
 			if err := s.envConfig.AddModelToProvider(req.Name, model); err != nil {
 				config.VerboseLog("Error adding model %s: %v", modelName, err)

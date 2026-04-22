@@ -12,6 +12,27 @@ import (
 	"github.com/kris-hansen/comanda/utils/models"
 )
 
+func (p *Processor) resolveConfiguredModel(modelName string) (string, *config.Model, error) {
+	if p.envConfig == nil {
+		return "", nil, fmt.Errorf("environment configuration is not available")
+	}
+	return p.envConfig.ResolveConfiguredModel(modelName)
+}
+
+func (p *Processor) resolveModelTarget(modelName string) string {
+	if p.envConfig == nil {
+		return modelName
+	}
+	_, model, err := p.envConfig.ResolveConfiguredModel(modelName)
+	if err != nil || model == nil {
+		return modelName
+	}
+	if model.Target != "" {
+		return model.Target
+	}
+	return model.Name
+}
+
 // --- Ollama specific types (copied from ollama.go for local check) ---
 
 // OllamaTagsResponse represents the top-level structure of Ollama's /api/tags response
@@ -108,24 +129,54 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 	for _, modelName := range modelNames {
 		p.debugf("Starting validation for model: %s", modelName)
 		p.debugf("Attempting provider detection for model: %s", modelName)
-		provider := models.DetectProvider(modelName)
+		resolvedModelName := p.resolveModelTarget(modelName)
+		provider := models.DetectProvider(resolvedModelName)
 		p.debugf("Provider detection result for %s: found=%v", modelName, provider != nil)
 		if provider == nil {
+			if providerName, _, err := p.resolveConfiguredModel(modelName); err == nil {
+				switch providerName {
+				case "openai":
+					provider = models.NewOpenAIProvider()
+				case "anthropic":
+					provider = models.NewAnthropicProvider()
+				case "google":
+					provider = models.NewGoogleProvider()
+				case "xai":
+					provider = models.NewXAIProvider()
+				case "deepseek":
+					provider = models.NewDeepseekProvider()
+				case "moonshot":
+					provider = models.NewMoonshotProvider()
+				case "ollama":
+					provider = models.NewOllamaProvider()
+				case "vllm":
+					provider = models.NewVLLMProvider()
+				case "llama.cpp":
+					provider = models.NewLlamaCPPProvider()
+				}
+			}
+		}
+		if provider == nil {
 			// Check if this is a Claude Code model - give specific error about missing CLI
-			if models.NewClaudeCodeProvider().SupportsModel(modelName) {
+			if models.NewClaudeCodeProvider().SupportsModel(resolvedModelName) {
 				errMsg := fmt.Sprintf("model %s requires Claude Code CLI, but 'claude' binary not found. Install Claude Code from https://claude.ai/download or ensure it's in your PATH", modelName)
 				p.debugf("Validation failed: %s", errMsg)
 				return fmt.Errorf("%s", errMsg)
 			}
 			// Check if this is a Gemini CLI model - give specific error about missing CLI
-			if models.NewGeminiCLIProvider().SupportsModel(modelName) {
+			if models.NewGeminiCLIProvider().SupportsModel(resolvedModelName) {
 				errMsg := fmt.Sprintf("model %s requires Gemini CLI, but 'gemini' binary not found. Install Gemini CLI via 'npm install -g @google/gemini-cli' or ensure it's in your PATH", modelName)
 				p.debugf("Validation failed: %s", errMsg)
 				return fmt.Errorf("%s", errMsg)
 			}
 			// Check if this is an OpenAI Codex model - give specific error about missing CLI
-			if models.NewOpenAICodexProvider().SupportsModel(modelName) {
+			if models.NewOpenAICodexProvider().SupportsModel(resolvedModelName) {
 				errMsg := fmt.Sprintf("model %s requires OpenAI Codex CLI, but 'codex' binary not found. Install OpenAI Codex CLI via 'npm install -g @openai/codex' or ensure it's in your PATH", modelName)
+				p.debugf("Validation failed: %s", errMsg)
+				return fmt.Errorf("%s", errMsg)
+			}
+			if models.NewLlamaCPPProvider().SupportsModel(resolvedModelName) {
+				errMsg := fmt.Sprintf("model %s requires llama.cpp with a local .gguf file, but 'llama-cli' was not found or the GGUF file does not exist. Install llama.cpp or set LLAMA_CPP_BINARY, and verify the model path is valid", modelName)
 				p.debugf("Validation failed: %s", errMsg)
 				return fmt.Errorf("%s", errMsg)
 			}
@@ -135,8 +186,8 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 		}
 
 		// Check if the provider actually supports this model
-		p.debugf("Checking if provider %s supports model %s", provider.Name(), modelName)
-		if !provider.SupportsModel(modelName) {
+		p.debugf("Checking if provider %s supports model %s", provider.Name(), resolvedModelName)
+		if !provider.SupportsModel(resolvedModelName) {
 			errMsg := fmt.Sprintf("unsupported model: %s (provider %s does not support it)", modelName, provider.Name())
 			p.debugf("Validation failed: %s", errMsg)
 			return fmt.Errorf("%s", errMsg)
@@ -149,7 +200,7 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 		// --- Add Ollama specific local check ---
 		if providerName == "ollama" {
 			p.debugf("Performing local check for Ollama model tag: %s", modelName)
-			exists, err := checkOllamaModelExists(modelName)
+			exists, err := checkOllamaModelExists(resolvedModelName)
 			if err != nil {
 				// Error occurred during check (e.g., connection refused, API error)
 				p.debugf("Ollama local check failed for %s: %v", modelName, err)
@@ -160,7 +211,7 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 				// The error from checkOllamaModelExists already contains the helpful message
 				p.debugf("Ollama model tag %s not found locally.", modelName)
 				// The error from checkOllamaModelExists includes the suggestion to pull
-				return fmt.Errorf("model tag '%s' not found locally via Ollama API", modelName)
+				return fmt.Errorf("model tag '%s' not found locally via Ollama API", resolvedModelName)
 			}
 			p.debugf("Ollama model tag %s confirmed to exist locally.", modelName)
 		}
@@ -198,6 +249,17 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 			continue
 		}
 		// --- End OpenAI Codex specific check ---
+
+		// --- Skip envConfig checks for llama.cpp provider ---
+		// llama.cpp uses a local GGUF model path directly and does not require API keys.
+		if providerName == "llama.cpp" {
+			p.debugf("Skipping envConfig check for llama.cpp provider (uses local GGUF path)")
+			provider.SetVerbose(p.verbose)
+			p.providers[provider.Name()] = provider
+			p.debugf("Model %s is supported by provider %s", modelName, provider.Name())
+			continue
+		}
+		// --- End llama.cpp specific check ---
 
 		// Get model configuration from environment
 		p.debugf("Getting model configuration for %s from provider %s", modelName, providerName)
@@ -252,6 +314,7 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 // Add new local provider names here as needed.
 var localProviders = map[string]bool{
 	"ollama":       true,
+	"llama.cpp":    true,
 	"claude-code":  true,
 	"gemini-cli":   true,
 	"openai-codex": true,

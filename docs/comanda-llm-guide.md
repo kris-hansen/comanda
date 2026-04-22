@@ -256,6 +256,13 @@ consolidate_results:
 - `claude-code-sonnet` - Uses Claude Sonnet 4.5
 - `claude-code-haiku` - Uses Claude Haiku 4.5
 
+**llama.cpp GGUF models** (for local inference via `llama-cli`):
+- Use a direct `.gguf` file path as the model, e.g. `model: /models/qwen2.5-7b-instruct.gguf`
+- Or use an explicit prefix, e.g. `model: llama.cpp:/models/qwen2.5-7b-instruct.gguf`
+- `comanda configure` can register a GGUF file with a short alias, so workflows can use `model: qwen-local` instead of a full path
+- Set `LLAMA_CPP_BINARY` if `llama-cli` is not in `PATH`
+- Set `LLAMA_CPP_MODEL_DIR` or `LLAMA_CPP_MODEL_DIRS` to help `comanda configure` discover GGUF files
+
 ### Actions
 - Single instruction: `action: "Summarize this text."`
 - Multiple sequential instructions: `action: ["Action 1", "Action 2"]`

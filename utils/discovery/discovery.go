@@ -6,8 +6,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 
+	"github.com/kris-hansen/comanda/utils/models"
 	openai "github.com/sashabaranov/go-openai"
 )
 
@@ -16,6 +20,62 @@ type OllamaModel struct {
 	Name    string `json:"name"`
 	ModTime string `json:"modified_at"`
 	Size    int64  `json:"size"`
+}
+
+// CheckLlamaCPPInstalled checks if the llama.cpp CLI is installed and runnable.
+func CheckLlamaCPPInstalled() bool {
+	return models.IsLlamaCPPAvailable()
+}
+
+// GetLlamaCPPModels discovers GGUF models from LLAMA_CPP_MODEL_DIR or LLAMA_CPP_MODEL_DIRS.
+func GetLlamaCPPModels() ([]string, error) {
+	var roots []string
+
+	if single := strings.TrimSpace(os.Getenv("LLAMA_CPP_MODEL_DIR")); single != "" {
+		roots = append(roots, single)
+	}
+	if multi := strings.TrimSpace(os.Getenv("LLAMA_CPP_MODEL_DIRS")); multi != "" {
+		for _, root := range strings.Split(multi, string(os.PathListSeparator)) {
+			root = strings.TrimSpace(root)
+			if root != "" {
+				roots = append(roots, root)
+			}
+		}
+	}
+
+	if len(roots) == 0 {
+		return []string{}, nil
+	}
+
+	var modelsFound []string
+	seen := make(map[string]bool)
+	for _, root := range roots {
+		err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				return nil
+			}
+			if !strings.HasSuffix(strings.ToLower(path), ".gguf") {
+				return nil
+			}
+			absPath, err := filepath.Abs(path)
+			if err != nil {
+				return err
+			}
+			if !seen[absPath] {
+				seen[absPath] = true
+				modelsFound = append(modelsFound, absPath)
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("error scanning GGUF models in %s: %v", root, err)
+		}
+	}
+
+	return modelsFound, nil
 }
 
 // GetOpenAIModels fetches the list of available models from the OpenAI API.
@@ -219,6 +279,8 @@ func GetAvailableModels(providerName string, apiKey string) ([]string, error) {
 			modelNames[i] = m.ID
 		}
 		return modelNames, nil
+	case "llama.cpp":
+		return GetLlamaCPPModels()
 	default:
 		return nil, fmt.Errorf("unknown provider: %s", providerName)
 	}
