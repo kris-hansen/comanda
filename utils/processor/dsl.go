@@ -59,6 +59,7 @@ type Processor struct {
 	streamLogPath        string             // Path to stream log file (for passing to sub-processes)
 	worktreeHandler      *WorktreeHandler   // Handler for Git worktrees (parallel Claude Code execution)
 	currentStepWorktree  string             // Current step's worktree name (if any)
+	workflowFile         string             // Workflow file that created this processor, for loop state/checksums
 }
 
 // getEffectiveWorkDir returns the working directory for the current step
@@ -429,6 +430,13 @@ func NewProcessor(dslConfig *DSLConfig, envConfig *config.EnvConfig, serverConfi
 func (p *Processor) SetProgressWriter(w ProgressWriter) {
 	p.progress = w
 	p.spinner.SetProgressWriter(w)
+}
+
+// SetWorkflowFile records the workflow file used to create this processor.
+// It is intentionally separate from runtimeDir: CLI file paths are resolved
+// relative to the user's cwd unless --runtime-dir is explicitly provided.
+func (p *Processor) SetWorkflowFile(path string) {
+	p.workflowFile = path
 }
 
 // DisableSpinner disables the CLI spinner (use when running in TUI mode)
@@ -2026,9 +2034,8 @@ func (p *Processor) processProcessStep(step Step, isParallel bool, parallelID st
 
 	// 2. Create a new Processor for the sub-workflow
 	//    It inherits verbose settings and envConfig, but has its own DSLConfig and variables.
-	//    The runtimeDir for the sub-processor could be the directory of the sub-workflow file or inherited.
-	//    For now, let's assume it inherits the parent's runtimeDir.
 	subProcessor := NewProcessor(&subDSLConfig, p.envConfig, p.serverConfig, p.verbose, p.runtimeDir)
+	subProcessor.SetWorkflowFile(subWorkflowPath)
 	if p.progress != nil { // Propagate progress writer if available
 		subProcessor.SetProgressWriter(p.progress)
 	}
@@ -2475,13 +2482,15 @@ func (p *Processor) processMultiLoopOrchestration() error {
 
 	// Show workflow header with progress display
 	workflowName := "Multi-Loop Orchestration"
-	if p.runtimeDir != "" {
+	if p.workflowFile != "" {
+		workflowName = p.workflowFile
+	} else if p.runtimeDir != "" {
 		workflowName = p.runtimeDir
 	}
 	p.progressDisplay.StartWorkflow(workflowName, len(loopsToExecute))
 
 	// Create orchestrator
-	orchestrator := NewLoopOrchestrator(p, loopsToExecute, p.runtimeDir)
+	orchestrator := NewLoopOrchestrator(p, loopsToExecute, p.workflowFile)
 	orchestrator.SetProgressDisplay(p.progressDisplay)
 
 	// Build dependency graph and show execution order
@@ -2642,7 +2651,7 @@ func (p *Processor) prepareWorkflowNodeInput(config *AgenticLoopConfig, outputs 
 // executeWorkflowLoop executes a single loop in the workflow
 func (p *Processor) executeWorkflowLoop(loopName string, config *AgenticLoopConfig, input string) (*LoopOutput, error) {
 	startTime := time.Now()
-	result, err := p.processAgenticLoopWithFile(loopName, config, input, p.runtimeDir)
+	result, err := p.processAgenticLoopWithFile(loopName, config, input, p.workflowFile)
 	endTime := time.Now()
 
 	output := &LoopOutput{

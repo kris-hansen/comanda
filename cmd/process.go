@@ -132,31 +132,20 @@ Input can be provided via:
 				Enabled: false, // Disable server mode for CLI processing
 			}
 
-			// Default runtimeDir to workflow file's directory if not specified
-			// This ensures Claude Code runs in the project directory, not a temp folder
-			effectiveRuntimeDir := runtimeDir
-			if effectiveRuntimeDir == "" {
-				effectiveRuntimeDir = filepath.Dir(file)
-				if effectiveRuntimeDir == "." {
-					// Get absolute path for current directory
-					if cwd, err := os.Getwd(); err == nil {
-						effectiveRuntimeDir = cwd
-					}
-				} else {
-					// Resolve to absolute path
-					if absPath, err := filepath.Abs(effectiveRuntimeDir); err == nil {
-						effectiveRuntimeDir = absPath
-					}
-				}
+			effectiveRuntimeDir := resolveProcessRuntimeDir(runtimeDir)
+			if effectiveRuntimeDir != "" {
 				if verbose {
-					log.Printf("[DEBUG] No --runtime-dir specified, using workflow directory: %s\n", effectiveRuntimeDir)
+					log.Printf("[DEBUG] Using --runtime-dir: %s\n", effectiveRuntimeDir)
 				}
+			} else if verbose {
+				log.Printf("[DEBUG] No --runtime-dir specified, resolving relative file paths from current working directory\n")
 			}
 
 			// Parse CLI variables
 			cliVars := parseVarsFlags(varsFlags, stdinData)
 
 			proc := processor.NewProcessor(&dslConfig, envConfig, serverConfig, verbose, effectiveRuntimeDir, cliVars)
+			proc.SetWorkflowFile(file)
 
 			// Set up stream logging if requested
 			if streamLogFile != "" {
@@ -408,22 +397,10 @@ func runWorkflowWithStreamLog(workflowFile, streamLogPath string, disableSpinner
 	serverConfig := &config.ServerConfig{Enabled: false}
 	cliVars := parseVarsFlags(varsFlags, "")
 
-	// Default runtimeDir to workflow file's directory if not specified
-	effectiveRuntimeDir := runtimeDir
-	if effectiveRuntimeDir == "" {
-		effectiveRuntimeDir = filepath.Dir(workflowFile)
-		if effectiveRuntimeDir == "." {
-			if cwd, err := os.Getwd(); err == nil {
-				effectiveRuntimeDir = cwd
-			}
-		} else {
-			if absPath, err := filepath.Abs(effectiveRuntimeDir); err == nil {
-				effectiveRuntimeDir = absPath
-			}
-		}
-	}
+	effectiveRuntimeDir := resolveProcessRuntimeDir(runtimeDir)
 
 	proc := processor.NewProcessor(&dslConfig, envConfig, serverConfig, verbose, effectiveRuntimeDir, cliVars)
+	proc.SetWorkflowFile(workflowFile)
 
 	// Disable spinner and progress display if requested (TUI mode handles progress display)
 	if len(disableSpinner) > 0 && disableSpinner[0] {
@@ -439,6 +416,16 @@ func runWorkflowWithStreamLog(workflowFile, streamLogPath string, disableSpinner
 
 	// Run processor
 	return proc.Process()
+}
+
+func resolveProcessRuntimeDir(flagValue string) string {
+	if flagValue == "" {
+		return ""
+	}
+	if absPath, err := filepath.Abs(flagValue); err == nil {
+		return absPath
+	}
+	return flagValue
 }
 
 // ensureComandaDirIfNeeded checks if the workflow uses .comanda paths and

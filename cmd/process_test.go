@@ -1,6 +1,10 @@
 package cmd
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestParseVarsFlags(t *testing.T) {
 	tests := []struct {
@@ -75,5 +79,30 @@ func TestParseVarsFlags(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestResolveProcessRuntimeDir(t *testing.T) {
+	if got := resolveProcessRuntimeDir(""); got != "" {
+		t.Fatalf("empty runtime dir = %q, want empty", got)
+	}
+
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(oldWd)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	got := resolveProcessRuntimeDir(".comanda")
+	want, err := filepath.Abs(".comanda")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("relative runtime dir = %q, want %q", got, want)
 	}
 }
