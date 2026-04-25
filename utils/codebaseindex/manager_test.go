@@ -254,6 +254,152 @@ export function main() {
 	}
 }
 
+func TestJavaAdapterDetection(t *testing.T) {
+	cases := []struct {
+		name       string
+		filename   string
+		fileBody   string
+		subdir     string
+		shouldFind bool
+	}{
+		{name: "pom.xml at root", filename: "pom.xml", fileBody: "<project/>", shouldFind: true},
+		{name: "build.gradle at root", filename: "build.gradle", fileBody: "apply plugin: 'java'", shouldFind: true},
+		{name: "build.gradle.kts at root", filename: "build.gradle.kts", fileBody: "plugins { java }", shouldFind: true},
+		{name: "pom.xml in subdir", filename: "pom.xml", fileBody: "<project/>", subdir: "service-a", shouldFind: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			dir := tmpDir
+			if tc.subdir != "" {
+				dir = filepath.Join(tmpDir, tc.subdir)
+				if err := os.Mkdir(dir, 0755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := os.WriteFile(filepath.Join(dir, tc.filename), []byte(tc.fileBody), 0644); err != nil {
+				t.Fatal(err)
+			}
+
+			registry := NewRegistry()
+			detected := registry.Detect(tmpDir)
+
+			found := false
+			for _, a := range detected {
+				if a.Name() == "java" {
+					found = true
+					break
+				}
+			}
+			if found != tc.shouldFind {
+				t.Errorf("Java detection for %s: got %v, want %v", tc.filename, found, tc.shouldFind)
+			}
+		})
+	}
+}
+
+func TestExtractJavaSymbols(t *testing.T) {
+	content := []byte(`package com.example.demo;
+
+import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.boot.SpringApplication;
+import static java.util.Arrays.asList;
+
+/**
+ * App entrypoint.
+ */
+public class DemoApplication {
+    public static final String VERSION = "1.0";
+    private static final int MAX_RETRIES = 3;
+
+    public static void main(String[] args) {
+        SpringApplication.run(DemoApplication.class, args);
+    }
+
+    private String greet(String name) {
+        return "Hello, " + name;
+    }
+}
+
+interface Greeter {
+    String greet(String name);
+}
+
+enum Status { OK, ERROR }
+`)
+
+	info, err := extractJavaSymbols("DemoApplication.java", content)
+	if err != nil {
+		t.Fatalf("extractJavaSymbols failed: %v", err)
+	}
+
+	if info.Package != "com.example.demo" {
+		t.Errorf("Package should be 'com.example.demo', got %q", info.Package)
+	}
+
+	if len(info.Imports) != 4 {
+		t.Errorf("Should have 4 imports, got %d (%v)", len(info.Imports), info.Imports)
+	}
+
+	wantTypes := map[string]string{
+		"DemoApplication": "class",
+		"Greeter":         "interface",
+		"Status":          "enum",
+	}
+	for name, kind := range wantTypes {
+		found := false
+		for _, ti := range info.Types {
+			if ti.Name == name && ti.Kind == kind {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("Should have %s %s in types %+v", kind, name, info.Types)
+		}
+	}
+
+	wantMethods := map[string]bool{"main": true, "greet": true}
+	for _, fn := range info.Functions {
+		delete(wantMethods, fn.Name)
+	}
+	if len(wantMethods) != 0 {
+		t.Errorf("Missing expected methods: %v (got %+v)", wantMethods, info.Functions)
+	}
+
+	foundConst := false
+	for _, c := range info.Constants {
+		if c == "VERSION" || c == "MAX_RETRIES" {
+			foundConst = true
+		}
+	}
+	if !foundConst {
+		t.Errorf("Should have detected at least one constant, got %v", info.Constants)
+	}
+
+	foundSpring := false
+	for _, fw := range info.Frameworks {
+		if fw == "spring-boot" || fw == "spring" {
+			foundSpring = true
+		}
+	}
+	if !foundSpring {
+		t.Errorf("Should detect spring framework from imports, got %v", info.Frameworks)
+	}
+
+	foundConcurrency := false
+	for _, tag := range info.RiskTags {
+		if tag == "concurrency" {
+			foundConcurrency = true
+		}
+	}
+	if !foundConcurrency {
+		t.Errorf("Should detect concurrency risk from java.util.concurrent import, got %v", info.RiskTags)
+	}
+}
+
 func TestEncryptDecrypt(t *testing.T) {
 	content := []byte("Hello, World!")
 	password := "testpassword123"
