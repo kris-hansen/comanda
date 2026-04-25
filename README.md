@@ -71,3 +71,7 @@ See [comanda.sh/features](https://comanda.sh/features) for full details.
 ## License
 
 MIT
+
+## Download History
+
+[![Download History](https://skill-history.com/chart/kris-hansen/comanda.svg)](https://skill-history.com/kris-hansen/comanda)
