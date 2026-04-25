@@ -61,6 +61,7 @@ func NewRegistry() *Registry {
 	r.Register(&PythonAdapter{})
 	r.Register(&TypeScriptAdapter{})
 	r.Register(&FlutterAdapter{})
+	r.Register(&JavaAdapter{})
 	return r
 }
 
@@ -323,4 +324,41 @@ func (a *FlutterAdapter) ScoreFile(path string, depth int, isEntrypoint, isConfi
 }
 func (a *FlutterAdapter) ExtractSymbols(path string, content []byte) (*SymbolInfo, error) {
 	return extractFlutterSymbols(path, content)
+}
+
+// JavaAdapter handles Java codebases (Maven, Gradle)
+type JavaAdapter struct{}
+
+func (a *JavaAdapter) Name() string { return "java" }
+func (a *JavaAdapter) DetectionFiles() []string {
+	return []string{"pom.xml", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts", "build.xml"}
+}
+func (a *JavaAdapter) FileExtensions() []string { return []string{".java"} }
+func (a *JavaAdapter) IgnoreDirs() []string {
+	return []string{"target", "build", ".gradle", "out", "bin", ".idea", ".mvn"}
+}
+func (a *JavaAdapter) IgnoreGlobs() []string {
+	return []string{"*.class", "*.jar", "*.war", "*Test.java", "*Tests.java", "*IT.java"}
+}
+func (a *JavaAdapter) EntrypointPatterns() []string {
+	return []string{"Main.java", "Application.java", "**/Main.java", "**/Application.java"}
+}
+func (a *JavaAdapter) ConfigPatterns() []string {
+	return []string{"pom.xml", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts", "build.xml"}
+}
+func (a *JavaAdapter) ScoreFile(path string, depth int, isEntrypoint, isConfig bool) int {
+	score := 0
+	if isEntrypoint {
+		score += 40
+	}
+	if isConfig {
+		score += 30
+	}
+	if depth <= 2 {
+		score += 60
+	}
+	return score
+}
+func (a *JavaAdapter) ExtractSymbols(path string, content []byte) (*SymbolInfo, error) {
+	return extractJavaSymbols(path, content)
 }

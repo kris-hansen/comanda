@@ -14,7 +14,7 @@ comanda run index-and-analyze.yaml
 
 ## How It Works
 
-1. **Language Detection**: Automatically detects Go, Python, TypeScript, and Flutter codebases
+1. **Language Detection**: Automatically detects Go, Python, TypeScript, Flutter, and Java codebases
 2. **Smart Scanning**: Uses parallel workers with early pruning for performance
 3. **Symbol Extraction**: Extracts functions, types, and imports using AST (Go) or regex
 4. **Markdown Synthesis**: Generates a structured index with key sections
@@ -152,6 +152,7 @@ The generated index includes these sections (when data is available):
 | Python | `pyproject.toml`, `requirements.txt` | Regex |
 | TypeScript | `tsconfig.json`, `package.json` | Regex |
 | Flutter | `pubspec.yaml` | Regex |
+| Java | `pom.xml`, `build.gradle`, `build.gradle.kts` | Regex |
 
 ## Sample Project
 

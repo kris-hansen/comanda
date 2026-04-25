@@ -661,6 +661,194 @@ func detectFlutterRiskTags(text string, imports []string) []string {
 	return tags
 }
 
+// extractJavaSymbols extracts symbols from Java source code using regex
+func extractJavaSymbols(path string, content []byte) (*SymbolInfo, error) {
+	info := &SymbolInfo{}
+	text := string(content)
+
+	// Strip block and line comments to reduce false matches
+	stripped := stripJavaComments(text)
+
+	// Package declaration
+	if match := regexp.MustCompile(`(?m)^\s*package\s+([\w.]+)\s*;`).FindStringSubmatch(stripped); len(match) > 1 {
+		info.Package = match[1]
+	}
+
+	// Imports (including static imports; capture the fully qualified name)
+	importRe := regexp.MustCompile(`(?m)^\s*import\s+(?:static\s+)?([\w.*]+)\s*;`)
+	for _, match := range importRe.FindAllStringSubmatch(stripped, -1) {
+		if len(match) > 1 {
+			info.Imports = append(info.Imports, match[1])
+		}
+	}
+
+	// Classes, interfaces, enums, records, annotations
+	typeRe := regexp.MustCompile(`(?m)^\s*(public\s+|protected\s+|private\s+)?(?:(?:abstract|final|static|sealed|non-sealed)\s+)*(class|interface|enum|record|@interface)\s+(\w+)`)
+	for _, match := range typeRe.FindAllStringSubmatch(stripped, -1) {
+		if len(match) > 3 {
+			kind := match[2]
+			if kind == "@interface" {
+				kind = "annotation"
+			}
+			info.Types = append(info.Types, TypeInfo{
+				Name:       match[3],
+				Kind:       kind,
+				IsExported: strings.TrimSpace(match[1]) == "public",
+			})
+		}
+	}
+
+	// Methods - capture modifiers + return type + name + open paren.
+	// Skip control-flow keywords by requiring the preceding token isn't if/for/while/switch/catch/return/new/throw.
+	methodRe := regexp.MustCompile(`(?m)^\s*(public|protected|private)\s+(?:(?:static|final|abstract|synchronized|native|default)\s+)*(?:<[^>]+>\s+)?(?:[\w.<>\[\],\s?]+\s+)?(\w+)\s*\([^)]*\)\s*(?:throws\s+[\w.,\s]+)?\s*[{;]`)
+	for _, match := range methodRe.FindAllStringSubmatch(stripped, -1) {
+		if len(match) > 2 {
+			name := match[2]
+			// Filter out keywords mistaken for method names
+			if isJavaKeyword(name) {
+				continue
+			}
+			info.Functions = append(info.Functions, FunctionInfo{
+				Name:       name,
+				IsExported: match[1] == "public",
+				IsMethod:   true,
+			})
+		}
+	}
+
+	// Constants: public/static/final fields
+	constRe := regexp.MustCompile(`(?m)^\s*(?:public\s+)?(?:static\s+)(?:final\s+)[\w.<>\[\],\s?]+\s+(\w+)\s*[=;]`)
+	for _, match := range constRe.FindAllStringSubmatch(stripped, -1) {
+		if len(match) > 1 {
+			info.Constants = appendUnique(info.Constants, match[1])
+		}
+	}
+
+	info.Frameworks = detectJavaFrameworks(info.Imports)
+	info.RiskTags = detectJavaRiskTags(stripped, info.Imports)
+
+	return info, nil
+}
+
+// stripJavaComments removes // and /* */ comments to avoid spurious matches.
+func stripJavaComments(text string) string {
+	blockRe := regexp.MustCompile(`(?s)/\*.*?\*/`)
+	text = blockRe.ReplaceAllString(text, "")
+	lineRe := regexp.MustCompile(`(?m)//.*$`)
+	return lineRe.ReplaceAllString(text, "")
+}
+
+// isJavaKeyword filters out Java keywords that the method regex might capture.
+func isJavaKeyword(s string) bool {
+	switch s {
+	case "if", "for", "while", "switch", "catch", "return", "new", "throw",
+		"do", "synchronized", "try", "else", "case", "instanceof":
+		return true
+	}
+	return false
+}
+
+// detectJavaFrameworks detects common Java frameworks from imports
+func detectJavaFrameworks(imports []string) []string {
+	var frameworks []string
+	frameworkMap := map[string]string{
+		"org.springframework":      "spring",
+		"org.springframework.boot": "spring-boot",
+		"org.hibernate":            "hibernate",
+		"jakarta.persistence":      "jpa",
+		"javax.persistence":        "jpa",
+		"jakarta.ws.rs":            "jax-rs",
+		"javax.ws.rs":              "jax-rs",
+		"jakarta.servlet":          "servlet",
+		"javax.servlet":            "servlet",
+		"io.quarkus":               "quarkus",
+		"io.micronaut":             "micronaut",
+		"play":                     "play",
+		"akka":                     "akka",
+		"org.junit":                "junit",
+		"org.testng":               "testng",
+		"org.mockito":              "mockito",
+		"com.google.guice":         "guice",
+		"dagger":                   "dagger",
+		"lombok":                   "lombok",
+		"com.fasterxml.jackson":    "jackson",
+		"com.google.gson":          "gson",
+		"org.apache.kafka":         "kafka",
+		"org.apache.camel":         "camel",
+		"io.netty":                 "netty",
+		"reactor":                  "reactor",
+		"io.reactivex":             "rxjava",
+		"android":                  "android",
+		"androidx":                 "androidx",
+	}
+
+	for _, imp := range imports {
+		lower := strings.ToLower(imp)
+		for pattern, name := range frameworkMap {
+			if strings.HasPrefix(lower, strings.ToLower(pattern)) {
+				frameworks = appendUnique(frameworks, name)
+			}
+		}
+	}
+
+	return frameworks
+}
+
+// detectJavaRiskTags detects risk areas in Java code
+func detectJavaRiskTags(text string, imports []string) []string {
+	var tags []string
+
+	riskImports := map[string]string{
+		"javax.crypto":                 "crypto",
+		"java.security":                "crypto",
+		"org.bouncycastle":             "crypto",
+		"java.sql":                     "database",
+		"javax.sql":                    "database",
+		"javax.persistence":            "database",
+		"jakarta.persistence":          "database",
+		"org.hibernate":                "database",
+		"java.util.concurrent":         "concurrency",
+		"java.lang.reflect":            "reflection",
+		"java.io":                      "filesystem",
+		"java.nio.file":                "filesystem",
+		"java.net":                     "network",
+		"jwt":                          "auth",
+		"oauth":                        "auth",
+		"spring.security":              "auth",
+		"org.springframework.security": "auth",
+		"javax.servlet.http":           "web",
+		"jakarta.servlet.http":         "web",
+		"sun.misc.unsafe":              "unsafe",
+		"java.lang.runtime":            "code-execution",
+		"javax.script":                 "code-execution",
+	}
+
+	for _, imp := range imports {
+		lower := strings.ToLower(imp)
+		for pattern, tag := range riskImports {
+			if strings.Contains(lower, strings.ToLower(pattern)) {
+				tags = appendUnique(tags, tag)
+			}
+		}
+	}
+
+	// Code patterns
+	if regexp.MustCompile(`Runtime\.getRuntime\(\)\.exec`).MatchString(text) {
+		tags = appendUnique(tags, "subprocess")
+	}
+	if regexp.MustCompile(`ProcessBuilder`).MatchString(text) {
+		tags = appendUnique(tags, "subprocess")
+	}
+	if regexp.MustCompile(`(?i)password|secret|apikey|api_key|token`).MatchString(text) {
+		tags = appendUnique(tags, "secrets")
+	}
+	if regexp.MustCompile(`new\s+Thread\s*\(|Executors\.|ForkJoinPool`).MatchString(text) {
+		tags = appendUnique(tags, "concurrency")
+	}
+
+	return tags
+}
+
 // Helper functions
 
 func isUpperCase(b byte) bool {

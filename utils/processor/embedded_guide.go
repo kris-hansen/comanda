@@ -1067,6 +1067,7 @@ analyze_codebase:
 - **Python**: Uses regex. Detection: ` + "`pyproject.toml`" + `, ` + "`requirements.txt`" + `, ` + "`setup.py`" + `
 - **TypeScript/JavaScript**: Uses regex. Detection: ` + "`tsconfig.json`" + `, ` + "`package.json`" + `
 - **Flutter/Dart**: Uses regex. Detection: ` + "`pubspec.yaml`" + `
+- **Java**: Uses regex. Detection: ` + "`pom.xml`" + `, ` + "`build.gradle`" + `, ` + "`build.gradle.kts`" + `
 
 **Example: Index and Analyze a Codebase**
 ` + "```yaml" + `
@@ -2431,6 +2432,7 @@ analyze_codebase:
 - **Python**: Uses regex. Detection: ` + "`pyproject.toml`" + `, ` + "`requirements.txt`" + `, ` + "`setup.py`" + `
 - **TypeScript/JavaScript**: Uses regex. Detection: ` + "`tsconfig.json`" + `, ` + "`package.json`" + `
 - **Flutter/Dart**: Uses regex. Detection: ` + "`pubspec.yaml`" + `
+- **Java**: Uses regex. Detection: ` + "`pom.xml`" + `, ` + "`build.gradle`" + `, ` + "`build.gradle.kts`" + `
 
 **Example: Index and Analyze a Codebase**
 ` + "```yaml" + `

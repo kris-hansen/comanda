@@ -57,7 +57,7 @@ func (m *Manager) Generate() (*Result, error) {
 	// Step 1: Detect or use specified adapters
 	m.adapters = m.detectAdapters()
 	if len(m.adapters) == 0 {
-		return nil, fmt.Errorf("no language adapters detected for repository at %s (supported: Go, Python, TypeScript, Flutter)", m.config.Root)
+		return nil, fmt.Errorf("no language adapters detected for repository at %s (supported: Go, Python, TypeScript, Flutter, Java)", m.config.Root)
 	}
 
 	languages := make([]string, len(m.adapters))
