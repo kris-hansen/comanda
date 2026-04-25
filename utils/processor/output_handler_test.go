@@ -178,3 +178,38 @@ func TestHandleOutput(t *testing.T) {
 		})
 	}
 }
+
+func TestHandleOutputCLIDisabledServerConfigUsesCWD(t *testing.T) {
+	tempDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(oldWd)
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatal(err)
+	}
+
+	proc := &Processor{
+		serverConfig: &config.ServerConfig{Enabled: false},
+		verbose:      true,
+	}
+
+	if err := proc.handleOutput("test-model", "analysis content", []string{".comanda/ANALYSIS.md"}, nil); err != nil {
+		t.Fatalf("handleOutput failed: %v", err)
+	}
+
+	wantPath := filepath.Join(tempDir, ".comanda", "ANALYSIS.md")
+	content, err := os.ReadFile(wantPath)
+	if err != nil {
+		t.Fatalf("failed to read output %s: %v", wantPath, err)
+	}
+	if string(content) != "analysis content" {
+		t.Fatalf("output content = %q, want %q", string(content), "analysis content")
+	}
+
+	doublePath := filepath.Join(tempDir, ".comanda", ".comanda", "ANALYSIS.md")
+	if _, err := os.Stat(doublePath); !os.IsNotExist(err) {
+		t.Fatalf("unexpected double-prefixed output path exists: %s", doublePath)
+	}
+}
