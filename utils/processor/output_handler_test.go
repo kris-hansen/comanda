@@ -109,6 +109,11 @@ func TestHandleOutput(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create working directory for CLI mode tests
 			if !tt.expectInDataDir {
+				oldWd, err := os.Getwd()
+				if err != nil {
+					t.Fatalf("Failed to get working directory: %v", err)
+				}
+				defer os.Chdir(oldWd)
 				if err := os.Chdir(tempDir); err != nil {
 					t.Fatalf("Failed to change working directory: %v", err)
 				}
