@@ -527,23 +527,45 @@ func containsHelper(s, substr string) bool {
 func TestInferDefaultAllowedPaths(t *testing.T) {
 	p := &Processor{}
 
-	// Test with workflow file
 	tmpDir := t.TempDir()
-	workflowFile := filepath.Join(tmpDir, "test.yaml")
-	os.WriteFile(workflowFile, []byte("test"), 0644)
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(oldWd)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	expectedCwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Test with workflow file in a subdirectory. Defaults should still use cwd.
+	workflowDir := filepath.Join(tmpDir, ".comanda")
+	if err := os.MkdirAll(workflowDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	workflowFile := filepath.Join(workflowDir, "test.yaml")
+	if err := os.WriteFile(workflowFile, []byte("test"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	paths := p.inferDefaultAllowedPaths(workflowFile)
 	if len(paths) != 1 {
 		t.Errorf("Expected 1 path, got %d", len(paths))
 	}
-	if paths[0] != tmpDir {
-		t.Errorf("Expected %s, got %s", tmpDir, paths[0])
+	if paths[0] != expectedCwd {
+		t.Errorf("Expected %s, got %s", expectedCwd, paths[0])
 	}
 
-	// Test with empty workflow file (should fall back to cwd)
+	// Test with empty workflow file
 	paths = p.inferDefaultAllowedPaths("")
 	if len(paths) != 1 {
 		t.Errorf("Expected 1 path for cwd fallback, got %d", len(paths))
+	}
+	if paths[0] != expectedCwd {
+		t.Errorf("Expected %s, got %s", expectedCwd, paths[0])
 	}
 }
 

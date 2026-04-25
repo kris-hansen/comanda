@@ -521,8 +521,7 @@ document_codebase:
 ### Simplified Path Configuration
 
 **If `allowed_paths` is empty or omitted**, comanda automatically infers sensible defaults:
-1. Uses the workflow file's directory (if the workflow was loaded from a file)
-2. Falls back to the current working directory
+1. Uses the current working directory where `comanda process <workflow.yaml>` was invoked
 
 **Auto-expansion:** When allowed paths are set, comanda automatically adds:
 - Output directories (from step `output` paths)

@@ -257,6 +257,8 @@ func (p *Processor) isOutputInOtherSteps(path string) bool {
 
 // processRegularInput handles regular file and directory inputs, respecting runtimeDir and globs
 func (p *Processor) processRegularInput(inputPath string) error {
+	serverMode := p.serverConfig != nil && p.serverConfig.Enabled
+
 	// Debug server and runtime directory configuration
 	p.debugf("Server and runtime directory configuration:")
 	p.debugf("- Runtime directory: %s (empty: %v)", p.runtimeDir, p.runtimeDir == "")
@@ -266,11 +268,15 @@ func (p *Processor) processRegularInput(inputPath string) error {
 		p.debugf("- Data directory: %s", p.serverConfig.DataDir)
 	}
 
-	// Force server mode with runtime directory if available
 	if p.runtimeDir != "" {
-		p.debugf("IMPORTANT: Server mode with runtime directory is active")
-		p.debugf("All relative paths will be resolved relative to: %s",
-			filepath.Join(p.serverConfig.DataDir, p.runtimeDir))
+		if serverMode {
+			p.debugf("Server mode with runtime directory is active")
+			p.debugf("All relative paths will be resolved relative to: %s",
+				filepath.Join(p.serverConfig.DataDir, p.runtimeDir))
+		} else {
+			p.debugf("CLI mode with runtime directory is active")
+			p.debugf("All relative paths will be resolved relative to: %s", p.runtimeDir)
+		}
 	}
 
 	// --- Step 1: Check for Glob Pattern ---
@@ -282,7 +288,7 @@ func (p *Processor) processRegularInput(inputPath string) error {
 		if filepath.IsAbs(inputPath) {
 			globPattern = inputPath // Absolute path glob
 			p.debugf("Using absolute glob pattern: %s", globPattern)
-		} else if p.runtimeDir != "" && p.serverConfig != nil {
+		} else if p.runtimeDir != "" && serverMode {
 			// In server mode with runtime directory, join with DataDir
 			runtimeDirPath := filepath.Join(p.serverConfig.DataDir, p.runtimeDir)
 			if err := os.MkdirAll(runtimeDirPath, 0755); err != nil {
@@ -291,7 +297,7 @@ func (p *Processor) processRegularInput(inputPath string) error {
 			p.debugf("Ensured runtime directory exists: %s", runtimeDirPath)
 			globPattern = filepath.Join(runtimeDirPath, inputPath)
 			p.debugf("Resolving glob '%s' relative to DataDir/runtimeDir: %s", inputPath, globPattern)
-		} else if p.serverConfig != nil && p.serverConfig.Enabled {
+		} else if serverMode {
 			// Server mode, no runtimeDir, use DataDir
 			globPattern = filepath.Join(p.serverConfig.DataDir, inputPath)
 			p.debugf("Resolving glob '%s' relative to DataDir '%s': %s", inputPath, p.serverConfig.DataDir, globPattern)
@@ -321,7 +327,7 @@ func (p *Processor) processRegularInput(inputPath string) error {
 
 	if !filepath.IsAbs(inputPath) {
 		// Input is a relative path
-		if p.runtimeDir != "" && p.serverConfig != nil {
+		if p.runtimeDir != "" && serverMode {
 			// In server mode with runtime directory, check relative to DataDir/runtimeDir
 			resolvedPath := filepath.Join(p.serverConfig.DataDir, p.runtimeDir, inputPath)
 			pathSource = fmt.Sprintf("runtime directory '%s' in data directory", p.runtimeDir)
@@ -356,7 +362,7 @@ func (p *Processor) processRegularInput(inputPath string) error {
 				}
 				// Keep filePath empty, will trigger "not found" error later if needed
 			}
-		} else if p.serverConfig != nil && p.serverConfig.Enabled {
+		} else if serverMode {
 			// Server mode, no runtimeDir, check relative to DataDir
 			resolvedPath := filepath.Join(p.serverConfig.DataDir, inputPath)
 			pathSource = fmt.Sprintf("data directory '%s'", p.serverConfig.DataDir)
@@ -401,7 +407,7 @@ func (p *Processor) processRegularInput(inputPath string) error {
 		}
 		// Return specific "not found" error based on where we looked
 		p.debugf("File not found and is not marked as an output in any step")
-		if p.runtimeDir != "" && p.serverConfig != nil {
+		if p.runtimeDir != "" && serverMode {
 			// In server mode with runtime directory, use the resolved path in the error message
 			resolvedPath := filepath.Join(p.serverConfig.DataDir, p.runtimeDir, inputPath)
 			return fmt.Errorf("input file '%s' not found (checked path: %s)", inputPath, resolvedPath)
@@ -420,7 +426,7 @@ func (p *Processor) processRegularInput(inputPath string) error {
 				return nil // Allow processing to continue
 			}
 			// Final "not found" error, referencing the path we actually checked
-			if p.runtimeDir != "" && p.serverConfig != nil {
+			if p.runtimeDir != "" && serverMode {
 				// In server mode with runtime directory, use the resolved path in the error message
 				resolvedPath := filepath.Join(p.serverConfig.DataDir, p.runtimeDir, inputPath)
 				return fmt.Errorf("input file '%s' not found (checked path: %s)", inputPath, resolvedPath)

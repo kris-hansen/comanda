@@ -828,35 +828,20 @@ func (p *Processor) extractOutputPath(output interface{}) string {
 }
 
 // inferDefaultAllowedPaths returns sensible default paths when none are specified.
-// Priority:
-// 1. Workflow file's directory (if provided)
-// 2. Current working directory
+// In CLI mode, workflow-relative paths are resolved from the invocation cwd,
+// so the default agentic access path should match that same cwd.
 func (p *Processor) inferDefaultAllowedPaths(workflowFile string) []string {
-	var basePath string
-
-	// If we have a workflow file, use its directory as the base
-	if workflowFile != "" {
-		absPath, err := filepath.Abs(workflowFile)
-		if err == nil {
-			basePath = filepath.Dir(absPath)
-			p.debugf("Using workflow file directory as default allowed_path: %s", basePath)
-		}
-	}
-
-	// Fall back to current working directory
-	if basePath == "" {
-		cwd, err := os.Getwd()
-		if err == nil {
-			basePath = cwd
-			p.debugf("Using current working directory as default allowed_path: %s", basePath)
-		}
-	}
-
-	if basePath == "" {
+	cwd, err := os.Getwd()
+	if err != nil {
 		return nil
 	}
 
-	return []string{basePath}
+	if workflowFile != "" {
+		p.debugf("Using current working directory as default allowed_path for workflow %s: %s", workflowFile, cwd)
+	} else {
+		p.debugf("Using current working directory as default allowed_path: %s", cwd)
+	}
+	return []string{cwd}
 }
 
 // expandWithCommonProjectDirs adds common project subdirectories to allowed_paths

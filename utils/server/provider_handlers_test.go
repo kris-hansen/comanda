@@ -4,10 +4,21 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 
 	"github.com/kris-hansen/comanda/utils/config"
 )
+
+func setTestComandaEnv(t *testing.T, envConfig *config.EnvConfig) {
+	t.Helper()
+
+	envPath := filepath.Join(t.TempDir(), "config.yaml")
+	if err := config.SaveEnvConfig(envPath, envConfig); err != nil {
+		t.Fatalf("Failed to save test config: %v", err)
+	}
+	t.Setenv("COMANDA_ENV", envPath)
+}
 
 func TestHandleDeleteProvider(t *testing.T) {
 	// Create test configuration
@@ -27,6 +38,7 @@ func TestHandleDeleteProvider(t *testing.T) {
 			},
 		},
 	}
+	setTestComandaEnv(t, testConfig)
 
 	// Create server instance
 	server := &Server{
@@ -152,6 +164,7 @@ func TestProviderRouteHandling(t *testing.T) {
 			},
 		},
 	}
+	setTestComandaEnv(t, testConfig)
 
 	// Create server instance
 	server := &Server{

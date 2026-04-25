@@ -35,12 +35,14 @@ func (p *Processor) loadIncrementalContext(stepConfig *StepConfig) string {
 	}
 
 	// Resolve the path
-	if p.serverConfig != nil {
+	if p.serverConfig != nil && p.serverConfig.Enabled {
 		if p.runtimeDir != "" {
 			outputPath = filepath.Join(p.serverConfig.DataDir, p.runtimeDir, outputPath)
 		} else {
 			outputPath = filepath.Join(p.serverConfig.DataDir, outputPath)
 		}
+	} else if p.runtimeDir != "" && !filepath.IsAbs(outputPath) {
+		outputPath = filepath.Join(p.runtimeDir, outputPath)
 	}
 
 	// Read existing content
@@ -244,7 +246,7 @@ func (p *Processor) handleOutputWithOptions(modelName string, response string, o
 		} else {
 			// Determine the output path based on server mode and runtime directory
 			outputPath := output
-			if p.serverConfig != nil {
+			if p.serverConfig != nil && p.serverConfig.Enabled {
 				if p.runtimeDir != "" {
 					// When runtime directory is set, treat all output paths as relative to it
 					p.debugf("Using runtime directory: %s, output path: %s", p.runtimeDir, output)
@@ -253,6 +255,10 @@ func (p *Processor) handleOutputWithOptions(modelName string, response string, o
 					// No runtime directory, use DataDir directly
 					outputPath = filepath.Join(p.serverConfig.DataDir, output)
 				}
+				p.debugf("Resolved output path: %s", outputPath)
+			} else if p.runtimeDir != "" && !filepath.IsAbs(output) {
+				p.debugf("CLI mode with runtime directory: using path '%s' in %s", output, p.runtimeDir)
+				outputPath = filepath.Join(p.runtimeDir, output)
 				p.debugf("Resolved output path: %s", outputPath)
 			}
 

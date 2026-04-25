@@ -146,3 +146,42 @@ func TestGetProcessedInputs(t *testing.T) {
 		t.Errorf("Expected content 'test content', got '%s'", string(inputs[0].Contents))
 	}
 }
+
+func TestProcessRegularInputCLIDisabledServerConfigUsesCWD(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(oldWd)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.MkdirAll(".comanda", 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(".comanda", "INDEX.md"), []byte("index content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	processor := NewProcessor(
+		&DSLConfig{},
+		createTestEnvConfig(),
+		&config.ServerConfig{Enabled: false},
+		false,
+		"",
+	)
+
+	if err := processor.processInputs([]string{".comanda/INDEX.md"}); err != nil {
+		t.Fatalf("processInputs() error = %v", err)
+	}
+
+	inputs := processor.GetProcessedInputs()
+	if len(inputs) != 1 {
+		t.Fatalf("expected 1 processed input, got %d", len(inputs))
+	}
+	if string(inputs[0].Contents) != "index content" {
+		t.Fatalf("processed content = %q, want %q", string(inputs[0].Contents), "index content")
+	}
+}
