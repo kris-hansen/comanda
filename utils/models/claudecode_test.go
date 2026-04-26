@@ -6,6 +6,59 @@ import (
 	"testing"
 )
 
+func TestExtractClaudeCodeResult(t *testing.T) {
+	// Realistic envelope from `claude --output-format json`. Includes a
+	// `contextWindow` metadata field that previously triggered the loop's
+	// context-exhaustion regex and caused premature exits.
+	envelope := `{"type":"result","subtype":"success","is_error":false,"result":"## Iteration 2 Complete\n\nProgress made.","stop_reason":"end_turn","usage":{"contextWindow":200000,"input_tokens":44}}`
+
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "extracts result from JSON envelope",
+			in:   envelope,
+			want: "## Iteration 2 Complete\n\nProgress made.",
+		},
+		{
+			name: "passes through plain text",
+			in:   "just a plain reply",
+			want: "just a plain reply",
+		},
+		{
+			name: "passes through empty string",
+			in:   "",
+			want: "",
+		},
+		{
+			name: "passes through malformed JSON",
+			in:   `{"type":"result","result":`,
+			want: `{"type":"result","result":`,
+		},
+		{
+			name: "passes through envelope with empty result",
+			in:   `{"type":"result","result":""}`,
+			want: `{"type":"result","result":""}`,
+		},
+		{
+			name: "tolerates leading whitespace",
+			in:   "   " + envelope,
+			want: "## Iteration 2 Complete\n\nProgress made.",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractClaudeCodeResult(tt.in)
+			if got != tt.want {
+				t.Errorf("extractClaudeCodeResult(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestClaudeCodeProviderName(t *testing.T) {
 	provider := NewClaudeCodeProvider()
 	if provider.Name() != "claude-code" {
