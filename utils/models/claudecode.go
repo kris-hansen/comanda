@@ -2,6 +2,7 @@ package models
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -15,6 +16,34 @@ import (
 	"github.com/kris-hansen/comanda/utils/fileutil"
 	"github.com/kris-hansen/comanda/utils/retry"
 )
+
+// claudeCodeJSONEnvelope mirrors the shape returned by `claude --output-format json`.
+// Only the fields we actually consume are declared.
+type claudeCodeJSONEnvelope struct {
+	Result string `json:"result"`
+}
+
+// extractClaudeCodeResult unwraps the JSON envelope produced by `--output-format json`
+// and returns just the agent's `result` text. Returns the input unchanged if it doesn't
+// look like the envelope (so non-JSON callers and future format changes degrade safely).
+//
+// This matters because downstream pattern matching (loop exit conditions) and file
+// outputs would otherwise see metadata like `"contextWindow":200000` and treat it as
+// agent prose — yielding spurious exits and unreadable log files.
+func extractClaudeCodeResult(stdout string) string {
+	trimmed := strings.TrimSpace(stdout)
+	if trimmed == "" || trimmed[0] != '{' {
+		return stdout
+	}
+	var env claudeCodeJSONEnvelope
+	if err := json.Unmarshal([]byte(trimmed), &env); err != nil {
+		return stdout
+	}
+	if env.Result == "" {
+		return stdout
+	}
+	return env.Result
+}
 
 // ClaudeCodeProvider handles Claude Code CLI for agentic programming tasks
 type ClaudeCodeProvider struct {
@@ -245,7 +274,7 @@ func (c *ClaudeCodeProvider) SendPromptAgentic(modelName string, prompt string, 
 		return "", err
 	}
 
-	response := result.(string)
+	response := extractClaudeCodeResult(result.(string))
 	c.debugf("Agentic command completed, response length: %d characters", len(response))
 	return response, nil
 }
