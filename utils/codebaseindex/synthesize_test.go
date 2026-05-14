@@ -39,6 +39,7 @@ func TestOutputFormats(t *testing.T) {
 			mustContain: []string{
 				"File Categories",
 				"Repository Layout",
+				"Code Conventions & Patterns",
 			},
 		},
 		{
@@ -164,6 +165,65 @@ func TestCategorizeFiles(t *testing.T) {
 	}
 	if totalCategorized != len(scan.Candidates) {
 		t.Errorf("categorized %d files, want %d", totalCategorized, len(scan.Candidates))
+	}
+}
+
+// TestCodeConventionsWhyLayer verifies that indexes include the deeper
+// language-specific "why" layer agents need before editing a codebase.
+func TestCodeConventionsWhyLayer(t *testing.T) {
+	config := DefaultConfig()
+	config.OutputFormat = FormatStructured
+	config.RepoFileSlug = "myproject"
+	config.RepoVarSlug = "MYPROJECT"
+
+	manager := &Manager{
+		config:   config,
+		adapters: []Adapter{&GoAdapter{}},
+	}
+
+	scan := &ScanResult{
+		TotalFiles: 6,
+		Files: []*FileEntry{
+			{Path: "go.mod", IsConfig: true},
+			{Path: "cmd/index.go", IsEntrypoint: true, Symbols: &SymbolInfo{Imports: []string{"github.com/spf13/cobra"}, Frameworks: []string{"cobra"}}},
+			{Path: "utils/codebaseindex/manager.go"},
+			{Path: "utils/codebaseindex/scan.go"},
+			{Path: "utils/codebaseindex/extract.go"},
+			{Path: "utils/codebaseindex/synthesize.go"},
+		},
+		Candidates: []*FileEntry{
+			{Path: "cmd/index.go", IsEntrypoint: true, Symbols: &SymbolInfo{Imports: []string{"github.com/spf13/cobra"}, Frameworks: []string{"cobra"}}},
+			{Path: "utils/codebaseindex/manager.go"},
+			{Path: "utils/codebaseindex/scan.go"},
+			{Path: "utils/codebaseindex/extract.go"},
+			{Path: "utils/codebaseindex/synthesize.go"},
+		},
+		DirTree: &DirNode{
+			Name: ".",
+			Children: []*DirNode{
+				{Name: "cmd", Files: []string{"index.go"}},
+				{Name: "utils", Children: []*DirNode{{Name: "codebaseindex"}}},
+			},
+		},
+	}
+
+	content, err := manager.synthesizeStructured(scan)
+	if err != nil {
+		t.Fatalf("synthesizeStructured failed: %v", err)
+	}
+
+	mustContain := []string{
+		"Code Conventions & Patterns",
+		"what exists",
+		"why the code is organized this way",
+		"Cobra-style CLI command wiring",
+		"Pipeline-oriented package design",
+		"Agent guidance",
+	}
+	for _, must := range mustContain {
+		if !strings.Contains(content, must) {
+			t.Errorf("content missing required why-layer text: %q", must)
+		}
 	}
 }
 
