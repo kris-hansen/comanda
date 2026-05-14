@@ -95,6 +95,9 @@ func (m *Manager) synthesizeSummary(scan *ScanResult) (string, error) {
 		sb.WriteString("\n")
 	}
 
+	// Quick why-layer hints for agents
+	m.writeCodeConventions(&sb, scan, 3)
+
 	// Quick tips
 	hints := m.detectConventions(scan)
 	if len(hints) > 0 && len(hints) <= 3 {
@@ -186,6 +189,9 @@ func (m *Manager) synthesizeStructured(scan *ScanResult) (string, error) {
 	// Entry points
 	m.writeEntryPoints(&sb, scan)
 
+	// Code conventions and agent guidance
+	m.writeCodeConventions(&sb, scan, 0)
+
 	// Token budget warnings
 	m.writeTokenBudget(&sb, scan)
 
@@ -216,6 +222,9 @@ func (m *Manager) synthesizeFull(scan *ScanResult) (string, error) {
 
 	// 5. Key modules (if detected)
 	m.writeKeyModules(&sb, scan)
+
+	// 5.5. Code conventions and agent guidance
+	m.writeCodeConventions(&sb, scan, 0)
 
 	// 6. Important files (always include)
 	m.writeImportantFiles(&sb, scan)
