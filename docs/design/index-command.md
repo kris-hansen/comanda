@@ -352,3 +352,34 @@ ${AGGREGATED_INDEX}:
 - [ ] README.md updated with index command documentation
 - [ ] Example workflows added to `examples/` directory
 - [ ] Website documentation updated (comanda.dev)
+
+## Next Layer: Code Conventions & Patterns
+
+The first index implementation answers **what exists**: repository layout,
+entrypoints, important files, symbols, operational notes, and risk areas. The
+next useful layer for agents is **why the code is shaped this way**.
+
+This layer should capture language- and repository-specific conventions that
+help agents make changes in the local house style instead of merely navigating
+files. Examples:
+
+- Go projects may separate CLI entrypoints in `cmd/` from reusable logic in
+  `internal/`, `pkg/`, or `utils/`.
+- Cobra-based tools often keep command flag wiring close to `RunE` and delegate
+  substantial behavior to reusable packages.
+- Pipeline-style packages often split orchestration, scanning/input collection,
+  extraction/analysis, synthesis/output, and storage/metadata into separate
+  files.
+- Workflow engines usually require new YAML fields to be updated across typed
+  config structs, validation, execution handlers, docs, and examples.
+
+Each detected convention should include:
+
+1. **Why** — the rationale behind the pattern.
+2. **Agent guidance** — how an agent should extend or modify the code safely.
+3. **Evidence** — files/imports/symbols supporting the inference.
+4. **Confidence** — so downstream agents can distinguish strong local signals
+   from generic language advice.
+
+The goal is to turn the index from a map of the codebase into a compact guide to
+the codebase's intent and change conventions.
