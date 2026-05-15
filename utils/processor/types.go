@@ -194,12 +194,14 @@ type PerformanceMetrics struct {
 
 // CodebaseIndexConfig represents the configuration for codebase-index step
 type CodebaseIndexConfig struct {
-	Root        string                      `yaml:"root"`                    // Repository path (defaults to current directory)
-	Output      *CodebaseIndexOutputConfig  `yaml:"output,omitempty"`        // Output configuration
-	Expose      *CodebaseIndexExposeConfig  `yaml:"expose,omitempty"`        // Variable/memory exposure configuration
-	Adapters    map[string]*AdapterOverride `yaml:"adapters,omitempty"`      // Per-adapter overrides
-	MaxOutputKB int                         `yaml:"max_output_kb,omitempty"` // Maximum output size in KB
-	Qmd         *QmdIntegrationConfig       `yaml:"qmd,omitempty"`           // qmd integration configuration
+	Root         string                      `yaml:"root"`                    // Repository path (defaults to current directory)
+	Output       *CodebaseIndexOutputConfig  `yaml:"output,omitempty"`        // Output configuration
+	Expose       *CodebaseIndexExposeConfig  `yaml:"expose,omitempty"`        // Variable/memory exposure configuration
+	Adapters     map[string]*AdapterOverride `yaml:"adapters,omitempty"`      // Per-adapter overrides
+	MaxOutputKB  int                         `yaml:"max_output_kb,omitempty"` // Maximum output size in KB
+	Enhance      bool                        `yaml:"enhance,omitempty"`       // Run second-pass AI macro analysis
+	EnhanceModel string                      `yaml:"enhance_model,omitempty"` // Model for enhancement (default_generation_model if empty)
+	Qmd          *QmdIntegrationConfig       `yaml:"qmd,omitempty"`           // qmd integration configuration
 
 	// Registry integration
 	Use       interface{} `yaml:"use,omitempty"`       // Load from registry: string or []string

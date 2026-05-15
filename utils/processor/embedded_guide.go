@@ -997,6 +997,8 @@ step_name:
         ignore_dirs: [vendor, testdata]
         priority_files: ["cmd/**/*.go"]
     max_output_kb: 100        # Maximum output size in KB
+    enhance: false            # Optional second-pass AI macro analysis
+    enhance_model: claude-code # Optional; defaults to default_generation_model
     qmd:                      # qmd integration (optional)
       collection: myproject   # Register index as qmd collection
       context: "Project source code"  # Description for search relevance
@@ -1014,6 +1016,8 @@ step_name:
 - ` + "`expose.memory.key`" + `: (string) Key name for memory access.
 - ` + "`adapters`" + `: (map, optional) Per-language configuration overrides.
 - ` + "`max_output_kb`" + `: (int, default: 100) Maximum size of generated index.
+- ` + "`enhance`" + `: (bool, default: false) Run a second AI pass with the default generation model to add macro architecture analysis, component boundaries, frontend/backend patterns, and an agent change playbook.
+- ` + "`enhance_model`" + `: (string, optional) Model for ` + "`enhance`" + `; defaults to configured ` + "`default_generation_model`" + `.
 - ` + "`qmd.collection`" + `: (string, optional) Register index as a qmd collection with this name.
 - ` + "`qmd.context`" + `: (string, optional) Description for the collection (improves search relevance).
 - ` + "`qmd.embed`" + `: (bool, default: false) Run ` + "`qmd embed`" + ` after indexing (enables semantic search, slow).
@@ -2362,6 +2366,8 @@ step_name:
         ignore_dirs: [vendor, testdata]
         priority_files: ["cmd/**/*.go"]
     max_output_kb: 100        # Maximum output size in KB
+    enhance: false            # Optional second-pass AI macro analysis
+    enhance_model: claude-code # Optional; defaults to default_generation_model
     qmd:                      # qmd integration (optional)
       collection: myproject   # Register index as qmd collection
       context: "Project source code"  # Description for search relevance
@@ -2379,6 +2385,8 @@ step_name:
 - ` + "`expose.memory.key`" + `: (string) Key name for memory access.
 - ` + "`adapters`" + `: (map, optional) Per-language configuration overrides.
 - ` + "`max_output_kb`" + `: (int, default: 100) Maximum size of generated index.
+- ` + "`enhance`" + `: (bool, default: false) Run a second AI pass with the default generation model to add macro architecture analysis, component boundaries, frontend/backend patterns, and an agent change playbook.
+- ` + "`enhance_model`" + `: (string, optional) Model for ` + "`enhance`" + `; defaults to configured ` + "`default_generation_model`" + `.
 - ` + "`qmd.collection`" + `: (string, optional) Register index as a qmd collection with this name.
 - ` + "`qmd.context`" + `: (string, optional) Description for the collection (improves search relevance).
 - ` + "`qmd.embed`" + `: (bool, default: false) Run ` + "`qmd embed`" + ` after indexing (enables semantic search, slow).

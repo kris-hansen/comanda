@@ -8,6 +8,7 @@ import (
 
 	"github.com/kris-hansen/comanda/utils/codebaseindex"
 	"github.com/kris-hansen/comanda/utils/fileutil"
+	"github.com/kris-hansen/comanda/utils/models"
 )
 
 // processCodebaseIndexStep handles the codebase-index step type
@@ -133,7 +134,10 @@ func (p *Processor) processCodebaseIndexFromRegistry(step Step, ci *CodebaseInde
 // processCodebaseIndexGenerate generates a fresh index
 func (p *Processor) processCodebaseIndexGenerate(step Step) (string, error) {
 	// Build configuration from step config
-	config := p.buildCodebaseIndexConfig(step.Config)
+	config, err := p.buildCodebaseIndexConfigWithError(step.Config)
+	if err != nil {
+		return "", err
+	}
 
 	// Create manager
 	manager, err := codebaseindex.NewManager(config, p.verbose)
@@ -175,8 +179,16 @@ func (p *Processor) processCodebaseIndexGenerate(step Step) (string, error) {
 		result.Languages, result.FileCount, result.OutputPath, result.Duration), nil
 }
 
-// buildCodebaseIndexConfig converts processor config to codebaseindex.Config
+// buildCodebaseIndexConfig converts processor config to codebaseindex.Config.
+// It preserves the historical test helper signature; runtime code should call
+// buildCodebaseIndexConfigWithError so explicit enhancement failures are not
+// silently ignored.
 func (p *Processor) buildCodebaseIndexConfig(stepConfig StepConfig) *codebaseindex.Config {
+	config, _ := p.buildCodebaseIndexConfigWithError(stepConfig)
+	return config
+}
+
+func (p *Processor) buildCodebaseIndexConfigWithError(stepConfig StepConfig) (*codebaseindex.Config, error) {
 	config := codebaseindex.DefaultConfig()
 
 	// Use step-level config if available
@@ -249,6 +261,16 @@ func (p *Processor) buildCodebaseIndexConfig(stepConfig StepConfig) *codebaseind
 			config.MaxOutputKB = ci.MaxOutputKB
 		}
 
+		if ci.Enhance {
+			modelName, enhanceFunc, err := p.buildCodebaseIndexEnhancer(ci.EnhanceModel)
+			if err != nil {
+				return nil, fmt.Errorf("failed to configure codebase index enhancement: %w", err)
+			}
+			config.EnhanceIndex = true
+			config.EnhancementModel = modelName
+			config.EnhancementFunc = enhanceFunc
+		}
+
 		// Convert adapter overrides
 		if len(ci.Adapters) > 0 {
 			config.AdapterOverrides = make(map[string]*codebaseindex.AdapterOverride)
@@ -277,5 +299,40 @@ func (p *Processor) buildCodebaseIndexConfig(stepConfig StepConfig) *codebaseind
 
 	config.Verbose = p.verbose
 
-	return config
+	return config, nil
+}
+
+func (p *Processor) buildCodebaseIndexEnhancer(requestedModel string) (string, func(string) (string, error), error) {
+	if p.envConfig == nil {
+		return "", nil, fmt.Errorf("enhance requires environment configuration")
+	}
+
+	modelName := requestedModel
+	if modelName == "" {
+		modelName = p.envConfig.DefaultGenerationModel
+	}
+	if modelName == "" {
+		return "", nil, fmt.Errorf("enhance requires default_generation_model or codebase_index.enhance_model")
+	}
+
+	resolvedModel := p.resolveModelTarget(modelName)
+	provider := models.DetectProvider(resolvedModel)
+	if provider == nil {
+		return "", nil, fmt.Errorf("could not detect provider for enhancement model %q", modelName)
+	}
+
+	providerName := provider.Name()
+	isCLIAgent := providerName == "claude-code" || providerName == "gemini-cli" || providerName == "openai-codex"
+	if providerConfig, err := p.envConfig.GetProviderConfig(providerName); err == nil {
+		if err := provider.Configure(providerConfig.APIKey); err != nil {
+			return "", nil, fmt.Errorf("failed to configure provider %s: %w", providerName, err)
+		}
+	} else if !isCLIAgent {
+		return "", nil, fmt.Errorf("provider %s not configured: %w", providerName, err)
+	}
+	provider.SetVerbose(p.verbose)
+
+	return modelName, func(prompt string) (string, error) {
+		return provider.SendPrompt(resolvedModel, prompt)
+	}, nil
 }
