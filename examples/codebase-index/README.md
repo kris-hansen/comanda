@@ -18,7 +18,9 @@ comanda run index-and-analyze.yaml
 2. **Smart Scanning**: Uses parallel workers with early pruning for performance
 3. **Symbol Extraction**: Extracts functions, types, and imports using AST (Go) or regex
 4. **Markdown Synthesis**: Generates a structured index with key sections
-5. **Variable Export**: Exposes the index as workflow variables for downstream steps
+5. **Component Mapping**: Detects monorepo-style component boundaries (frontend/backend/mobile/CLI/shared libraries)
+6. **Optional AI Enhancement**: With `enhance: true`, runs a second pass using the default generation model for macro architecture analysis
+7. **Variable Export**: Exposes the index as workflow variables for downstream steps
 
 ## Workflow Variables
 
@@ -93,6 +95,29 @@ index_codebase:
     max_output_kb: 100         # Limit output size
 ```
 
+### Enhanced Monorepo / Macro Analysis
+
+Use enhancement when the index should help future coding agents understand deeper architecture, not just list files and symbols. The first pass remains the fast deterministic scanner; the second pass uses your configured `default_generation_model` (or `enhance_model`) to add component boundaries, frontend/backend patterns, cross-cutting conventions, and an agent change playbook.
+
+```yaml
+index_codebase:
+  step_type: codebase-index
+  codebase_index:
+    root: ./large-monorepo
+    output:
+      format: structured
+    enhance: true
+    # Optional override; otherwise default_generation_model is used
+    enhance_model: claude-code
+```
+
+CLI equivalent:
+
+```bash
+comanda index capture --enhance
+comanda index capture --enhance --enhance-model claude-code
+```
+
 ## Configuration Reference
 
 ### `root`
@@ -129,20 +154,28 @@ Per-language configuration overrides:
 ### `max_output_kb`
 Maximum size of generated index in KB (default: 100).
 
+### `enhance` / `enhance_model`
+- `enhance`: Run the optional second-pass AI macro analysis (default: false).
+- `enhance_model`: Model for enhancement; defaults to configured `default_generation_model`.
+
+Enhanced output is best for large or mixed-language repositories where future agents need architectural guidance before making changes.
+
 ## Index Output Structure
 
 The generated index includes these sections (when data is available):
 
 1. **Purpose** - Languages detected, file counts
-2. **Repository Layout** - Directory tree (depth-limited)
-3. **Primary Capabilities** - Inferred from directory names
-4. **Entry Points** - main.go, index.ts, etc.
-5. **Key Modules** - Grouped by directory
-6. **Important Files** - Top-scored files with symbols
-7. **Operational Notes** - Build, test, CI files
-8. **Risk/Caution Areas** - Auth, crypto, database code
-9. **Navigation Hints** - Conventions detected
-10. **Footer** - Generation timestamp and scan time
+2. **Component Map** - Monorepo/component boundaries with frontend/backend/CLI/mobile/shared-library roles
+3. **Repository Layout** - Directory tree (depth-limited)
+4. **Primary Capabilities** - Inferred from directory names
+5. **Entry Points** - main.go, index.ts, etc.
+6. **Key Modules** - Grouped by directory
+7. **Important Files** - Top-scored files with symbols
+8. **Operational Notes** - Build, test, CI files
+9. **Risk/Caution Areas** - Auth, crypto, database code
+10. **Navigation Hints** - Conventions detected
+11. **AI Macro Analysis** - Optional second-pass architecture analysis when `enhance: true`
+12. **Footer** - Generation timestamp and scan time
 
 ## Supported Languages
 

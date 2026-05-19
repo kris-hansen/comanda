@@ -73,6 +73,13 @@ type Config struct {
 	Incremental   bool
 	Verbose       bool
 
+	// Optional second-pass AI enhancement. The normal high-performance scan still
+	// runs first; when enabled, EnhancementFunc receives a bounded macro-analysis
+	// prompt and returns additional markdown insights for future agents.
+	EnhanceIndex     bool
+	EnhancementModel string
+	EnhancementFunc  func(prompt string) (string, error)
+
 	// qmd integration (optional)
 	Qmd *QmdConfig
 
@@ -133,6 +140,12 @@ type ScanResult struct {
 	// Directory structure summary
 	DirTree *DirNode
 
+	// Macro structure inferred from config files, language roots, and framework
+	// indicators. This helps monorepos expose distinct frontend/backend/mobile/CLI
+	// components instead of flattening everything into one generic file list.
+	IsMonorepo bool
+	Components []*CodebaseComponent
+
 	// Statistics
 	TotalFiles    int
 	TotalDirs     int
@@ -140,6 +153,22 @@ type ScanResult struct {
 	IgnoredDirs   int
 	TotalBytes    int64
 	ProcessedTime time.Duration
+}
+
+// CodebaseComponent describes a logical app/package inside a repository. In a
+// monorepo this usually maps to a frontend, backend, worker, mobile app, CLI, or
+// shared library rooted at a subdirectory with its own manifest/config file.
+type CodebaseComponent struct {
+	Name        string
+	Root        string
+	Language    string
+	Kind        string // frontend, backend, cli, mobile, shared-library, infrastructure, unknown
+	Frameworks  []string
+	ConfigFiles []string
+	EntryPoints []string
+	KeyDirs     []string
+	FileCount   int
+	Evidence    []string
 }
 
 // FileEntry represents a single file in the repository

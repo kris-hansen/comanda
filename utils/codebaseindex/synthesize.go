@@ -64,6 +64,20 @@ func (m *Manager) synthesizeSummary(scan *ScanResult) (string, error) {
 		sb.WriteString("\n\n")
 	}
 
+	if scan.IsMonorepo && len(scan.Components) > 0 {
+		sb.WriteString("## Components\n\n")
+		for _, c := range scan.Components {
+			sb.WriteString(fmt.Sprintf("- `%s` — %s %s", c.Root, c.Kind, c.Language))
+			if len(c.Frameworks) > 0 {
+				sb.WriteString(" (")
+				sb.WriteString(strings.Join(c.Frameworks, ", "))
+				sb.WriteString(")")
+			}
+			sb.WriteString("\n")
+		}
+		sb.WriteString("\n")
+	}
+
 	// Main areas (capabilities)
 	capabilities := m.inferCapabilities(scan)
 	if len(capabilities) > 0 {
@@ -141,6 +155,10 @@ func (m *Manager) synthesizeStructured(scan *ScanResult) (string, error) {
 		sb.WriteString("\n\n")
 	}
 
+	// Component boundaries before flat file categories so large monorepos do not
+	// collapse frontend/backend/packages into a single generic index.
+	m.writeComponentMap(&sb, scan)
+
 	// Categorize files by domain/purpose
 	categories := m.categorizeFiles(scan)
 
@@ -210,6 +228,9 @@ func (m *Manager) synthesizeFull(scan *ScanResult) (string, error) {
 
 	// 1. Purpose (always include)
 	m.writePurpose(&sb, scan)
+
+	// 1.5. Component/monorepo map (if inferred)
+	m.writeComponentMap(&sb, scan)
 
 	// 2. Repo layout (always include)
 	m.writeRepoLayout(&sb, scan)

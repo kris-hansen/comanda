@@ -227,6 +227,108 @@ func TestCodeConventionsWhyLayer(t *testing.T) {
 	}
 }
 
+func TestMonorepoComponentMap(t *testing.T) {
+	config := DefaultConfig()
+	config.OutputFormat = FormatStructured
+	config.RepoFileSlug = "monorepo"
+	config.RepoVarSlug = "MONOREPO"
+
+	manager := &Manager{
+		config:   config,
+		adapters: []Adapter{&GoAdapter{}, &TypeScriptAdapter{}},
+	}
+
+	scan := &ScanResult{
+		TotalFiles: 7,
+		Files: []*FileEntry{
+			{Path: "backend/go.mod", IsConfig: true, Language: "go"},
+			{Path: "backend/cmd/server/main.go", IsEntrypoint: true, Language: "go", Symbols: &SymbolInfo{Frameworks: []string{"stdlib-http"}}},
+			{Path: "backend/internal/service/users.go", Language: "go"},
+			{Path: "web/package.json", IsConfig: true, Language: "typescript"},
+			{Path: "web/tsconfig.json", IsConfig: true, Language: "typescript"},
+			{Path: "web/src/App.tsx", IsEntrypoint: true, Language: "typescript", Symbols: &SymbolInfo{Frameworks: []string{"react"}}},
+			{Path: "web/src/api/client.ts", Language: "typescript"},
+		},
+		Candidates: []*FileEntry{
+			{Path: "backend/go.mod", IsConfig: true, Language: "go"},
+			{Path: "backend/cmd/server/main.go", IsEntrypoint: true, Language: "go", Symbols: &SymbolInfo{Frameworks: []string{"stdlib-http"}}},
+			{Path: "backend/internal/service/users.go", Language: "go"},
+			{Path: "web/package.json", IsConfig: true, Language: "typescript"},
+			{Path: "web/tsconfig.json", IsConfig: true, Language: "typescript"},
+			{Path: "web/src/App.tsx", IsEntrypoint: true, Language: "typescript", Symbols: &SymbolInfo{Frameworks: []string{"react"}}},
+			{Path: "web/src/api/client.ts", Language: "typescript"},
+		},
+		DirTree: &DirNode{Name: ".", Children: []*DirNode{{Name: "backend"}, {Name: "web"}}},
+	}
+
+	manager.analyzeComponents(scan)
+	if !scan.IsMonorepo {
+		t.Fatal("expected monorepo to be detected")
+	}
+	if len(scan.Components) != 2 {
+		t.Fatalf("expected 2 components, got %d", len(scan.Components))
+	}
+
+	content, err := manager.synthesizeStructured(scan)
+	if err != nil {
+		t.Fatalf("synthesizeStructured failed: %v", err)
+	}
+
+	mustContain := []string{
+		"Component Map (Monorepo Detected)",
+		"`backend`",
+		"backend (go)",
+		"`web`",
+		"frontend (typescript)",
+		"web/src/App.tsx",
+	}
+	for _, must := range mustContain {
+		if !strings.Contains(content, must) {
+			t.Errorf("component map missing %q\n%s", must, content)
+		}
+	}
+}
+
+func TestAIEnhancementSecondPass(t *testing.T) {
+	config := DefaultConfig()
+	config.RepoFileSlug = "monorepo"
+	config.EnhanceIndex = true
+	config.EnhancementModel = "test-model"
+
+	var prompt string
+	config.EnhancementFunc = func(p string) (string, error) {
+		prompt = p
+		return "## AI Macro Analysis\n\n### Monorepo Shape & Component Boundaries\n- Backend changes live under `backend/`; frontend changes live under `web/`.", nil
+	}
+
+	manager := &Manager{config: config}
+	scan := &ScanResult{
+		TotalFiles: 2,
+		IsMonorepo: true,
+		Components: []*CodebaseComponent{
+			{Name: "backend", Root: "backend", Language: "go", Kind: "backend", ConfigFiles: []string{"backend/go.mod"}},
+			{Name: "web", Root: "web", Language: "typescript", Kind: "frontend", ConfigFiles: []string{"web/package.json"}},
+		},
+		Candidates: []*FileEntry{
+			{Path: "backend/go.mod", Language: "go", IsConfig: true},
+			{Path: "web/package.json", Language: "typescript", IsConfig: true},
+		},
+	}
+
+	content, err := manager.enhanceIndex(scan, "# base index")
+	if err != nil {
+		t.Fatalf("enhanceIndex failed: %v", err)
+	}
+	if !strings.Contains(content, "# base index") || !strings.Contains(content, "## AI Macro Analysis") {
+		t.Fatalf("enhanced content missing base or analysis: %s", content)
+	}
+	for _, must := range []string{"Monorepo detected: true", "root=backend", "root=web", "Candidate files"} {
+		if !strings.Contains(prompt, must) {
+			t.Errorf("enhancement prompt missing %q\n%s", must, prompt)
+		}
+	}
+}
+
 // TestSynthesizeSummary verifies summary format specifics
 func TestSynthesizeSummary(t *testing.T) {
 	config := DefaultConfig()
