@@ -11,17 +11,20 @@ import (
 	"github.com/kris-hansen/comanda/utils/codebaseindex"
 	"github.com/kris-hansen/comanda/utils/config"
 	"github.com/kris-hansen/comanda/utils/fileutil"
+	"github.com/kris-hansen/comanda/utils/models"
 	"github.com/spf13/cobra"
 )
 
 var (
 	// Capture flags
-	indexName    string
-	indexOutput  string
-	indexFormat  string
-	indexGlobal  bool
-	indexEncrypt bool
-	indexForce   bool
+	indexName         string
+	indexOutput       string
+	indexFormat       string
+	indexGlobal       bool
+	indexEncrypt      bool
+	indexForce        bool
+	indexEnhance      bool
+	indexEnhanceModel string
 
 	// Update flags
 	updateFull bool
@@ -72,6 +75,7 @@ Examples:
   comanda index capture ~/clawd/comanda     # Index specific path
   comanda index capture -n myproject        # Custom name
   comanda index capture -f summary          # Compact format
+  comanda index capture --enhance           # Add AI macro analysis using default_generation_model
   comanda index capture -g                  # Store in ~/.comanda/indexes/
   comanda index capture -e                  # Encrypt output`,
 	Args: cobra.MaximumNArgs(1),
@@ -168,9 +172,13 @@ func init() {
 	captureCmd.Flags().BoolVarP(&indexGlobal, "global", "g", false, "Store in ~/.comanda/indexes/")
 	captureCmd.Flags().BoolVarP(&indexEncrypt, "encrypt", "e", false, "Encrypt the output")
 	captureCmd.Flags().BoolVar(&indexForce, "force", false, "Overwrite existing index")
+	captureCmd.Flags().BoolVar(&indexEnhance, "enhance", false, "Run a second-pass AI macro analysis using default_generation_model")
+	captureCmd.Flags().StringVar(&indexEnhanceModel, "enhance-model", "", "Model for --enhance (default: configured default_generation_model)")
 
 	// Update flags
 	updateCmd.Flags().BoolVar(&updateFull, "full", false, "Force full regeneration")
+	updateCmd.Flags().BoolVar(&indexEnhance, "enhance", false, "Run a second-pass AI macro analysis during update")
+	updateCmd.Flags().StringVar(&indexEnhanceModel, "enhance-model", "", "Model for --enhance (default: configured default_generation_model)")
 
 	// Diff flags
 	diffCmd.Flags().StringVar(&diffSince, "since", "", "Show changes since date (YYYY-MM-DD)")
@@ -258,6 +266,16 @@ func runCapture(cmd *cobra.Command, args []string) error {
 		if cfg.EncryptionKey == "" {
 			return fmt.Errorf("encryption requested but no key configured (set COMANDA_INDEX_KEY or run 'comanda configure')")
 		}
+	}
+
+	if indexEnhance {
+		modelName, enhanceFunc, err := buildIndexEnhancer(indexEnhanceModel)
+		if err != nil {
+			return err
+		}
+		cfg.EnhanceIndex = true
+		cfg.EnhancementModel = modelName
+		cfg.EnhancementFunc = enhanceFunc
 	}
 
 	// Create manager
@@ -360,6 +378,46 @@ func registerIndex(name, repoPath string, result *codebaseindex.Result, cfg *cod
 	return config.SaveEnvConfig(configPath, envCfg)
 }
 
+func buildIndexEnhancer(requestedModel string) (string, func(string) (string, error), error) {
+	if envConfig == nil {
+		return "", nil, fmt.Errorf("AI index enhancement requires comanda configuration to be loaded")
+	}
+
+	modelName := requestedModel
+	if modelName == "" {
+		modelName = envConfig.DefaultGenerationModel
+	}
+	if modelName == "" {
+		return "", nil, fmt.Errorf("--enhance requires a model: set default_generation_model with 'comanda configure --set-default-generation-model <model>' or pass --enhance-model")
+	}
+
+	resolvedModel := modelName
+	if _, configuredModel, err := envConfig.ResolveConfiguredModel(modelName); err == nil && configuredModel != nil && configuredModel.Target != "" {
+		resolvedModel = configuredModel.Target
+	}
+
+	provider := models.DetectProvider(resolvedModel)
+	if provider == nil {
+		return "", nil, fmt.Errorf("could not detect provider for enhancement model: %s", modelName)
+	}
+
+	providerName := provider.Name()
+	isCLIAgent := providerName == "claude-code" || providerName == "gemini-cli" || providerName == "openai-codex"
+	providerConfig, err := envConfig.GetProviderConfig(providerName)
+	if err != nil {
+		if !isCLIAgent {
+			log.Printf("Warning: Provider %s not found in env configuration. Assuming it does not require an API key or is pre-configured.\n", providerName)
+		}
+	} else if err := provider.Configure(providerConfig.APIKey); err != nil {
+		return "", nil, fmt.Errorf("failed to configure provider %s: %w", providerName, err)
+	}
+	provider.SetVerbose(verbose)
+
+	return modelName, func(prompt string) (string, error) {
+		return provider.SendPrompt(resolvedModel, prompt)
+	}, nil
+}
+
 func runUpdate(cmd *cobra.Command, args []string) error {
 	// Determine which index to update
 	name := ""
@@ -394,6 +452,16 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	cfg.Encrypt = entry.Encrypted
 	if entry.Encrypted && envConfig != nil {
 		cfg.EncryptionKey = envConfig.IndexEncryptionKey
+	}
+
+	if indexEnhance {
+		modelName, enhanceFunc, err := buildIndexEnhancer(indexEnhanceModel)
+		if err != nil {
+			return err
+		}
+		cfg.EnhanceIndex = true
+		cfg.EnhancementModel = modelName
+		cfg.EnhancementFunc = enhanceFunc
 	}
 
 	// Create manager

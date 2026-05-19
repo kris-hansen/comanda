@@ -80,11 +80,26 @@ func (m *Manager) Generate() (*Result, error) {
 		return nil, fmt.Errorf("symbol extraction failed: %w", err)
 	}
 
+	// Step 3b: Infer macro components after symbol extraction so monorepos retain
+	// frontend/backend/package boundaries in the generated index.
+	m.analyzeComponents(scanResult)
+
 	// Step 4: Synthesize markdown
 	m.logf("Synthesizing index...")
 	content, err := m.synthesize(scanResult)
 	if err != nil {
 		return nil, fmt.Errorf("synthesis failed: %w", err)
+	}
+
+	// Optional Step 4b: second-pass AI macro analysis. The first pass above stays
+	// deterministic and fast; this pass asks the configured generation model to
+	// turn the scan/index into deeper repo-specific guidance.
+	if m.config.EnhanceIndex {
+		m.logf("Enhancing index with model: %s", m.config.EnhancementModel)
+		content, err = m.enhanceIndex(scanResult, content)
+		if err != nil {
+			return nil, fmt.Errorf("AI index enhancement failed: %w", err)
+		}
 	}
 
 	// Step 5: Compute hash

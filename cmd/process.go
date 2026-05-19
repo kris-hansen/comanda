@@ -227,6 +227,13 @@ Input can be provided via:
 					if ci.MaxOutputKB > 0 {
 						log.Printf("- Max Output: %d KB\n", ci.MaxOutputKB)
 					}
+					if ci.Enhance {
+						if ci.EnhanceModel != "" {
+							log.Printf("- Enhance: true (%s)\n", ci.EnhanceModel)
+						} else {
+							log.Printf("- Enhance: true (default_generation_model)\n")
+						}
+					}
 				} else {
 					// Standard step display
 					inputs := proc.NormalizeStringSlice(step.Config.Input)
