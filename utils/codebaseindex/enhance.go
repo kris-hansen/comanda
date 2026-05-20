@@ -127,12 +127,14 @@ Rules:
 - Start with "## AI Macro Analysis".
 - Include these subsections when supported by evidence:
   - Monorepo Shape & Component Boundaries
+  - Deep Code Conventions & Agent Editing Rules
   - Frontend Patterns
   - Backend Patterns
   - Shared/Data/Infra Patterns
   - Cross-Cutting Conventions
   - Agent Change Playbook
   - Unknowns / Follow-up Exploration
+- In Deep Code Conventions & Agent Editing Rules, use compact entries with Why, Agent guidance, Evidence paths, and Confidence when repeated code patterns support them.
 - Cite concrete evidence paths inline. Do not invent files, frameworks, services, or business domains.
 - Avoid generic advice like "follow best practices". Every claim should explain what pattern appears in this repository and how an agent should change code safely.
 - If a section is not supported by evidence, say what is unknown and which files/dirs to inspect next.

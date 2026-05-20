@@ -67,6 +67,7 @@ func (m *Manager) writeCodeConventions(sb *strings.Builder, scan *ScanResult, ma
 
 func (m *Manager) detectCodeConventions(scan *ScanResult) []CodeConvention {
 	var conventions []CodeConvention
+	conventions = append(conventions, m.detectEvidenceBackedConventions(scan)...)
 
 	languages := make(map[string]bool)
 	for _, adapter := range m.adapters {
@@ -77,12 +78,81 @@ func (m *Manager) detectCodeConventions(scan *ScanResult) []CodeConvention {
 		conventions = append(conventions, m.detectGoConventions(scan)...)
 	}
 
+	conventions = dedupeConventions(conventions)
 	sort.SliceStable(conventions, func(i, j int) bool {
 		if conventions[i].Confidence == conventions[j].Confidence {
 			return conventions[i].Name < conventions[j].Name
 		}
 		return conventions[i].Confidence > conventions[j].Confidence
 	})
+
+	return conventions
+}
+
+// detectEvidenceBackedConventions mines repeated local file-role patterns from
+// the scan result before language-specific fallbacks run. These conventions are
+// intentionally evidence-first: they only appear when multiple files demonstrate
+// the same editing pattern in this repository.
+func (m *Manager) detectEvidenceBackedConventions(scan *ScanResult) []CodeConvention {
+	files := allScanFiles(scan)
+	if len(files) == 0 {
+		return nil
+	}
+
+	var conventions []CodeConvention
+	roleGroups := groupFilesByLocalRole(files)
+	conventions = append(conventions, conventionFromRoleGroup("cmd/main.go", roleGroups["cmd/main.go"], CodeConvention{
+		Name:      "Command entrypoints are isolated under cmd",
+		Rationale: "Executable surfaces repeat under cmd/, which keeps user-facing command wiring separate from reusable implementation packages.",
+		Guidance:  "When adding an executable or CLI surface, create or extend the matching cmd/.../main.go entrypoint and move reusable behavior into a package outside cmd/.",
+	})...)
+	conventions = append(conventions, conventionFromRoleGroup("db/store.go", roleGroups["db/store.go"], CodeConvention{
+		Name:      "Storage logic is isolated behind db/store files",
+		Rationale: "Multiple domains keep persistence behavior in local db/store.go files, which makes storage boundaries easy to find and keeps callers out of database details.",
+		Guidance:  "For persistence changes, edit the domain's db/store.go boundary and keep SQL/storage details there rather than spreading them through service or handler code.",
+	})...)
+	conventions = append(conventions, conventionFromRoleGroup("manager.go", roleGroups["manager.go"], CodeConvention{
+		Name:      "Managers own orchestration boundaries",
+		Rationale: "Repeated manager.go files mark packages where coordination logic is separated from lower-level helpers.",
+		Guidance:  "Put sequencing, lifecycle, and cross-step coordination in the package manager; keep parsing, extraction, persistence, and rendering work in narrower files.",
+	})...)
+	conventions = append(conventions, conventionFromRoleGroup("handler.go", roleGroups["handler.go"], CodeConvention{
+		Name:      "Handlers form integration boundaries",
+		Rationale: "Repeated handler.go files indicate that input/output or transport integration is kept at the edge of each feature area.",
+		Guidance:  "When changing external behavior, adjust the relevant handler boundary, then delegate substantial validation or business logic to package-local helpers.",
+	})...)
+	conventions = append(conventions, conventionFromRoleGroup("validator.go", roleGroups["validator.go"], CodeConvention{
+		Name:      "Validation is kept explicit and package-local",
+		Rationale: "Repeated validator files show that invalid states are rejected close to the feature schema rather than being handled ad hoc at call sites.",
+		Guidance:  "When adding fields or accepted values, update the validator beside the feature and add focused tests for both valid and invalid cases.",
+	})...)
+	conventions = append(conventions, conventionFromRoleGroup("*_test.go", roleGroups["*_test.go"], CodeConvention{
+		Name:      "Behavior is protected by package-local tests",
+		Rationale: "Test files recur beside implementation packages, so local behavior usually has a nearby safety net.",
+		Guidance:  "Before editing a package, inspect its adjacent *_test.go files; update or add focused tests in the same package for changed parser, handler, synthesis, or storage behavior.",
+	})...)
+
+	if evidence := pipelineEvidence(roleGroups); len(evidence) >= 3 {
+		conventions = append(conventions, CodeConvention{
+			Language:   "Repository",
+			Name:       "Pipeline phases are split into role-specific files",
+			Rationale:  "The repository repeatedly names pipeline phases as separate files, which keeps orchestration, input collection, extraction, synthesis, and storage work independently editable.",
+			Guidance:   "Identify the phase you are changing before patching: manager/orchestration, scan/input, extract/analysis, synthesize/output, handler/integration, validate/schema, or store/persistence. Avoid mixing phase changes unless the feature contract requires it.",
+			Evidence:   evidence,
+			Confidence: confidenceFromEvidence(len(evidence), 4),
+		})
+	}
+
+	if evidence := schemaChangeEvidence(files); len(evidence) >= 4 {
+		conventions = append(conventions, CodeConvention{
+			Language:   "Repository",
+			Name:       "Schema changes require coordinated parser, validator, executor, and docs updates",
+			Rationale:  "Typed config, validation, execution handlers, docs, and examples all exist in the indexed evidence, so user-facing workflow fields usually cross several layers.",
+			Guidance:   "When adding or changing a workflow/index field, update the type definition, parsing/builder path, validator, execution handler, docs or embedded guide, examples, and package-local tests together.",
+			Evidence:   evidence,
+			Confidence: confidenceFromEvidence(len(evidence), 5),
+		})
+	}
 
 	return conventions
 }
@@ -265,6 +335,154 @@ func sampleEvidence(scan *ScanResult, needles []string, limit int) []string {
 		}
 	}
 	return evidence
+}
+
+func groupFilesByLocalRole(files []*FileEntry) map[string][]string {
+	groups := make(map[string][]string)
+	for _, f := range files {
+		if f == nil || f.Path == "" {
+			continue
+		}
+		path := filepath.ToSlash(f.Path)
+		base := filepath.Base(path)
+		parts := strings.Split(path, "/")
+		if strings.HasSuffix(base, "_test.go") {
+			groups["*_test.go"] = append(groups["*_test.go"], path)
+		}
+		if base == "main.go" && containsPathPart(parts, "cmd") {
+			groups["cmd/main.go"] = append(groups["cmd/main.go"], path)
+		}
+		if len(parts) >= 2 && parts[len(parts)-2] == "db" && base == "store.go" {
+			groups["db/store.go"] = append(groups["db/store.go"], path)
+		}
+		for _, role := range []string{
+			"manager.go",
+			"scan.go",
+			"extract.go",
+			"synthesize.go",
+			"store.go",
+			"handler.go",
+			"validator.go",
+			"types.go",
+			"config.go",
+		} {
+			if base == role {
+				groups[role] = append(groups[role], path)
+			}
+		}
+	}
+
+	for role := range groups {
+		sort.Strings(groups[role])
+	}
+	return groups
+}
+
+func containsPathPart(parts []string, want string) bool {
+	for _, part := range parts {
+		if part == want {
+			return true
+		}
+	}
+	return false
+}
+
+func conventionFromRoleGroup(role string, evidence []string, convention CodeConvention) []CodeConvention {
+	if len(evidence) < minimumEvidenceForRole(role) {
+		return nil
+	}
+	if convention.Language == "" {
+		convention.Language = "Repository"
+	}
+	convention.Evidence = limitEvidence(evidence, 6)
+	convention.Confidence = confidenceFromEvidence(len(evidence), minimumEvidenceForRole(role))
+	return []CodeConvention{convention}
+}
+
+func minimumEvidenceForRole(role string) int {
+	switch role {
+	case "cmd/main.go", "db/store.go":
+		return 2
+	case "*_test.go":
+		return 3
+	default:
+		return 2
+	}
+}
+
+func pipelineEvidence(roleGroups map[string][]string) []string {
+	var evidence []string
+	for _, role := range []string{"manager.go", "scan.go", "extract.go", "synthesize.go", "handler.go", "validator.go", "store.go"} {
+		if files := roleGroups[role]; len(files) > 0 {
+			evidence = append(evidence, files[0])
+		}
+	}
+	return limitEvidence(evidence, 7)
+}
+
+func schemaChangeEvidence(files []*FileEntry) []string {
+	required := []string{"types.go", "validator.go", "handler.go"}
+	for _, needle := range required {
+		if firstEvidenceForNeedle(files, needle) == "" {
+			return nil
+		}
+	}
+	needles := append(required, "embedded_guide.go", "README.md", "examples/", "_test.go")
+	var evidence []string
+	for _, needle := range needles {
+		if path := firstEvidenceForNeedle(files, needle); path != "" {
+			evidence = append(evidence, path)
+		}
+	}
+	return limitEvidence(evidence, 7)
+}
+
+func firstEvidenceForNeedle(files []*FileEntry, needle string) string {
+	for _, f := range files {
+		if f == nil {
+			continue
+		}
+		path := filepath.ToSlash(f.Path)
+		if strings.Contains(path, needle) {
+			return path
+		}
+	}
+	return ""
+}
+
+func confidenceFromEvidence(count, threshold int) float64 {
+	if threshold <= 0 {
+		threshold = 1
+	}
+	confidence := 0.55 + (float64(count-threshold+1) * 0.08)
+	if confidence > 0.92 {
+		return 0.92
+	}
+	if confidence < 0.6 {
+		return 0.6
+	}
+	return confidence
+}
+
+func limitEvidence(evidence []string, limit int) []string {
+	if limit <= 0 || len(evidence) <= limit {
+		return evidence
+	}
+	return append([]string(nil), evidence[:limit]...)
+}
+
+func dedupeConventions(conventions []CodeConvention) []CodeConvention {
+	seen := make(map[string]bool)
+	var result []CodeConvention
+	for _, c := range conventions {
+		key := strings.ToLower(c.Language + ":" + c.Name)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		result = append(result, c)
+	}
+	return result
 }
 
 func allScanFiles(scan *ScanResult) []*FileEntry {
