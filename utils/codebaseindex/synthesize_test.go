@@ -227,6 +227,64 @@ func TestCodeConventionsWhyLayer(t *testing.T) {
 	}
 }
 
+func TestCodeConventionsMineRepeatedRepositoryPatterns(t *testing.T) {
+	config := DefaultConfig()
+	config.OutputFormat = FormatStructured
+	config.RepoFileSlug = "large-repo"
+	config.RepoVarSlug = "LARGE_REPO"
+
+	manager := &Manager{
+		config:   config,
+		adapters: []Adapter{&GoAdapter{}},
+	}
+
+	scan := &ScanResult{
+		TotalFiles: 12,
+		Files: []*FileEntry{
+			{Path: "go.mod", IsConfig: true, Language: "go"},
+			{Path: "core/cmd/blockchain/batch-process-deposits/main.go", IsEntrypoint: true, Language: "go", Symbols: &SymbolInfo{Imports: []string{"github.com/spf13/cobra"}, Frameworks: []string{"cobra"}}},
+			{Path: "core/cmd/dev/paxos/main.go", IsEntrypoint: true, Language: "go", Symbols: &SymbolInfo{Imports: []string{"github.com/spf13/cobra"}, Frameworks: []string{"cobra"}}},
+			{Path: "core/internal/service/batch_transfers/db/store.go", Language: "go"},
+			{Path: "core/internal/service/erbnet/db/store.go", Language: "go"},
+			{Path: "core/internal/service/files/db/store.go", Language: "go"},
+			{Path: "core/internal/client/vault/totp_store.go", Language: "go"},
+			{Path: "core/internal/scan/scan.go", Language: "go"},
+			{Path: "core/internal/index/extract.go", Language: "go"},
+			{Path: "core/internal/index/synthesize.go", Language: "go"},
+			{Path: "core/internal/index/manager.go", Language: "go"},
+			{Path: "core/internal/index/synthesize_test.go", Language: "go"},
+		},
+		Candidates: []*FileEntry{
+			{Path: "core/cmd/blockchain/batch-process-deposits/main.go", IsEntrypoint: true, Language: "go", Symbols: &SymbolInfo{Imports: []string{"github.com/spf13/cobra"}, Frameworks: []string{"cobra"}}},
+			{Path: "core/cmd/dev/paxos/main.go", IsEntrypoint: true, Language: "go", Symbols: &SymbolInfo{Imports: []string{"github.com/spf13/cobra"}, Frameworks: []string{"cobra"}}},
+			{Path: "core/internal/service/batch_transfers/db/store.go", Language: "go"},
+			{Path: "core/internal/service/erbnet/db/store.go", Language: "go"},
+			{Path: "core/internal/service/files/db/store.go", Language: "go"},
+			{Path: "core/internal/scan/scan.go", Language: "go"},
+			{Path: "core/internal/index/extract.go", Language: "go"},
+			{Path: "core/internal/index/synthesize.go", Language: "go"},
+			{Path: "core/internal/index/manager.go", Language: "go"},
+		},
+		DirTree: &DirNode{Name: ".", Children: []*DirNode{{Name: "core"}}},
+	}
+
+	content, err := manager.synthesizeStructured(scan)
+	if err != nil {
+		t.Fatalf("synthesizeStructured failed: %v", err)
+	}
+
+	for _, must := range []string{
+		"Storage logic is isolated behind db/store files",
+		"core/internal/service/batch_transfers/db/store.go",
+		"Pipeline phases are split into role-specific files",
+		"Command entrypoints are isolated under cmd",
+	} {
+		if !strings.Contains(content, must) {
+			t.Errorf("content missing mined convention text %q\n%s", must, content)
+		}
+	}
+}
+
 func TestMonorepoComponentMap(t *testing.T) {
 	config := DefaultConfig()
 	config.OutputFormat = FormatStructured
@@ -322,7 +380,7 @@ func TestAIEnhancementSecondPass(t *testing.T) {
 	if !strings.Contains(content, "# base index") || !strings.Contains(content, "## AI Macro Analysis") {
 		t.Fatalf("enhanced content missing base or analysis: %s", content)
 	}
-	for _, must := range []string{"Monorepo detected: true", "root=backend", "root=web", "Candidate files"} {
+	for _, must := range []string{"Monorepo detected: true", "root=backend", "root=web", "Candidate files", "Deep Code Conventions & Agent Editing Rules"} {
 		if !strings.Contains(prompt, must) {
 			t.Errorf("enhancement prompt missing %q\n%s", must, prompt)
 		}

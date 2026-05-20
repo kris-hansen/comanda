@@ -99,6 +99,8 @@ index_codebase:
 
 Use enhancement when the index should help future coding agents understand deeper architecture, not just list files and symbols. The first pass remains the fast deterministic scanner; the second pass uses your configured `default_generation_model` (or `enhance_model`) to add component boundaries, frontend/backend patterns, cross-cutting conventions, and an agent change playbook.
 
+The normal deterministic index also mines repeated local file-role patterns for the **Code Conventions & Patterns** section. For example, repeated `cmd/.../main.go`, `db/store.go`, `manager.go`, `handler.go`, `validator.go`, and `*_test.go` files become evidence-backed editing guidance with concrete paths and confidence scores. Use `--enhance` when you also want the model to synthesize deeper conventions across components and call out unknowns that need follow-up exploration.
+
 ```yaml
 index_codebase:
   step_type: codebase-index
@@ -171,11 +173,12 @@ The generated index includes these sections (when data is available):
 5. **Entry Points** - main.go, index.ts, etc.
 6. **Key Modules** - Grouped by directory
 7. **Important Files** - Top-scored files with symbols
-8. **Operational Notes** - Build, test, CI files
-9. **Risk/Caution Areas** - Auth, crypto, database code
-10. **Navigation Hints** - Conventions detected
-11. **AI Macro Analysis** - Optional second-pass architecture analysis when `enhance: true`
-12. **Footer** - Generation timestamp and scan time
+8. **Code Conventions & Patterns** - Evidence-backed local patterns, agent guidance, evidence paths, and confidence
+9. **Operational Notes** - Build, test, CI files
+10. **Risk/Caution Areas** - Auth, crypto, database code
+11. **Navigation Hints** - Conventions detected
+12. **AI Macro Analysis** - Optional second-pass architecture analysis when `enhance: true`
+13. **Footer** - Generation timestamp and scan time
 
 ## Supported Languages
 
