@@ -73,6 +73,10 @@ type Config struct {
 	Incremental   bool
 	Verbose       bool
 
+	// MaxFilesPerDir caps how many files are listed per directory in the
+	// Repository Layout tree. 0 or negative means unlimited (list every file).
+	MaxFilesPerDir int
+
 	// Optional second-pass AI enhancement. The normal high-performance scan still
 	// runs first; when enabled, EnhancementFunc receives a bounded macro-analysis
 	// prompt and returns additional markdown insights for future agents.
@@ -283,5 +287,6 @@ func DefaultConfig() *Config {
 		HashAlgorithm:  DefaultHash,
 		Incremental:    false,
 		Verbose:        false,
+		MaxFilesPerDir: DefaultMaxFilesPerDir,
 	}
 }
