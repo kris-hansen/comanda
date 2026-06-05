@@ -125,6 +125,76 @@ func (r *Registry) detectAdapter(repoPath string, adapter Adapter) bool {
 			}
 		}
 	}
+
+	// Fallback: detect by source-file extension. Projects that predate or omit
+	// a manifest file (e.g. pre-modules Go using Godeps/GOPATH/dep/glide, or
+	// loose script directories) have no go.mod/package.json/etc. but are still
+	// indexable. If the repo contains source files matching this adapter's
+	// extensions, treat the adapter as applicable.
+	if r.detectByExtension(repoPath, adapter) {
+		return true
+	}
+	return false
+}
+
+// detectByExtension reports whether the repo contains any source file whose
+// extension is handled by the adapter. It searches the repo root and direct
+// subdirectories (matching the monorepo detection depth used above), skipping
+// hidden directories and the adapter's ignored directories so vendored
+// dependencies don't trigger a false positive.
+func (r *Registry) detectByExtension(repoPath string, adapter Adapter) bool {
+	exts := adapter.FileExtensions()
+	if len(exts) == 0 {
+		return false
+	}
+	extSet := make(map[string]bool, len(exts))
+	for _, e := range exts {
+		extSet[strings.ToLower(e)] = true
+	}
+
+	ignored := make(map[string]bool)
+	for _, d := range adapter.IgnoreDirs() {
+		ignored[d] = true
+	}
+
+	dirHasExt := func(dir string) bool {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return false
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			if extSet[strings.ToLower(filepath.Ext(entry.Name()))] {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Root level.
+	if dirHasExt(repoPath) {
+		return true
+	}
+
+	// Direct subdirectories (skip hidden and ignored dirs).
+	entries, err := os.ReadDir(repoPath)
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if strings.HasPrefix(name, ".") || ignored[name] {
+			continue
+		}
+		if dirHasExt(filepath.Join(repoPath, name)) {
+			return true
+		}
+	}
 	return false
 }
 

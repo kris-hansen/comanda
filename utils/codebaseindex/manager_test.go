@@ -128,6 +128,67 @@ func TestMonorepoDetection(t *testing.T) {
 	}
 }
 
+// TestGoAdapterDetectionWithoutManifest covers pre-modules Go projects
+// (e.g. Godeps/GOPATH/dep/glide era) that have .go source files but no
+// go.mod or go.sum. These should still be detected via the source-file
+// extension fallback.
+func TestGoAdapterDetectionWithoutManifest(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// main.go at root, plus a package in a subdirectory — no go.mod/go.sum.
+	if err := os.WriteFile(filepath.Join(tmpDir, "main.go"),
+		[]byte("package main\nfunc main() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	modelsDir := filepath.Join(tmpDir, "models")
+	if err := os.Mkdir(modelsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(modelsDir, "accounts.go"),
+		[]byte("package models\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	registry := NewRegistry()
+	detected := registry.Detect(tmpDir)
+
+	foundGo := false
+	for _, a := range detected {
+		if a.Name() == "go" {
+			foundGo = true
+			break
+		}
+	}
+	if !foundGo {
+		t.Error("Go adapter should be detected for a manifest-less Go project via .go files")
+	}
+}
+
+// TestExtensionFallbackIgnoresVendored ensures the extension-based fallback
+// does not trigger on .go files that live only inside ignored directories
+// such as vendor/, which would otherwise produce false positives.
+func TestExtensionFallbackIgnoresVendored(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	vendorPkg := filepath.Join(tmpDir, "vendor", "example.com", "pkg")
+	if err := os.MkdirAll(vendorPkg, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(vendorPkg, "lib.go"),
+		[]byte("package pkg\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	registry := NewRegistry()
+	detected := registry.Detect(tmpDir)
+
+	for _, a := range detected {
+		if a.Name() == "go" {
+			t.Error("Go adapter should not be detected when .go files exist only in vendor/")
+		}
+	}
+}
+
 func TestExtractGoSymbols(t *testing.T) {
 	content := []byte(`package main
 
