@@ -17,14 +17,15 @@ import (
 
 var (
 	// Capture flags
-	indexName         string
-	indexOutput       string
-	indexFormat       string
-	indexGlobal       bool
-	indexEncrypt      bool
-	indexForce        bool
-	indexEnhance      bool
-	indexEnhanceModel string
+	indexName           string
+	indexOutput         string
+	indexFormat         string
+	indexGlobal         bool
+	indexEncrypt        bool
+	indexForce          bool
+	indexEnhance        bool
+	indexEnhanceModel   string
+	indexMaxFilesPerDir int
 
 	// Update flags
 	updateFull bool
@@ -174,11 +175,13 @@ func init() {
 	captureCmd.Flags().BoolVar(&indexForce, "force", false, "Overwrite existing index")
 	captureCmd.Flags().BoolVar(&indexEnhance, "enhance", false, "Run a second-pass AI macro analysis using default_generation_model")
 	captureCmd.Flags().StringVar(&indexEnhanceModel, "enhance-model", "", "Model for --enhance (default: configured default_generation_model)")
+	captureCmd.Flags().IntVar(&indexMaxFilesPerDir, "max-files-per-dir", codebaseindex.DefaultMaxFilesPerDir, "Max files listed per directory in the layout tree (0 = unlimited)")
 
 	// Update flags
 	updateCmd.Flags().BoolVar(&updateFull, "full", false, "Force full regeneration")
 	updateCmd.Flags().BoolVar(&indexEnhance, "enhance", false, "Run a second-pass AI macro analysis during update")
 	updateCmd.Flags().StringVar(&indexEnhanceModel, "enhance-model", "", "Model for --enhance (default: configured default_generation_model)")
+	updateCmd.Flags().IntVar(&indexMaxFilesPerDir, "max-files-per-dir", codebaseindex.DefaultMaxFilesPerDir, "Max files listed per directory in the layout tree (0 = unlimited)")
 
 	// Diff flags
 	diffCmd.Flags().StringVar(&diffSince, "since", "", "Show changes since date (YYYY-MM-DD)")
@@ -224,6 +227,7 @@ func runCapture(cmd *cobra.Command, args []string) error {
 	cfg := codebaseindex.DefaultConfig()
 	cfg.Root = absPath
 	cfg.Verbose = verbose
+	cfg.MaxFilesPerDir = indexMaxFilesPerDir
 
 	// Set format
 	switch indexFormat {
@@ -438,6 +442,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	cfg.Root = entry.Path
 	cfg.OutputPath = entry.IndexPath
 	cfg.Verbose = verbose
+	cfg.MaxFilesPerDir = indexMaxFilesPerDir
 
 	// Set format from entry
 	switch entry.Format {
