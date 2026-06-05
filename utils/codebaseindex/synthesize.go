@@ -13,9 +13,13 @@ import (
 
 const (
 	maxTreeDepth      = 3
-	maxFilesPerDir    = 12
 	maxImportantFiles = 25
 	maxSymbolsPerFile = 8
+
+	// DefaultMaxFilesPerDir caps how many files are listed per directory in the
+	// Repository Layout tree. Overridable via Config.MaxFilesPerDir / the
+	// --max-files-per-dir CLI flag. 0 or negative means unlimited.
+	DefaultMaxFilesPerDir = 200
 )
 
 // synthesize generates the markdown index from scan results based on output format
@@ -437,18 +441,19 @@ func (m *Manager) writeTreeNode(sb *strings.Builder, node *DirNode, prefix strin
 		return node.Children[i].Name < node.Children[j].Name
 	})
 
-	// Write files first (limited)
+	// Write files first (capped per directory; 0 or negative means unlimited)
 	sort.Strings(node.Files)
 	fileCount := len(node.Files)
-	if fileCount > maxFilesPerDir {
-		for i := 0; i < maxFilesPerDir-1; i++ {
+	maxFiles := m.config.MaxFilesPerDir
+	if maxFiles > 0 && fileCount > maxFiles {
+		for i := 0; i < maxFiles-1; i++ {
 			sb.WriteString(prefix)
 			sb.WriteString("  ")
 			sb.WriteString(node.Files[i])
 			sb.WriteString("\n")
 		}
 		sb.WriteString(prefix)
-		sb.WriteString(fmt.Sprintf("  ... and %d more files\n", fileCount-maxFilesPerDir+1))
+		sb.WriteString(fmt.Sprintf("  ... and %d more files\n", fileCount-maxFiles+1))
 	} else {
 		for _, f := range node.Files {
 			sb.WriteString(prefix)
