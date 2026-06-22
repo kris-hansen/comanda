@@ -130,6 +130,12 @@ func GetDeepseekModels() []string {
 	}
 }
 
+// GetSakanaModels returns a hardcoded list of known Sakana models.
+func GetSakanaModels() []string {
+	registry := models.GetRegistry()
+	return registry.GetModels("sakana")
+}
+
 // GetGoogleModels returns a hardcoded list of known Google models.
 func GetGoogleModels() []string {
 	// This list should be updated periodically based on Google's offerings.
@@ -259,6 +265,8 @@ func GetAvailableModels(providerName string, apiKey string) ([]string, error) {
 		return GetXAIModels(), nil
 	case "deepseek":
 		return GetDeepseekModels(), nil
+	case "sakana":
+		return GetSakanaModels(), nil
 	case "ollama":
 		ollamaModels, err := GetOllamaModels()
 		if err != nil {
