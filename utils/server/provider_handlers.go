@@ -40,6 +40,7 @@ func (s *Server) handleGetProviders(w http.ResponseWriter, r *http.Request) {
 		{"anthropic", models.NewAnthropicProvider()},
 		{"google", models.NewGoogleProvider()},
 		{"xai", models.NewXAIProvider()},
+		{"sakana", models.NewSakanaProvider()},
 		{"ollama", models.NewOllamaProvider()},
 		{"vllm", models.NewVLLMProvider()},
 		{"llama.cpp", models.NewLlamaCPPProvider()},
@@ -107,7 +108,7 @@ func (s *Server) handleGetAvailableModels(w http.ResponseWriter, r *http.Request
 	apiKey := ""
 	if err == nil { // Provider exists, get its key
 		apiKey = providerConfig.APIKey
-	} else if providerName != "ollama" && providerName != "vllm" && providerName != "llama.cpp" && providerName != "anthropic" && providerName != "google" && providerName != "xai" && providerName != "deepseek" {
+	} else if providerName != "ollama" && providerName != "vllm" && providerName != "llama.cpp" && providerName != "anthropic" && providerName != "google" && providerName != "xai" && providerName != "deepseek" && providerName != "sakana" {
 		// If provider doesn't exist and requires a key, we can't proceed
 		sendJSONError(w, http.StatusBadRequest, fmt.Sprintf("Provider '%s' not configured or requires an API key to list models", providerName))
 		return
@@ -321,6 +322,8 @@ func (s *Server) handleValidateProvider(w http.ResponseWriter, r *http.Request) 
 		provider = models.NewGoogleProvider()
 	case "xai":
 		provider = models.NewXAIProvider()
+	case "sakana":
+		provider = models.NewSakanaProvider()
 	case "ollama":
 		provider = models.NewOllamaProvider()
 	case "vllm":
@@ -407,6 +410,8 @@ func (s *Server) handleUpdateProvider(w http.ResponseWriter, r *http.Request) {
 			provider = models.NewGoogleProvider()
 		case "xai":
 			provider = models.NewXAIProvider()
+		case "sakana":
+			provider = models.NewSakanaProvider()
 		case "ollama":
 			provider = models.NewOllamaProvider()
 		case "vllm":

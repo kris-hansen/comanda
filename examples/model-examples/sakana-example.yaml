@@ -1,0 +1,23 @@
+# Sakana Fugu Example
+# Configure Sakana with `comanda configure`, then select `sakana` and add `fugu` or `fugu-ultra`.
+# Sakana API keys can be created in the Sakana console.
+
+draft_plan:
+  input:
+    - NA
+  model:
+    - fugu
+  action:
+    - Draft a concise launch checklist for a developer tool release. Group the checklist into build, docs, and release validation.
+  output:
+    - STDOUT
+
+review_plan:
+  input:
+    - STDIN
+  model:
+    - fugu-ultra
+  action:
+    - Review the checklist for missing release risks and add the three highest leverage improvements.
+  output:
+    - STDOUT

@@ -1,6 +1,6 @@
 # Adding a New Model to COMandA
 
-This guide outlines the steps for adding support for a new Large Language Model (LLM) to COMandA, assuming the provider (e.g., Anthropic, OpenAI) is already integrated.
+This guide outlines the steps for adding support for a new Large Language Model (LLM) to COMandA, assuming the provider (e.g., Anthropic, OpenAI, Sakana) is already integrated.
 
 ## Prerequisites
 

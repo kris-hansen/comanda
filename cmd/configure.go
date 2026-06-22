@@ -254,6 +254,12 @@ func getMoonshotModels() []string {
 	return registry.GetModels("moonshot")
 }
 
+func getSakanaModels() []string {
+	// Get models from the central registry
+	registry := models.GetRegistry()
+	return registry.GetModels("sakana")
+}
+
 func getOllamaModels() ([]OllamaModel, error) {
 	resp, err := http.Get("http://localhost:11434/api/tags")
 	if err != nil {
@@ -849,12 +855,12 @@ func configureModelsAndProviders(reader *bufio.Reader, envConfig *config.EnvConf
 
 // configureAPIProvider handles adding API-based providers
 func configureAPIProvider(reader *bufio.Reader, envConfig *config.EnvConfig) {
-	log.Printf("\nAvailable API providers: openai, anthropic, google, xai, deepseek, moonshot\n")
+	log.Printf("\nAvailable API providers: openai, anthropic, google, xai, deepseek, moonshot, sakana\n")
 	log.Printf("Enter provider name: ")
 	provider, _ := reader.ReadString('\n')
 	provider = strings.TrimSpace(provider)
 
-	validProviders := []string{"openai", "anthropic", "google", "xai", "deepseek", "moonshot"}
+	validProviders := []string{"openai", "anthropic", "google", "xai", "deepseek", "moonshot", "sakana"}
 	isValid := false
 	for _, vp := range validProviders {
 		if provider == vp {
@@ -914,6 +920,8 @@ func configureAPIProvider(reader *bufio.Reader, envConfig *config.EnvConfig) {
 		selectedModels, selectErr = promptForModelSelection(getDeepseekModels())
 	case "moonshot":
 		selectedModels, selectErr = promptForModelSelection(getMoonshotModels())
+	case "sakana":
+		selectedModels, selectErr = promptForModelSelection(getSakanaModels())
 	}
 
 	if selectErr != nil {
@@ -1511,7 +1519,7 @@ Running without flags starts interactive configuration mode, which guides you
 through setting up providers (Anthropic, OpenAI, Ollama, etc.) and their models.
 
 Comanda supports two types of providers:
-  API-based:  OpenAI, Anthropic, Google, X.AI, Deepseek, Moonshot (require API keys)
+  API-based:  OpenAI, Anthropic, Google, X.AI, Deepseek, Moonshot, Sakana (require API keys)
   Local:      Ollama, vLLM (require running servers)
   CLI Agents: Claude Code, Gemini CLI, OpenAI Codex (require installed binaries)
 
@@ -1854,13 +1862,13 @@ Flag Groups:
 			for {
 				log.Printf("\n")
 				log.Printf("Available provider types:\n")
-				log.Printf("  API-based:   openai, anthropic, google, xai, deepseek, moonshot\n")
+				log.Printf("  API-based:   openai, anthropic, google, xai, deepseek, moonshot, sakana\n")
 				log.Printf("  Local:       ollama, vllm, llama.cpp\n")
 				log.Printf("  CLI Agents:  claude-code, gemini-cli, openai-codex\n")
 				log.Printf("\nEnter provider: ")
 				provider, _ = reader.ReadString('\n')
 				provider = strings.TrimSpace(provider)
-				validProviders := []string{"openai", "anthropic", "ollama", "vllm", "llama.cpp", "google", "xai", "deepseek", "moonshot", "claude-code", "gemini-cli", "openai-codex"}
+				validProviders := []string{"openai", "anthropic", "ollama", "vllm", "llama.cpp", "google", "xai", "deepseek", "moonshot", "sakana", "claude-code", "gemini-cli", "openai-codex"}
 				isValid := false
 				for _, vp := range validProviders {
 					if provider == vp {
@@ -2036,6 +2044,18 @@ Flag Groups:
 					return
 				}
 				models := getMoonshotModels()
+				selectedModels, err = promptForModelSelection(models)
+				if err != nil {
+					log.Printf("Error selecting models: %v\n", err)
+					return
+				}
+
+			case "sakana":
+				if apiKey == "" {
+					log.Printf("Error: API key is required for Sakana")
+					return
+				}
+				models := getSakanaModels()
 				selectedModels, err = promptForModelSelection(models)
 				if err != nil {
 					log.Printf("Error selecting models: %v\n", err)

@@ -139,6 +139,15 @@ func (r *ModelRegistry) initializeDefaultModels() {
 		"moonshot-",
 	})
 
+	// Sakana Fugu models
+	r.RegisterModels("sakana", []string{
+		"fugu",
+		"fugu-ultra",
+	})
+	r.RegisterFamilies("sakana", []string{
+		"fugu-",
+	})
+
 	// Claude Code models (local CLI)
 	r.RegisterModels("claude-code", []string{
 		"claude-code",

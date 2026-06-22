@@ -314,6 +314,7 @@ func defaultDetectProvider(modelName string) Provider {
 		NewXAIProvider(),       // Handles grok- models
 		NewDeepseekProvider(),  // Handles deepseek- models
 		NewMoonshotProvider(),  // Handles moonshot- models
+		NewSakanaProvider(),    // Handles fugu models
 		NewOpenAIProvider(),    // Handles gpt- models
 	}
 

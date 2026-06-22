@@ -137,6 +137,7 @@ Examples demonstrating integration with different AI models:
 - `anthropic-pdf-example.yaml` - Using Anthropic's Claude model with PDF processing
 - `google-example.yaml` - Integration with Google's AI models
 - `xai-example.yaml` - X.AI model integration example
+- `sakana-example.yaml` - Sakana Fugu API integration example
 
 ### File Processing (`file-processing/`)
 Examples of file manipulation and processing:
@@ -233,6 +234,7 @@ Each example includes comments explaining its functionality and any specific req
    - `model-examples/anthropic-pdf-example.yaml` (PDF processing)
    - `model-examples/google-example.yaml` (Google AI integration)
    - `model-examples/xai-example.yaml` (X.AI integration)
+   - `model-examples/sakana-example.yaml` (Sakana Fugu integration)
 
 4. **Multi-Agent Examples**: Combine multiple agentic coding tools
    - `multi-agent/architecture-planning.yaml` (parallel analysis + synthesis)

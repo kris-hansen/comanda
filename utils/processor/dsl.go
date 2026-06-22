@@ -2207,6 +2207,8 @@ func (p *Processor) validateGeneratedWorkflow(yamlContent string) error {
 					provider = models.NewDeepseekProvider()
 				case "moonshot":
 					provider = models.NewMoonshotProvider()
+				case "sakana":
+					provider = models.NewSakanaProvider()
 				case "ollama":
 					provider = models.NewOllamaProvider()
 				case "vllm":
@@ -2334,6 +2336,8 @@ func (p *Processor) getProviderForModel(modelName string) (models.Provider, erro
 			newProvider = models.NewDeepseekProvider()
 		case "moonshot":
 			newProvider = models.NewMoonshotProvider()
+		case "sakana":
+			newProvider = models.NewSakanaProvider()
 		case "ollama":
 			newProvider = models.NewOllamaProvider()
 		case "vllm":

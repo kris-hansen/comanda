@@ -54,6 +54,7 @@ cat main.go | comanda process multi-agent.yaml
 ## Features
 
 - **Multi-agent** — Claude Code, Gemini CLI, OpenAI Codex in parallel
+- **API providers** — OpenAI, Anthropic, Google, X.AI, Deepseek, Moonshot, Sakana
 - **Agentic loops** — Iterative refinement with tool use
 - **Codebase indexing** — Persistent code context across workflows  
 - **Git worktrees** — Parallel execution in isolated branches

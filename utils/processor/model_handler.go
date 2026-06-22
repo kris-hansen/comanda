@@ -147,6 +147,8 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 					provider = models.NewDeepseekProvider()
 				case "moonshot":
 					provider = models.NewMoonshotProvider()
+				case "sakana":
+					provider = models.NewSakanaProvider()
 				case "ollama":
 					provider = models.NewOllamaProvider()
 				case "vllm":
@@ -365,6 +367,8 @@ func (p *Processor) configureProviders() error {
 			providerConfig, err = p.envConfig.GetProviderConfig("deepseek")
 		case "moonshot":
 			providerConfig, err = p.envConfig.GetProviderConfig("moonshot")
+		case "sakana":
+			providerConfig, err = p.envConfig.GetProviderConfig("sakana")
 		default:
 			return fmt.Errorf("unknown provider: %s", providerName)
 		}
