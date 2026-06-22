@@ -629,7 +629,7 @@ paths:
               properties:
                 name:
                   type: string
-                  description: Provider name (e.g., openai, anthropic, google, xai, ollama)
+                  description: Provider name (e.g., openai, anthropic, google, xai, sakana, ollama)
                 apiKey:
                   type: string
                   description: API key to validate
