@@ -75,6 +75,7 @@ func (o *OpenAIProvider) SupportsModel(modelName string) bool {
 		"gpt-4o-", // gpt-4o variants
 		"gpt-4.1",
 		"gpt-5-", // gpt-5 variants like gpt-5-mini, gpt-5-nano
+		"gpt-5.", // versioned GPT-5 families like gpt-5.6-sol
 		"o1-",    // o1 variants
 		"o3-",    // o3 variants
 		"o4-",    // o4 variants

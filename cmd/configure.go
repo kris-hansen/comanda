@@ -40,13 +40,17 @@ var (
 // Green checkmark for successful operations
 const greenCheckmark = "\u2705"
 
-// Primary OpenAI models based on the latest o-series and flagship models
+// Primary OpenAI models based on the latest GPT-5 family and supported legacy models.
 var primaryOpenAIModels = []string{
-	// GPT-5.1 series (latest)
+	// GPT-5.6 series (latest). gpt-5.6 is an alias for gpt-5.6-sol.
+	"gpt-5.6",
+	"gpt-5.6-sol",
+	"gpt-5.6-terra",
+	"gpt-5.6-luna",
+	// Previous GPT-5 series
 	"gpt-5.1",
 	"gpt-5.1-mini",
 	"gpt-5.1-nano",
-	// GPT-5 series
 	"gpt-5",
 	"gpt-5-mini",
 	"gpt-5-nano",
