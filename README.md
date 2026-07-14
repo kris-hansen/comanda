@@ -2,11 +2,19 @@
 
 # comanda
 
-**Declarative AI pipelines for the command line.**
+Declarative AI workflows for the command line.
 
-Define LLM workflows in YAML. Run Claude Code, Codex, and Gemini CLI in parallel. Version control everything.
+Comanda turns repeatable AI work into YAML pipelines you can run, review, and
+version control. Use it to generate workflows from natural language, run
+multi-model pipelines, orchestrate agentic loops, process files, call tools, and
+wire Claude Code, Gemini CLI, OpenAI Codex, and API models together.
 
-🌐 **[comanda.sh](https://comanda.sh)** — Getting started, features, and templates
+For the full guide, feature tour, and copy-ready workflow templates, start at
+[comanda.sh](https://comanda.sh):
+
+- [Features](https://comanda.sh/features)
+- [Templates](https://comanda.sh/templates)
+- [GitHub examples](examples/README.md)
 
 ## Install
 
@@ -14,60 +22,81 @@ Define LLM workflows in YAML. Run Claude Code, Codex, and Gemini CLI in parallel
 brew install kris-hansen/comanda/comanda
 ```
 
-Or: `go install github.com/kris-hansen/comanda@latest` · [Releases](https://github.com/kris-hansen/comanda/releases)
+Or install with Go:
+
+```bash
+go install github.com/kris-hansen/comanda@latest
+```
+
+See [GitHub Releases](https://github.com/kris-hansen/comanda/releases) for
+prebuilt binaries.
 
 ## Quick Start
 
 ```bash
-comanda configure                              # Set up API keys
-comanda generate "review this code for bugs"   # Generate workflow from English
-comanda process workflow.yaml                  # Run a workflow
+comanda configure
+comanda generate workflow.yaml "review this code for bugs"
+comanda process workflow.yaml
 ```
 
-## Example
+Pipe input through a workflow:
+
+```bash
+cat main.go | comanda process workflow.yaml
+```
+
+Inspect or iterate on a workflow:
+
+```bash
+comanda chart workflow.yaml
+comanda improve workflow.yaml "Add security findings and suggested fixes"
+```
+
+## Minimal Workflow
 
 ```yaml
-parallel-process:
-  claude:
-    input: STDIN
-    model: claude-code
-    action: "Analyze architecture"
-    output: $CLAUDE
-
-  gemini:
-    input: STDIN
-    model: gemini-cli
-    action: "Identify patterns"
-    output: $GEMINI
-
-synthesize:
-  input: "Claude: $CLAUDE\nGemini: $GEMINI"
-  model: claude-code
-  action: "Combine into recommendations"
+summarize:
+  input: STDIN
+  model: gpt-4o
+  action: "Summarize the input in three bullets."
   output: STDOUT
 ```
 
+Run it:
+
 ```bash
-cat main.go | comanda process multi-agent.yaml
+cat notes.md | comanda process summarize.yaml
 ```
 
-## Features
+## What You Can Build
 
-- **Multi-agent** — Claude Code, Gemini CLI, OpenAI Codex in parallel
-- **API providers** — OpenAI, Anthropic, Google, X.AI, Deepseek, Moonshot, Sakana
-- **Agentic loops** — Iterative refinement with tool use
-- **Codebase indexing** — Persistent code context across workflows  
-- **Git worktrees** — Parallel execution in isolated branches
-- **All the I/O** — Files, URLs, databases, images, chunking
+- Multi-agent reviews with Claude Code, Gemini CLI, OpenAI Codex, and API models
+- Agentic loops that iterate until work is complete
+- File, URL, image, PDF, database, and batch-processing workflows
+- Tool-enabled workflows with explicit command allowlists
+- Codebase indexes for persistent project context
+- Git worktree workflows for parallel isolated implementation
+- Server-backed workflows callable over HTTP
 
-See [comanda.sh/features](https://comanda.sh/features) for full details.
+## More Examples
 
-## Documentation
+Most examples and walkthroughs live on [comanda.sh](https://comanda.sh):
 
-- [Examples](examples/README.md)
-- [Multi-Agent Patterns](examples/multi-agent/README.md)
-- [Agentic Loops](examples/agentic-loop/)
+- [Browse workflow templates](https://comanda.sh/templates)
+- [Explore all features](https://comanda.sh/features)
+- [Local examples directory](examples/README.md)
+- [Multi-agent patterns](examples/multi-agent/README.md)
+- [Agentic loops](examples/agentic-loop/)
+- [Tool use](examples/tool-use/README.md)
 - [Server API](docs/server-api.md)
+
+## Development
+
+```bash
+make deps
+make build
+make test
+```
 
 ## License
 
