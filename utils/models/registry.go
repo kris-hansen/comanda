@@ -69,11 +69,15 @@ func (r *ModelRegistry) initializeDefaultModels() {
 
 	// OpenAI models - primary models only, the full list is fetched from the API
 	r.RegisterModels("openai", []string{
-		// GPT-5.1 series (latest)
+		// GPT-5.6 series (latest)
+		"gpt-5.6",
+		"gpt-5.6-sol",
+		"gpt-5.6-terra",
+		"gpt-5.6-luna",
+		// Previous GPT-5 series
 		"gpt-5.1",
 		"gpt-5.1-mini",
 		"gpt-5.1-nano",
-		// GPT-5 series
 		"gpt-5",
 		"gpt-5-mini",
 		"gpt-5-nano",
@@ -94,10 +98,20 @@ func (r *ModelRegistry) initializeDefaultModels() {
 
 	// X.AI models
 	r.RegisterModels("xai", []string{
+		// Current Grok models
+		"grok-4.5",
+		"grok-4.5-latest",
+		"grok-4.3",
+		"grok-4.3-latest",
+		"grok-latest",
+		// Previous Grok models retained for compatibility
 		"grok-beta",
 		"grok-vision-beta",
 		"grok-4",
 		"grok-4-heavy",
+	})
+	r.RegisterFamilies("xai", []string{
+		"grok-",
 	})
 
 	// Deepseek models

@@ -15,6 +15,11 @@ func TestSupportsModel(t *testing.T) {
 		// GPT models
 		{"gpt-4", "gpt-4", true},
 		{"gpt-3.5-turbo", "gpt-3.5-turbo", true},
+		{"gpt-5.6 alias", "gpt-5.6", true},
+		{"gpt-5.6 Sol", "gpt-5.6-sol", true},
+		{"gpt-5.6 Terra", "gpt-5.6-terra", true},
+		{"gpt-5.6 Luna", "gpt-5.6-luna", true},
+		{"future dotted GPT-5 family", "gpt-5.7", true},
 
 		// O1 models
 		{"o1-pro", "o1-pro", true},
@@ -72,6 +77,7 @@ func TestIsNewModelSeries(t *testing.T) {
 		{"o1-preview", "o1-preview", true},
 		{"o3-mini", "o3-mini", true},
 		{"gpt-4o-mini", "gpt-4o-mini", true},
+		{"gpt-5.6-sol", "gpt-5.6-sol", true},
 
 		// Legacy models
 		{"gpt-4", "gpt-4", false},
@@ -86,5 +92,17 @@ func TestIsNewModelSeries(t *testing.T) {
 				t.Errorf("isNewModelSeries(%q) = %v, want %v", tt.model, result, tt.expected)
 			}
 		})
+	}
+}
+
+func TestGPT56UsesReasoningModelTokenParameter(t *testing.T) {
+	provider := NewOpenAIProvider()
+	req := provider.createChatCompletionRequest("gpt-5.6-sol", nil)
+
+	if req.MaxCompletionTokens == 0 {
+		t.Fatal("GPT-5.6 request must use max_completion_tokens")
+	}
+	if req.MaxTokens != 0 {
+		t.Fatalf("GPT-5.6 request must not use legacy max_tokens; got %d", req.MaxTokens)
 	}
 }
