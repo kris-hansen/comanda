@@ -133,10 +133,12 @@ docker run -d -p 5432:5432 comanda-postgres
 ### Model Examples (`model-examples/`)
 Examples demonstrating integration with different AI models:
 - `openai-example.yaml` - Basic OpenAI integration example
+- `gpt-5.6-example.yaml` - OpenAI GPT-5.6 Sol, Terra, and Luna via the Responses API
 - `ollama-example.yaml` - Using local Ollama models
 - `anthropic-pdf-example.yaml` - Using Anthropic's Claude model with PDF processing
 - `google-example.yaml` - Integration with Google's AI models
 - `xai-example.yaml` - X.AI model integration example
+- `grok-4-example.yaml` - X.AI Grok 4.5 and Grok 4.3 workflow
 - `sakana-example.yaml` - Sakana Fugu API integration example
 
 ### File Processing (`file-processing/`)

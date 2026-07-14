@@ -2,7 +2,7 @@ step_one:
   input:
     - ../document-processing/sample.pdf
   model:
-    - grok-beta
+    - grok-4.5
   action:
     - provide a summary of this pdf document
   output:

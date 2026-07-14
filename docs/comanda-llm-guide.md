@@ -237,7 +237,7 @@ consolidate_results:
 - Repetitive processing tasks
 - High-volume batch operations
 
-**Use flagship models (opus, pro, o1, o3, gpt-5) for:**
+**Use flagship models (GPT-5.6 Sol, Grok 4.5, opus, pro, o1, o3) for:**
 - Complex reasoning and analysis
 - Creative writing and nuanced content
 - Multi-step problem solving
@@ -245,10 +245,10 @@ consolidate_results:
 - Small token window tasks where quality matters most
 
 **Model tiers (from cheapest to most expensive):**
-- **Nano/Lite tier**: `gpt-5.1-nano`, `gpt-5-nano`, `gemini-2.5-flash-lite`
-- **Mini/Flash tier**: `gpt-5.1-mini`, `gpt-5-mini`, `o4-mini`, `o3-mini`, `gemini-2.5-flash`, `claude-haiku-4-5`
-- **Standard tier**: `gpt-4o`, `gpt-4.1`, `gemini-2.5-pro`, `claude-sonnet-4-5`
-- **Flagship tier**: `gpt-5`, `gpt-5.1`, `o1`, `o3`, `o1-pro`, `o3-pro`, `claude-opus-4-5`, `gemini-3-pro-preview`
+- **Nano/Lite tier**: `gpt-5.6-luna`, `gpt-5-nano`, `gemini-2.5-flash-lite`
+- **Mini/Flash tier**: `gpt-5-mini`, `o4-mini`, `o3-mini`, `gemini-2.5-flash`, `claude-haiku-4-5`
+- **Standard tier**: `gpt-5.6-terra`, `gpt-4.1`, `grok-4.3`, `gemini-2.5-pro`, `claude-sonnet-4-5`
+- **Flagship tier**: `gpt-5.6-sol` (or alias `gpt-5.6`), `grok-4.5`, `o3-pro`, `claude-opus-4-5`, `gemini-3-pro-preview`
 
 **Claude Code models** (for agentic programming tasks via local Claude CLI):
 - `claude-code` - Default Claude Code model

@@ -1,0 +1,38 @@
+# GPT-5.6 family example using OpenAI's recommended Responses API.
+# gpt-5.6 is an alias for gpt-5.6-sol.
+
+gpt56_sol_example:
+  type: openai-responses
+  input:
+    - examples/example_filename.txt
+  model: gpt-5.6-sol
+  instructions: "You are a helpful assistant specialized in business analysis."
+  action:
+    - analyze these company names and identify which are in the HVAC industry
+  max_output_tokens: 2000
+  output:
+    - STDOUT
+
+gpt56_terra_example:
+  type: openai-responses
+  input:
+    - examples/example_filename.txt
+  model: gpt-5.6-terra
+  instructions: "Balance analysis quality with cost."
+  action:
+    - rank the five company names with the strongest brand potential and explain why
+  max_output_tokens: 2000
+  output:
+    - STDOUT
+
+gpt56_luna_example:
+  type: openai-responses
+  input:
+    - examples/example_filename.txt
+  model: gpt-5.6-luna
+  instructions: "Return a compact, high-volume-friendly result."
+  action:
+    - classify each company name by likely industry
+  max_output_tokens: 2000
+  output:
+    - STDOUT

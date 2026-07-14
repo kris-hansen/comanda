@@ -47,4 +47,33 @@ func TestModelConsistency(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("Latest OpenAI Models Consistency", func(t *testing.T) {
+		provider := models.NewOpenAIProvider()
+		for _, model := range []string{"gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"} {
+			if !isPrimaryOpenAIModel(model) {
+				t.Errorf("latest OpenAI model %s is missing from configure", model)
+			}
+			if !provider.ValidateModel(model) {
+				t.Errorf("latest OpenAI model %s is not valid at runtime", model)
+			}
+		}
+	})
+
+	t.Run("Latest XAI Models Consistency", func(t *testing.T) {
+		provider := models.NewXAIProvider()
+		configured := make(map[string]bool)
+		for _, model := range getXAIModels() {
+			configured[model] = true
+		}
+
+		for _, model := range []string{"grok-4.5", "grok-4.3", "grok-latest"} {
+			if !configured[model] {
+				t.Errorf("latest XAI model %s is missing from configure", model)
+			}
+			if !provider.ValidateModel(model) {
+				t.Errorf("latest XAI model %s is not valid at runtime", model)
+			}
+		}
+	})
 }

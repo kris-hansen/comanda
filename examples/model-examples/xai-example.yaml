@@ -2,7 +2,7 @@ step_one:
   input:
     - examples/example_filename.txt
   model:
-    - grok-beta
+    - grok-4.5
   action:
     - analyze these company names and identify which ones have the strongest brand potential
   output:
