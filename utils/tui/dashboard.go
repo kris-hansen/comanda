@@ -18,6 +18,11 @@ type Activity struct {
 	Message   string
 }
 
+type activityDisplayLine struct {
+	Type string
+	Text string
+}
+
 // DashboardModel is the bubbletea model for the live dashboard
 type DashboardModel struct {
 	workflowName  string
@@ -37,33 +42,36 @@ type DashboardModel struct {
 	status        string // "running", "paused", "complete", "error"
 	errorMsg      string
 
-	spinner        spinner.Model
-	width          int
-	height         int
-	theme          *Theme
-	keymap         dashboardKeyMap
-	startTime      time.Time
-	eventChan      chan ProgressEvent
-	reporter       *ProgressReporter
-	quitting       bool
-	verbose        bool
-	debugMode      bool
-	debugScroll    int
-	outputExpanded bool
-	outputScroll   int
-	maxActivity    int
-	maxOutput      int
-	maxDebug       int
-	debugWriter    *DebugWriter
+	spinner          spinner.Model
+	width            int
+	height           int
+	theme            *Theme
+	keymap           dashboardKeyMap
+	startTime        time.Time
+	eventChan        chan ProgressEvent
+	reporter         *ProgressReporter
+	quitting         bool
+	verbose          bool
+	debugMode        bool
+	debugScroll      int
+	activityExpanded bool
+	activityScroll   int
+	outputExpanded   bool
+	outputScroll     int
+	maxActivity      int
+	maxOutput        int
+	maxDebug         int
+	debugWriter      *DebugWriter
 }
 
 type dashboardKeyMap struct {
-	Quit         key.Binding
-	Verbose      key.Binding
-	ToggleDebug  key.Binding
-	ToggleOutput key.Binding
-	ScrollUp     key.Binding
-	ScrollDown   key.Binding
+	Quit           key.Binding
+	Verbose        key.Binding
+	ToggleDebug    key.Binding
+	ToggleActivity key.Binding
+	ToggleOutput   key.Binding
+	ScrollUp       key.Binding
+	ScrollDown     key.Binding
 }
 
 func defaultDashboardKeyMap() dashboardKeyMap {
@@ -79,6 +87,10 @@ func defaultDashboardKeyMap() dashboardKeyMap {
 		ToggleDebug: key.NewBinding(
 			key.WithKeys("d"),
 			key.WithHelp("d", "debug panel"),
+		),
+		ToggleActivity: key.NewBinding(
+			key.WithKeys("ctrl+r"),
+			key.WithHelp("^R", "activity details"),
 		),
 		ToggleOutput: key.NewBinding(
 			key.WithKeys("ctrl+o"),
@@ -179,17 +191,29 @@ func (m *DashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.verbose = !m.verbose
 		case key.Matches(msg, m.keymap.ToggleDebug):
 			m.debugMode = !m.debugMode
+		case key.Matches(msg, m.keymap.ToggleActivity):
+			m.activityExpanded = !m.activityExpanded
+			m.activityScroll = 0
+			m.outputExpanded = false
 		case key.Matches(msg, m.keymap.ToggleOutput):
 			m.outputExpanded = !m.outputExpanded
 			m.outputScroll = 0 // Reset scroll when toggling
+			m.activityExpanded = false
 		case key.Matches(msg, m.keymap.ScrollUp):
-			if m.outputExpanded && m.outputScroll > 0 {
+			if m.activityExpanded && m.activityScroll > 0 {
+				m.activityScroll--
+			} else if m.outputExpanded && m.outputScroll > 0 {
 				m.outputScroll--
 			} else if m.debugMode && m.debugScroll > 0 {
 				m.debugScroll--
 			}
 		case key.Matches(msg, m.keymap.ScrollDown):
-			if m.outputExpanded {
+			if m.activityExpanded {
+				maxScroll := len(m.activityDetailLines()) - m.getActivityPanelHeight()
+				if maxScroll > 0 && m.activityScroll < maxScroll {
+					m.activityScroll++
+				}
+			} else if m.outputExpanded {
 				maxScroll := len(m.outputLines) - m.getOutputPanelHeight()
 				if maxScroll > 0 && m.outputScroll < maxScroll {
 					m.outputScroll++
@@ -277,9 +301,11 @@ func (m *DashboardModel) addActivity(actType, message string) {
 		Message:   message,
 	})
 
-	// Trim to max
-	if len(m.activities) > m.maxActivity*2 {
-		m.activities = m.activities[len(m.activities)-m.maxActivity:]
+	// Keep enough history to make the detailed activity view useful without
+	// allowing a long-running workflow to retain unbounded UI state.
+	const maxActivityHistory = 500
+	if len(m.activities) > maxActivityHistory {
+		m.activities = m.activities[len(m.activities)-maxActivityHistory:]
 	}
 }
 
@@ -308,6 +334,13 @@ func (m *DashboardModel) View() string {
 		var sections []string
 		sections = append(sections, m.renderHeader())
 		sections = append(sections, m.renderExpandedOutput())
+		sections = append(sections, m.renderFooter())
+		return lipgloss.JoinVertical(lipgloss.Left, sections...)
+	}
+	if m.activityExpanded {
+		var sections []string
+		sections = append(sections, m.renderHeader())
+		sections = append(sections, m.renderExpandedActivity())
 		sections = append(sections, m.renderFooter())
 		return lipgloss.JoinVertical(lipgloss.Left, sections...)
 	}
@@ -478,6 +511,7 @@ func (m *DashboardModel) renderActivity() string {
 
 	var content strings.Builder
 	content.WriteString(labelStyle.Render("RECENT ACTIVITY"))
+	content.WriteString(lipgloss.NewStyle().Foreground(m.theme.Muted).Render(" (^R details)"))
 	content.WriteString("\n")
 
 	if len(m.activities) == 0 {
@@ -522,6 +556,119 @@ func (m *DashboardModel) renderActivity() string {
 	}
 
 	return boxStyle.Render(content.String())
+}
+
+func (m *DashboardModel) renderExpandedActivity() string {
+	panelHeight := m.getActivityPanelHeight()
+	boxStyle := m.theme.BoxNormal.Width(m.width - 4).Height(panelHeight + 2)
+	labelStyle := lipgloss.NewStyle().Bold(true).Foreground(m.theme.Secondary)
+	mutedStyle := lipgloss.NewStyle().Foreground(m.theme.Muted)
+
+	lines := m.activityDetailLines()
+	var content strings.Builder
+	content.WriteString(labelStyle.Render("RECENT ACTIVITY"))
+	content.WriteString(mutedStyle.Render(" (detailed)"))
+	if len(lines) > panelHeight {
+		content.WriteString(mutedStyle.Render(fmt.Sprintf(" (%d-%d of %d) ↑↓ scroll",
+			m.activityScroll+1,
+			min(m.activityScroll+panelHeight, len(lines)),
+			len(lines),
+		)))
+	} else {
+		content.WriteString(mutedStyle.Render(fmt.Sprintf(" (%d lines)", len(lines))))
+	}
+	content.WriteString("\n")
+
+	if len(lines) == 0 {
+		content.WriteString(mutedStyle.Italic(true).Render("  Waiting for activity..."))
+		return boxStyle.Render(content.String())
+	}
+
+	start := m.activityScroll
+	end := start + panelHeight
+	if end > len(lines) {
+		end = len(lines)
+		start = max(0, end-panelHeight)
+	}
+	for _, line := range lines[start:end] {
+		style := lipgloss.NewStyle().Foreground(m.theme.Muted)
+		switch line.Type {
+		case "tool":
+			style = lipgloss.NewStyle().Foreground(m.theme.Secondary)
+		case "output":
+			style = lipgloss.NewStyle().Foreground(lipgloss.Color("#E5E7EB"))
+		case "error":
+			style = lipgloss.NewStyle().Foreground(m.theme.Error)
+		}
+		content.WriteString("  " + style.Render(line.Text) + "\n")
+	}
+
+	return boxStyle.Render(content.String())
+}
+
+func (m *DashboardModel) activityDetailLines() []activityDisplayLine {
+	if len(m.activities) == 0 {
+		return nil
+	}
+
+	maxWidth := max(20, m.width-10)
+	lines := make([]activityDisplayLine, 0, len(m.activities))
+	for _, activity := range m.activities {
+		icon := "·"
+		switch activity.Type {
+		case "tool":
+			icon = "→"
+		case "output":
+			icon = "◦"
+		case "error":
+			icon = "✗"
+		case "info":
+			icon = "•"
+		}
+
+		prefix := fmt.Sprintf("%s %s ", activity.Timestamp.Format("15:04:05"), icon)
+		continuation := strings.Repeat(" ", len(prefix))
+		wrapped := wrapActivityText(activity.Message, max(1, maxWidth-len(prefix)))
+		for i, line := range wrapped {
+			if i == 0 {
+				lines = append(lines, activityDisplayLine{Type: activity.Type, Text: prefix + line})
+			} else {
+				lines = append(lines, activityDisplayLine{Type: activity.Type, Text: continuation + line})
+			}
+		}
+	}
+	return lines
+}
+
+func wrapActivityText(message string, width int) []string {
+	if width < 1 {
+		width = 1
+	}
+
+	var wrapped []string
+	for _, paragraph := range strings.Split(message, "\n") {
+		runes := []rune(paragraph)
+		if len(runes) == 0 {
+			wrapped = append(wrapped, "")
+			continue
+		}
+		for len(runes) > width {
+			cut := width
+			for i := width; i > 0; i-- {
+				if runes[i-1] == ' ' || runes[i-1] == '\t' {
+					cut = i - 1
+					break
+				}
+			}
+			if cut == 0 {
+				cut = width
+			}
+			wrapped = append(wrapped, strings.TrimSpace(string(runes[:cut])))
+			runes = []rune(strings.TrimSpace(string(runes[cut:])))
+		}
+		wrapped = append(wrapped, string(runes))
+	}
+	return wrapped
 }
 
 func (m *DashboardModel) renderOutput() string {
@@ -679,10 +826,12 @@ func (m *DashboardModel) renderFooter() string {
 		MarginTop(1)
 
 	var keys []string
-	if m.outputExpanded {
+	if m.activityExpanded {
+		keys = []string{"q quit", "^R collapse", "↑↓ scroll"}
+	} else if m.outputExpanded {
 		keys = []string{"q quit", "^O collapse", "↑↓ scroll"}
 	} else {
-		keys = []string{"q quit", "v verbose", "d debug", "^O output"}
+		keys = []string{"q quit", "v verbose", "d debug", "^R activity", "^O output"}
 		if m.debugMode && len(m.debugLines) > m.maxDebug {
 			keys = append(keys, "↑↓ scroll")
 		}
@@ -738,4 +887,18 @@ func (m *DashboardModel) getOutputPanelHeight() int {
 		return m.height - 8 // Leave room for header and footer
 	}
 	return 20
+}
+
+func (m *DashboardModel) getActivityPanelHeight() int {
+	if m.height > 10 {
+		return m.height - 8 // Leave room for header and footer
+	}
+	return 20
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
