@@ -25,6 +25,7 @@ var (
 	indexForce          bool
 	indexEnhance        bool
 	indexEnhanceModel   string
+	indexMaxFiles       int
 	indexMaxFilesPerDir int
 
 	// Update flags
@@ -175,12 +176,14 @@ func init() {
 	captureCmd.Flags().BoolVar(&indexForce, "force", false, "Overwrite existing index")
 	captureCmd.Flags().BoolVar(&indexEnhance, "enhance", false, "Run a second-pass AI macro analysis using default_generation_model")
 	captureCmd.Flags().StringVar(&indexEnhanceModel, "enhance-model", "", "Model for --enhance (default: configured default_generation_model)")
+	captureCmd.Flags().IntVar(&indexMaxFiles, "max-files", codebaseindex.DefaultMaxFiles, "Max source files included in the index (0 = unlimited)")
 	captureCmd.Flags().IntVar(&indexMaxFilesPerDir, "max-files-per-dir", codebaseindex.DefaultMaxFilesPerDir, "Max files listed per directory in the layout tree (0 = unlimited)")
 
 	// Update flags
 	updateCmd.Flags().BoolVar(&updateFull, "full", false, "Force full regeneration")
 	updateCmd.Flags().BoolVar(&indexEnhance, "enhance", false, "Run a second-pass AI macro analysis during update")
 	updateCmd.Flags().StringVar(&indexEnhanceModel, "enhance-model", "", "Model for --enhance (default: configured default_generation_model)")
+	updateCmd.Flags().IntVar(&indexMaxFiles, "max-files", codebaseindex.DefaultMaxFiles, "Max source files included in the index (0 = unlimited)")
 	updateCmd.Flags().IntVar(&indexMaxFilesPerDir, "max-files-per-dir", codebaseindex.DefaultMaxFilesPerDir, "Max files listed per directory in the layout tree (0 = unlimited)")
 
 	// Diff flags
@@ -227,6 +230,7 @@ func runCapture(cmd *cobra.Command, args []string) error {
 	cfg := codebaseindex.DefaultConfig()
 	cfg.Root = absPath
 	cfg.Verbose = verbose
+	cfg.MaxFiles = indexMaxFiles
 	cfg.MaxFilesPerDir = indexMaxFilesPerDir
 
 	// Set format
@@ -442,6 +446,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	cfg.Root = entry.Path
 	cfg.OutputPath = entry.IndexPath
 	cfg.Verbose = verbose
+	cfg.MaxFiles = indexMaxFiles
 	cfg.MaxFilesPerDir = indexMaxFilesPerDir
 
 	// Set format from entry

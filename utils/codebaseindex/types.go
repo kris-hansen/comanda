@@ -77,6 +77,10 @@ type Config struct {
 	// Repository Layout tree. 0 or negative means unlimited (list every file).
 	MaxFilesPerDir int
 
+	// MaxFiles caps how many source files are selected for symbol extraction and
+	// inclusion in the index. 0 or negative means unlimited.
+	MaxFiles int
+
 	// Optional second-pass AI enhancement. The normal high-performance scan still
 	// runs first; when enabled, EnhancementFunc receives a bounded macro-analysis
 	// prompt and returns additional markdown insights for future agents.
@@ -288,5 +292,6 @@ func DefaultConfig() *Config {
 		Incremental:    false,
 		Verbose:        false,
 		MaxFilesPerDir: DefaultMaxFilesPerDir,
+		MaxFiles:       DefaultMaxFiles,
 	}
 }
