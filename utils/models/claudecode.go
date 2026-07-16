@@ -147,15 +147,17 @@ func (c *ClaudeCodeProvider) SendPrompt(modelName string, prompt string) (string
 		}
 	}
 
-	// Build the command arguments
-	args := c.buildArgs(modelName, prompt, "")
+	// Keep prompt content on stdin rather than in argv. Besides avoiding prompt
+	// leakage in process listings, this allows indexes and other large inputs to
+	// exceed the operating system's command-line argument limit.
+	args := c.buildArgs(modelName)
 
 	c.debugf("Executing: %s %v", c.binaryPath, args)
 
 	// Use retry mechanism for execution
 	result, err := retry.WithRetry(
 		func() (interface{}, error) {
-			return c.executeCommand(args, "")
+			return c.executeCommand(args, prompt, "")
 		},
 		func(err error) bool {
 			// Retry on timeout or transient errors
@@ -197,13 +199,13 @@ func (c *ClaudeCodeProvider) SendPromptWithFile(modelName string, prompt string,
 	combinedPrompt := fmt.Sprintf("File: %s\n\n```\n%s\n```\n\nTask: %s", file.Path, fileContent, prompt)
 
 	// Build args - use the file's directory as working directory
-	args := c.buildArgs(modelName, combinedPrompt, filepath.Dir(file.Path))
+	args := c.buildArgs(modelName)
 
 	c.debugf("Executing with file context: %s", file.Path)
 
 	result, err := retry.WithRetry(
 		func() (interface{}, error) {
-			return c.executeCommand(args, filepath.Dir(file.Path))
+			return c.executeCommand(args, combinedPrompt, filepath.Dir(file.Path))
 		},
 		func(err error) bool {
 			return strings.Contains(err.Error(), "timeout") ||
@@ -253,15 +255,16 @@ func (c *ClaudeCodeProvider) SendPromptAgentic(modelName string, prompt string, 
 		}
 	}
 
-	// Build agentic args (no --print flag)
-	args := c.buildArgsAgentic(modelName, prompt, allowedPaths, tools)
+	// Build agentic args. Send the prompt on stdin, not as a positional
+	// argument, so large loop context does not exceed ARG_MAX.
+	args := c.buildArgsAgentic(modelName, allowedPaths, tools)
 
 	c.debugf("Executing agentic: %s %v", c.binaryPath, args)
 
 	// Use retry mechanism for execution
 	result, err := retry.WithRetry(
 		func() (interface{}, error) {
-			return c.executeCommand(args, workDir)
+			return c.executeCommand(args, prompt, workDir)
 		},
 		func(err error) bool {
 			return strings.Contains(err.Error(), "timeout") ||
@@ -300,8 +303,9 @@ func (c *ClaudeCodeProvider) getModelFlag(modelName string) string {
 	}
 }
 
-// buildArgs constructs the command line arguments for claude
-func (c *ClaudeCodeProvider) buildArgs(modelName string, prompt string, workDir string) []string {
+// buildArgs constructs command-line arguments for Claude's non-interactive
+// mode. The prompt is deliberately supplied on stdin by executeCommand.
+func (c *ClaudeCodeProvider) buildArgs(modelName string) []string {
 	args := []string{
 		"--print", // Non-interactive mode, just print the response
 	}
@@ -309,9 +313,6 @@ func (c *ClaudeCodeProvider) buildArgs(modelName string, prompt string, workDir 
 	if model := c.getModelFlag(modelName); model != "" {
 		args = append(args, "--model", model)
 	}
-
-	// Add the prompt as positional argument
-	args = append(args, prompt)
 
 	return args
 }
@@ -336,9 +337,10 @@ func resolvePath(path string) string {
 	return path
 }
 
-// buildArgsAgentic constructs command line arguments for agentic mode
-// Uses -p (print mode) with --bare and explicit tool permissions for deterministic subprocess behavior
-func (c *ClaudeCodeProvider) buildArgsAgentic(modelName string, prompt string, allowedPaths []string, tools []string) []string {
+// buildArgsAgentic constructs command line arguments for agentic mode.
+// It uses -p (print mode) with explicit tool permissions for deterministic
+// subprocess behavior; executeCommand supplies the prompt on stdin.
+func (c *ClaudeCodeProvider) buildArgsAgentic(modelName string, allowedPaths []string, tools []string) []string {
 	// Start with -p for subprocess/one-shot mode and for subprocess mode
 	// Note: --bare was removed as it breaks auth on some Claude Code versions
 	args := []string{"-p"}
@@ -393,15 +395,15 @@ func (c *ClaudeCodeProvider) buildArgsAgentic(modelName string, prompt string, a
 		args = append(args, "--model", model)
 	}
 
-	// Add the prompt as the final positional argument
-	args = append(args, prompt)
-
 	return args
 }
 
 // executeCommand runs the claude binary and captures output
-func (c *ClaudeCodeProvider) executeCommand(args []string, workDir string) (string, error) {
+func (c *ClaudeCodeProvider) executeCommand(args []string, prompt string, workDir string) (string, error) {
 	cmd := exec.Command(c.binaryPath, args...)
+	// `claude --print` accepts piped input. Keeping prompts off argv avoids the
+	// OS command-line size cap for large file inputs and loop state.
+	cmd.Stdin = strings.NewReader(prompt)
 
 	if workDir != "" {
 		cmd.Dir = workDir

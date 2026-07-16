@@ -2,6 +2,7 @@ package models
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -103,42 +104,33 @@ func TestClaudeCodeBuildArgs(t *testing.T) {
 	tests := []struct {
 		name     string
 		model    string
-		prompt   string
 		contains []string
 	}{
 		{
 			name:     "base model",
 			model:    "claude-code",
-			prompt:   "hello",
-			contains: []string{"--print", "hello"},
+			contains: []string{"--print"},
 		},
 		{
 			name:     "opus variant",
 			model:    "claude-code-opus",
-			prompt:   "test",
-			contains: []string{"--print", "--model", "claude-opus-4-5-20251101", "test"},
+			contains: []string{"--print", "--model", "claude-opus-4-5-20251101"},
 		},
 		{
 			name:     "sonnet variant",
 			model:    "claude-code-sonnet",
-			prompt:   "test",
-			contains: []string{"--print", "--model", "claude-sonnet-4-5-20250929", "test"},
+			contains: []string{"--print", "--model", "claude-sonnet-4-5-20250929"},
 		},
 		{
 			name:     "haiku variant",
 			model:    "claude-code-haiku",
-			prompt:   "test",
-			contains: []string{"--print", "--model", "claude-haiku-4-5-20251001", "test"},
+			contains: []string{"--print", "--model", "claude-haiku-4-5-20251001"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			args := provider.buildArgs(tt.model, tt.prompt, "")
-			argsStr := ""
-			for _, arg := range args {
-				argsStr += arg + " "
-			}
+			args := provider.buildArgs(tt.model)
 			for _, expected := range tt.contains {
 				found := false
 				for _, arg := range args {
@@ -148,7 +140,7 @@ func TestClaudeCodeBuildArgs(t *testing.T) {
 					}
 				}
 				if !found {
-					t.Errorf("buildArgs(%q, %q) missing expected arg %q, got: %v", tt.model, tt.prompt, expected, args)
+					t.Errorf("buildArgs(%q) missing expected arg %q, got: %v", tt.model, expected, args)
 				}
 			}
 		})
@@ -234,7 +226,6 @@ func TestClaudeCodeBuildArgsAgentic(t *testing.T) {
 	tests := []struct {
 		name            string
 		model           string
-		prompt          string
 		allowedPaths    []string
 		tools           []string
 		contains        []string
@@ -245,10 +236,9 @@ func TestClaudeCodeBuildArgsAgentic(t *testing.T) {
 		{
 			name:            "basic agentic call",
 			model:           "claude-code-sonnet",
-			prompt:          "explore",
 			allowedPaths:    []string{"./"},
 			tools:           nil,
-			contains:        []string{"-p", "--add-dir", "--dangerously-skip-permissions", "--allowedTools", "Read,Write,Edit,Glob,Grep,Bash", "--output-format", "json", "--model", "claude-sonnet-4-5-20250929", "explore"},
+			contains:        []string{"-p", "--add-dir", "--dangerously-skip-permissions", "--allowedTools", "Read,Write,Edit,Glob,Grep,Bash", "--output-format", "json", "--model", "claude-sonnet-4-5-20250929"},
 			notContains:     []string{"--print"},
 			checkAbsPaths:   true,
 			expectedPathCnt: 1,
@@ -256,10 +246,9 @@ func TestClaudeCodeBuildArgsAgentic(t *testing.T) {
 		{
 			name:            "with tool restrictions",
 			model:           "claude-code",
-			prompt:          "test",
 			allowedPaths:    []string{"/tmp"},
 			tools:           []string{"Read", "Bash"},
-			contains:        []string{"-p", "--add-dir", "/tmp", "--dangerously-skip-permissions", "--allowedTools", "Read,Bash", "--output-format", "json", "test"},
+			contains:        []string{"-p", "--add-dir", "/tmp", "--dangerously-skip-permissions", "--allowedTools", "Read,Bash", "--output-format", "json"},
 			notContains:     []string{"--print", "--model"},
 			checkAbsPaths:   false, // /tmp is already absolute
 			expectedPathCnt: 1,
@@ -267,10 +256,9 @@ func TestClaudeCodeBuildArgsAgentic(t *testing.T) {
 		{
 			name:            "multiple paths",
 			model:           "claude-code-opus",
-			prompt:          "analyze",
 			allowedPaths:    []string{"./src", "./tests"},
 			tools:           nil,
-			contains:        []string{"-p", "--add-dir", "--dangerously-skip-permissions", "--allowedTools", "Read,Write,Edit,Glob,Grep,Bash", "--output-format", "json", "analyze"},
+			contains:        []string{"-p", "--add-dir", "--dangerously-skip-permissions", "--allowedTools", "Read,Write,Edit,Glob,Grep,Bash", "--output-format", "json"},
 			notContains:     []string{"--print"},
 			checkAbsPaths:   true,
 			expectedPathCnt: 2,
@@ -278,10 +266,9 @@ func TestClaudeCodeBuildArgsAgentic(t *testing.T) {
 		{
 			name:            "no allowed paths skips permission mode",
 			model:           "claude-code",
-			prompt:          "query",
 			allowedPaths:    []string{},
 			tools:           nil,
-			contains:        []string{"-p", "--output-format", "json", "query"},
+			contains:        []string{"-p", "--output-format", "json"},
 			notContains:     []string{"--print", "--add-dir", "--dangerously-skip-permissions", "--allowedTools"},
 			checkAbsPaths:   false,
 			expectedPathCnt: 0,
@@ -290,7 +277,7 @@ func TestClaudeCodeBuildArgsAgentic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			args := provider.buildArgsAgentic(tt.model, tt.prompt, tt.allowedPaths, tt.tools)
+			args := provider.buildArgsAgentic(tt.model, tt.allowedPaths, tt.tools)
 
 			for _, expected := range tt.contains {
 				found := false
@@ -330,6 +317,26 @@ func TestClaudeCodeBuildArgsAgentic(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestClaudeCodeExecuteCommandSendsLargePromptOnStdin(t *testing.T) {
+	dir := t.TempDir()
+	binaryPath := filepath.Join(dir, "fake-claude")
+	if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\n[ \"$#\" -eq 1 ] && [ \"$1\" = \"-p\" ] || exit 2\ncat\n"), 0o755); err != nil {
+		t.Fatalf("write fake claude: %v", err)
+	}
+
+	provider := NewClaudeCodeProvider()
+	provider.binaryPath = binaryPath
+	prompt := strings.Repeat("x", 300_000)
+
+	got, err := provider.executeCommand([]string{"-p"}, prompt, "")
+	if err != nil {
+		t.Fatalf("executeCommand() error: %v", err)
+	}
+	if got != prompt {
+		t.Fatalf("executeCommand() returned %d bytes, want %d", len(got), len(prompt))
 	}
 }
 
