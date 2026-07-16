@@ -429,6 +429,47 @@ func TestBuildCodebaseIndexConfigEncryptionKey(t *testing.T) {
 	})
 }
 
+func TestBuildCodebaseIndexConfigMaxFiles(t *testing.T) {
+	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), createTestServerConfig(), false, "")
+
+	limit := 500
+	config := processor.buildCodebaseIndexConfig(StepConfig{
+		CodebaseIndex: &CodebaseIndexConfig{MaxFiles: &limit},
+	})
+	if config.MaxFiles != limit {
+		t.Errorf("MaxFiles = %d, want %d", config.MaxFiles, limit)
+	}
+
+	unlimited := 0
+	config = processor.buildCodebaseIndexConfig(StepConfig{
+		CodebaseIndex: &CodebaseIndexConfig{MaxFiles: &unlimited},
+	})
+	if config.MaxFiles != unlimited {
+		t.Errorf("MaxFiles = %d, want unlimited (%d)", config.MaxFiles, unlimited)
+	}
+}
+
+func TestCodebaseIndexMaxFilesYAML(t *testing.T) {
+	var config DSLConfig
+	err := yaml.Unmarshal([]byte(`
+index:
+  step_type: codebase-index
+  codebase_index:
+    root: .
+    max_files: 2500
+`), &config)
+	if err != nil {
+		t.Fatalf("unmarshal workflow: %v", err)
+	}
+	if len(config.Steps) != 1 || config.Steps[0].Config.CodebaseIndex == nil {
+		t.Fatal("codebase_index step was not parsed")
+	}
+	maxFiles := config.Steps[0].Config.CodebaseIndex.MaxFiles
+	if maxFiles == nil || *maxFiles != 2500 {
+		t.Fatalf("max_files = %v, want 2500", maxFiles)
+	}
+}
+
 func TestProcess(t *testing.T) {
 	tests := []struct {
 		name        string
