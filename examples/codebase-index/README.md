@@ -93,6 +93,7 @@ index_codebase:
         priority_files:
           - cmd/**/*.go
     max_output_kb: 100         # Limit output size
+    max_files: 10000            # Source files to index (0 = unlimited)
 ```
 
 ### Enhanced Monorepo / Macro Analysis
@@ -155,6 +156,9 @@ Per-language configuration overrides:
 
 ### `max_output_kb`
 Maximum size of generated index in KB (default: 100).
+
+### `max_files`
+Maximum source files selected for indexing (default: 10,000). Set to `0` for no source-file cap.
 
 ### `enhance` / `enhance_model`
 - `enhance`: Run the optional second-pass AI macro analysis (default: false).

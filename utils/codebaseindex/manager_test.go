@@ -25,6 +25,44 @@ func TestNewManager(t *testing.T) {
 	}
 }
 
+func TestDefaultConfigMaxFiles(t *testing.T) {
+	if got := DefaultConfig().MaxFiles; got != DefaultMaxFiles {
+		t.Fatalf("DefaultConfig().MaxFiles = %d, want %d", got, DefaultMaxFiles)
+	}
+}
+
+func TestSelectCandidatesHonorsMaxFiles(t *testing.T) {
+	newFiles := func() []*FileEntry {
+		return []*FileEntry{
+			{Path: "low.go", Score: 1},
+			{Path: "high.go", Score: 5},
+			{Path: "medium.go", Score: 3},
+			{Path: "higher.go", Score: 4},
+		}
+	}
+
+	for _, tt := range []struct {
+		name  string
+		limit int
+		want  int
+	}{
+		{name: "bounded", limit: 2, want: 2},
+		{name: "unlimited with zero", limit: 0, want: 4},
+		{name: "unlimited with negative", limit: -1, want: 4},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			manager := &Manager{config: &Config{MaxFiles: tt.limit}}
+			selected := manager.selectCandidates(newFiles())
+			if len(selected) != tt.want {
+				t.Fatalf("selected %d files, want %d", len(selected), tt.want)
+			}
+			if selected[0].Path != "high.go" {
+				t.Fatalf("highest scoring file = %q, want high.go", selected[0].Path)
+			}
+		})
+	}
+}
+
 func TestDeriveRepoSlugs(t *testing.T) {
 	tests := []struct {
 		input        string

@@ -261,6 +261,10 @@ func (p *Processor) buildCodebaseIndexConfigWithError(stepConfig StepConfig) (*c
 			config.MaxOutputKB = ci.MaxOutputKB
 		}
 
+		if ci.MaxFiles != nil {
+			config.MaxFiles = *ci.MaxFiles
+		}
+
 		if ci.Enhance {
 			modelName, enhanceFunc, err := p.buildCodebaseIndexEnhancer(ci.EnhanceModel)
 			if err != nil {

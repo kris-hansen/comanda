@@ -18,8 +18,9 @@ import (
 )
 
 const (
-	// maxCandidates is the maximum number of files to select for indexing
-	maxCandidates = 100
+	// DefaultMaxFiles is the number of source files included in an index unless
+	// callers override Config.MaxFiles. 0 or a negative value means unlimited.
+	DefaultMaxFiles = 10000
 
 	// maxHashReadSize is the maximum bytes to read for hashing (1MB)
 	maxHashReadSize = 1024 * 1024
@@ -236,9 +237,9 @@ func (m *Manager) selectCandidates(files []*FileEntry) []*FileEntry {
 		return files[i].Score > files[j].Score
 	})
 
-	// Select top N
-	limit := maxCandidates
-	if len(files) < limit {
+	// Select top N. A non-positive limit means include every candidate.
+	limit := m.config.MaxFiles
+	if limit <= 0 || len(files) < limit {
 		limit = len(files)
 	}
 
