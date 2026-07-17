@@ -50,6 +50,14 @@ analyze-project:
   independent accounts and keys; that path is comanda's `moonshot` provider,
   not this one.
 
+## Agentic Mode
+
+`kimi-code` supports comanda's agentic loops (see `agentic-loop.yaml`):
+`allowed_paths` map to `--add-dir` workspace directories and the loop's working
+directory becomes the session cwd. Note that kimi's `-p` mode auto-approves
+routine actions (writes, shell commands) and has no per-tool allowlist flag, so
+the loop `tools:` list is advisory only — scope access with `allowed_paths`.
+
 ## Configuration
 
 No special configuration needed in `.env`. The provider automatically detects
