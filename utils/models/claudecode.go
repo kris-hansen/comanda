@@ -55,6 +55,13 @@ type ClaudeCodeProvider struct {
 	mu                sync.Mutex
 }
 
+// ClaudeCodeProvider implements the agentic provider capabilities.
+var (
+	_ AgenticProvider = (*ClaudeCodeProvider)(nil)
+	_ DebugFileSetter = (*ClaudeCodeProvider)(nil)
+	_ WorktreeSetter  = (*ClaudeCodeProvider)(nil)
+)
+
 // NewClaudeCodeProvider creates a new Claude Code provider instance
 func NewClaudeCodeProvider() *ClaudeCodeProvider {
 	return &ClaudeCodeProvider{}
