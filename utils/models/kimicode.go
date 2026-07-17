@@ -82,6 +82,9 @@ type KimiCodeProvider struct {
 	mu         sync.Mutex
 }
 
+// KimiCodeProvider implements the agentic provider capability.
+var _ AgenticProvider = (*KimiCodeProvider)(nil)
+
 // NewKimiCodeProvider creates a new Kimi Code provider instance
 func NewKimiCodeProvider() *KimiCodeProvider {
 	return &KimiCodeProvider{}
@@ -289,6 +292,75 @@ func (k *KimiCodeProvider) SendPromptWithFile(modelName string, prompt string, f
 	return response, nil
 }
 
+// SendPromptAgentic sends a prompt with full tool access for agentic mode.
+//
+// Permission posture: kimi's non-interactive -p mode rejects --yolo/--auto
+// (verified on 0.27.0: "Cannot combine --prompt with --yolo") and instead
+// auto-approves routine actions (file writes, shell commands) by default, so
+// no permission flags are passed — the effective posture matches claude-code's
+// --dangerously-skip-permissions, which comanda always uses in agentic mode.
+// kimi has no per-tool allowlist flag, so comanda's tools allowlist cannot be
+// enforced by the CLI and is ignored here (agentic runs get full tool access).
+func (k *KimiCodeProvider) SendPromptAgentic(modelName string, prompt string, allowedPaths []string, tools []string, workDir string) (string, error) {
+	k.debugf("Preparing to send agentic prompt via Kimi Code")
+	k.debugf("Prompt length: %d characters, allowed paths: %v, tools: %v", len(prompt), allowedPaths, tools)
+	if len(tools) > 0 {
+		k.debugf("Note: kimi has no per-tool allowlist flag; tools %v are advisory only", tools)
+	}
+
+	// Expand paths (handle ~, $HOME, etc.) before validation
+	expandedPaths, err := fileutil.ExpandPaths(allowedPaths)
+	if err != nil {
+		return "", fmt.Errorf("failed to expand allowed_paths: %w", err)
+	}
+
+	// Validate all allowed paths exist (do this first to fail fast on bad config)
+	var missingPaths []string
+	for i, path := range expandedPaths {
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			missingPaths = append(missingPaths, fmt.Sprintf("%s (expanded from %s)", path, allowedPaths[i]))
+		}
+	}
+	if len(missingPaths) > 0 {
+		return "", fmt.Errorf("allowed_path(s) do not exist:\n  • %s\n\n💡 Tip: If allowed_paths is empty, comanda will auto-infer from the workflow directory or cwd",
+			strings.Join(missingPaths, "\n  • "))
+	}
+
+	// Use expanded paths from here on
+	allowedPaths = expandedPaths
+
+	if k.binaryPath == "" {
+		if err := k.Configure("LOCAL"); err != nil {
+			return "", err
+		}
+	}
+
+	args := k.buildArgsAgentic(modelName, prompt, allowedPaths)
+
+	k.debugf("Executing agentic: %s %v", k.binaryPath, args)
+
+	// Use retry mechanism for execution
+	result, err := retry.WithRetry(
+		func() (interface{}, error) {
+			return k.executeCommand(args, workDir)
+		},
+		func(err error) bool {
+			// Retry on timeout or transient errors
+			return strings.Contains(err.Error(), "timeout") ||
+				strings.Contains(err.Error(), "connection")
+		},
+		retry.DefaultRetryConfig,
+	)
+
+	if err != nil {
+		return "", err
+	}
+
+	response := extractKimiCodeResult(result.(string))
+	k.debugf("Agentic command completed, response length: %d characters", len(response))
+	return response, nil
+}
+
 // getModelFlag returns the --model flag value for a given model name, or empty
 // string if none needed. kimi-code-<alias> maps to the model alias <alias> from
 // the user's ~/.kimi-code/config.toml; aliases are user-defined, so the variant
@@ -311,6 +383,19 @@ func (k *KimiCodeProvider) buildArgs(modelName string, prompt string) []string {
 		args = append(args, "--model", model)
 	}
 
+	return args
+}
+
+// buildArgsAgentic constructs the command line arguments for agentic mode:
+// buildArgs plus each allowed path as an additional workspace directory.
+func (k *KimiCodeProvider) buildArgsAgentic(modelName string, prompt string, allowedPaths []string) []string {
+	args := k.buildArgs(modelName, prompt)
+	for _, path := range allowedPaths {
+		// Resolve paths to absolute (expands ~ and converts relative to absolute)
+		resolvedPath := resolvePath(path)
+		k.debugf("Resolved allowed path: %s -> %s", path, resolvedPath)
+		args = append(args, "--add-dir", resolvedPath)
+	}
 	return args
 }
 

@@ -94,33 +94,37 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 		inputs := p.handler.GetInputs()
 		if len(inputs) == 0 {
 			// If there are no inputs, just send the action directly
-			// Check for agentic mode with Claude Code
+			// Check for agentic mode with an agentic-capable provider
 			if isAgenticMode {
-				if claudeCode, ok := configuredProvider.(*models.ClaudeCodeProvider); ok {
-					p.debugf("Using agentic mode with Claude Code (paths: %v, tools: %v)",
-						agenticConfig.AllowedPaths, agenticConfig.Tools)
-					// Pass stream log path to claude-code for debug visibility
+				if agentic, ok := configuredProvider.(models.AgenticProvider); ok {
+					p.debugf("Using agentic mode with %s (paths: %v, tools: %v)",
+						configuredProvider.Name(), agenticConfig.AllowedPaths, agenticConfig.Tools)
+					// Pass stream log path to the provider for debug visibility
 					streamLogPath := p.GetStreamLogPath()
 					p.debugf("Stream log path: %q", streamLogPath)
 					var debugWatcher *DebugWatcher
 					if streamLogPath != "" {
-						debugPath := streamLogPath + ".claude-debug"
-						p.debugf("Setting claude-code debug file: %s", debugPath)
-						claudeCode.SetDebugFile(debugPath)
-						// Start watching the debug file for context usage
-						if p.streamLog != nil {
-							debugWatcher = NewDebugWatcher(debugPath, p.streamLog)
-							debugWatcher.Start()
+						if df, ok := configuredProvider.(models.DebugFileSetter); ok {
+							debugPath := streamLogPath + ".claude-debug"
+							p.debugf("Setting provider debug file: %s", debugPath)
+							df.SetDebugFile(debugPath)
+							// Start watching the debug file for context usage
+							if p.streamLog != nil {
+								debugWatcher = NewDebugWatcher(debugPath, p.streamLog)
+								debugWatcher.Start()
+							}
 						}
 					}
 					// Set native worktree if provider supports it and step uses a worktree
 					worktreeName := p.getCurrentStepWorktree()
-					if worktreeName != "" && p.providerSupportsWorktrees("claude-code") {
-						p.debugf("Using native worktree support: %s", worktreeName)
-						claudeCode.SetWorktree(worktreeName)
-						defer claudeCode.ClearWorktree()
+					if worktreeName != "" && p.providerSupportsWorktrees(configuredProvider.Name()) {
+						if ws, ok := configuredProvider.(models.WorktreeSetter); ok {
+							p.debugf("Using native worktree support: %s", worktreeName)
+							ws.SetWorktree(worktreeName)
+							defer ws.ClearWorktree()
+						}
 					}
-					result, err := claudeCode.SendPromptAgentic(modelName, action,
+					result, err := agentic.SendPromptAgentic(modelName, action,
 						agenticConfig.AllowedPaths, agenticConfig.Tools, p.getEffectiveWorkDir())
 					// Stop the debug watcher
 					if debugWatcher != nil {
@@ -197,8 +201,8 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 				// In agentic mode, read the file content and use SendPromptAgentic
 				// This ensures the correct working directory is used instead of the file's temp directory
 				if isAgenticMode {
-					if claudeCode, ok := configuredProvider.(*models.ClaudeCodeProvider); ok {
-						p.debugf("Using agentic mode with Claude Code for single file input")
+					if agentic, ok := configuredProvider.(models.AgenticProvider); ok {
+						p.debugf("Using agentic mode with %s for single file input", configuredProvider.Name())
 						// Read file content
 						fileContent, err := fileutil.SafeReadFile(fileInputs[0].Path)
 						if err != nil {
@@ -208,26 +212,30 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 						combinedPrompt := fmt.Sprintf("File: %s\n\n```\n%s\n```\n\nTask: %s",
 							fileInputs[0].Path, string(fileContent), action)
 
-						// Pass stream log path to claude-code for debug visibility
+						// Pass stream log path to the provider for debug visibility
 						streamLogPath := p.GetStreamLogPath()
 						var debugWatcher *DebugWatcher
 						if streamLogPath != "" {
-							debugPath := streamLogPath + ".claude-debug"
-							p.debugf("Setting claude-code debug file: %s", debugPath)
-							claudeCode.SetDebugFile(debugPath)
-							if p.streamLog != nil {
-								debugWatcher = NewDebugWatcher(debugPath, p.streamLog)
-								debugWatcher.Start()
+							if df, ok := configuredProvider.(models.DebugFileSetter); ok {
+								debugPath := streamLogPath + ".claude-debug"
+								p.debugf("Setting provider debug file: %s", debugPath)
+								df.SetDebugFile(debugPath)
+								if p.streamLog != nil {
+									debugWatcher = NewDebugWatcher(debugPath, p.streamLog)
+									debugWatcher.Start()
+								}
 							}
 						}
 						// Set native worktree if provider supports it
 						worktreeName := p.getCurrentStepWorktree()
-						if worktreeName != "" && p.providerSupportsWorktrees("claude-code") {
-							p.debugf("Using native worktree support: %s", worktreeName)
-							claudeCode.SetWorktree(worktreeName)
-							defer claudeCode.ClearWorktree()
+						if worktreeName != "" && p.providerSupportsWorktrees(configuredProvider.Name()) {
+							if ws, ok := configuredProvider.(models.WorktreeSetter); ok {
+								p.debugf("Using native worktree support: %s", worktreeName)
+								ws.SetWorktree(worktreeName)
+								defer ws.ClearWorktree()
+							}
 						}
-						result, err := claudeCode.SendPromptAgentic(resolvedModelName, combinedPrompt,
+						result, err := agentic.SendPromptAgentic(resolvedModelName, combinedPrompt,
 							agenticConfig.AllowedPaths, agenticConfig.Tools, p.getEffectiveWorkDir())
 						if debugWatcher != nil {
 							debugWatcher.Stop()
@@ -334,32 +342,36 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 			combinedInput := strings.Join(nonFileInputs, "\n\n")
 			combinedPrompt := fmt.Sprintf("Input:\n%s\n\nAction: %s", combinedInput, action)
 
-			// Check for agentic mode with Claude Code
+			// Check for agentic mode with an agentic-capable provider
 			if isAgenticMode {
-				if claudeCode, ok := configuredProvider.(*models.ClaudeCodeProvider); ok {
-					p.debugf("Using agentic mode with Claude Code for non-file inputs")
-					// Pass stream log path to claude-code for debug visibility
+				if agentic, ok := configuredProvider.(models.AgenticProvider); ok {
+					p.debugf("Using agentic mode with %s for non-file inputs", configuredProvider.Name())
+					// Pass stream log path to the provider for debug visibility
 					streamLogPath := p.GetStreamLogPath()
 					p.debugf("Stream log path (non-file): %q", streamLogPath)
 					var debugWatcher *DebugWatcher
 					if streamLogPath != "" {
-						debugPath := streamLogPath + ".claude-debug"
-						p.debugf("Setting claude-code debug file: %s", debugPath)
-						claudeCode.SetDebugFile(debugPath)
-						// Start watching the debug file for context usage
-						if p.streamLog != nil {
-							debugWatcher = NewDebugWatcher(debugPath, p.streamLog)
-							debugWatcher.Start()
+						if df, ok := configuredProvider.(models.DebugFileSetter); ok {
+							debugPath := streamLogPath + ".claude-debug"
+							p.debugf("Setting provider debug file: %s", debugPath)
+							df.SetDebugFile(debugPath)
+							// Start watching the debug file for context usage
+							if p.streamLog != nil {
+								debugWatcher = NewDebugWatcher(debugPath, p.streamLog)
+								debugWatcher.Start()
+							}
 						}
 					}
 					// Set native worktree if provider supports it and step uses a worktree
 					worktreeName := p.getCurrentStepWorktree()
-					if worktreeName != "" && p.providerSupportsWorktrees("claude-code") {
-						p.debugf("Using native worktree support: %s", worktreeName)
-						claudeCode.SetWorktree(worktreeName)
-						defer claudeCode.ClearWorktree()
+					if worktreeName != "" && p.providerSupportsWorktrees(configuredProvider.Name()) {
+						if ws, ok := configuredProvider.(models.WorktreeSetter); ok {
+							p.debugf("Using native worktree support: %s", worktreeName)
+							ws.SetWorktree(worktreeName)
+							defer ws.ClearWorktree()
+						}
 					}
-					result, err := claudeCode.SendPromptAgentic(resolvedModelName, combinedPrompt,
+					result, err := agentic.SendPromptAgentic(resolvedModelName, combinedPrompt,
 						agenticConfig.AllowedPaths, agenticConfig.Tools, p.getEffectiveWorkDir())
 					// Stop the debug watcher
 					if debugWatcher != nil {

@@ -1,0 +1,32 @@
+# Agentic Loop with Kimi Code
+# Uses the local kimi CLI with full tool access to iteratively build a script
+#
+# Usage: cd /tmp && comanda process examples/kimi-code/agentic-loop.yaml
+#
+# The loop's allowed_paths auto-infer to the directory you run comanda from;
+# set allowed_paths explicitly to scope the agent's workspace access.
+
+implement:
+  agentic_loop:
+    max_iterations: 3
+    exit_condition: pattern_match
+    exit_pattern: "DONE"
+  input: NA
+  model: kimi-code
+  action: |
+    You are building a simple shell script. This is iteration {{ loop.iteration }}.
+
+    Task: create a file hello.sh in the current directory that prints
+    "hello from kimi-code" when run.
+
+    Previous work:
+    {{ loop.previous_output }}
+
+    Iteration 1: create hello.sh using your file tools.
+    Iteration 2: verify the file and improve it if needed.
+    Iteration 3: finalize.
+
+    If hello.sh exists and is correct, start your response with exactly: DONE
+
+    Then describe what you did.
+  output: STDOUT
