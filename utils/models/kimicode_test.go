@@ -198,7 +198,10 @@ func TestKimiCodeSendPromptArgvTransport(t *testing.T) {
 
 	provider := NewKimiCodeProvider()
 	provider.binaryPath = binaryPath
-	prompt := strings.Repeat("x", 300_000)
+	// 100 KB is large enough to prove argv transport while staying under Linux's
+	// 128 KiB per-argument limit (MAX_ARG_STRLEN), which the test must respect
+	// to run cross-platform.
+	prompt := strings.Repeat("x", 100_000)
 
 	got, err := provider.SendPrompt("kimi-code", prompt)
 	if err != nil {

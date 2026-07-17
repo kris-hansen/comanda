@@ -72,9 +72,10 @@ var kimiVersionPattern = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 // Unlike `claude --print`, `kimi -p` takes the prompt as an argv value rather than
 // on stdin. This has two consequences:
 //   - Prompt text is visible in process listings while the subprocess runs.
-//   - Very large prompts can hit the OS argument-size limit. SendPromptWithFile
-//     avoids this by referencing files by path (kimi's read-only tools auto-execute
-//     in -p mode) instead of inlining their contents.
+//   - Large prompts can hit OS argument-size limits (notably Linux's 128 KiB
+//     per-argument MAX_ARG_STRLEN). SendPromptWithFile avoids this by referencing
+//     files by path (kimi's read-only tools auto-execute in -p mode) instead of
+//     inlining their contents.
 type KimiCodeProvider struct {
 	verbose    bool
 	binaryPath string
@@ -347,9 +348,12 @@ func (k *KimiCodeProvider) executeCommand(args []string, workDir string) (string
 			if err != nil {
 				stderrStr := stderr.String()
 				k.debugf("Command failed after %v: %v, stderr: %s", elapsed, err, stderrStr)
-				// Map the CLI's known failure modes to actionable messages
+				// Map known failure modes to actionable messages
 				if strings.Contains(stderrStr, "No model configured") {
 					return "", fmt.Errorf("Kimi Code CLI is not authenticated: run 'kimi login' (or configure an API key in ~/.kimi-code/config.toml)")
+				}
+				if strings.Contains(err.Error(), "argument list too long") {
+					return "", fmt.Errorf("prompt exceeds the OS argument-size limit for 'kimi -p' (128 KiB per argument on Linux): shorten the prompt, or use file inputs so comanda references them by path instead of inlining contents: %w", err)
 				}
 				return "", fmt.Errorf("kimi command failed: %w (stderr: %s)", err, stderrStr)
 			}
