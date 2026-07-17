@@ -7,7 +7,7 @@ Declarative AI workflows for the command line.
 Comanda turns repeatable AI work into YAML pipelines you can run, review, and
 version control. Use it to generate workflows from natural language, run
 multi-model pipelines, orchestrate agentic loops, process files, call tools, and
-wire Claude Code, Gemini CLI, OpenAI Codex, and API models together.
+wire Claude Code, Gemini CLI, OpenAI Codex, Kimi Code, and API models together.
 
 For the full guide, feature tour, and copy-ready workflow templates, start at
 [comanda.sh](https://comanda.sh):
@@ -70,7 +70,7 @@ cat notes.md | comanda process summarize.yaml
 
 ## What You Can Build
 
-- Multi-agent reviews with Claude Code, Gemini CLI, OpenAI Codex, and API models
+- Multi-agent reviews with Claude Code, Gemini CLI, OpenAI Codex, Kimi Code, and API models
 - Agentic loops that iterate until work is complete
 - File, URL, image, PDF, database, and batch-processing workflows
 - Tool-enabled workflows with explicit command allowlists
