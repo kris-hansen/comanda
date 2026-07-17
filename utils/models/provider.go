@@ -65,6 +65,29 @@ type ResponsesProvider interface {
 	SendPromptWithResponsesStream(config ResponsesConfig, handler ResponsesStreamHandler) error
 }
 
+// AgenticProvider extends Provider for CLI-based providers that can run prompts
+// with full tool access (file edits, shell commands) for agentic mode.
+// allowedPaths scopes the agent's workspace access; tools is a provider-specific
+// tool allowlist (providers without per-tool granularity may ignore it);
+// workDir is the working directory for the subprocess.
+type AgenticProvider interface {
+	Provider
+	SendPromptAgentic(modelName string, prompt string, allowedPaths []string, tools []string, workDir string) (string, error)
+}
+
+// DebugFileSetter is an optional AgenticProvider capability for providers that
+// can stream debug output to a file (watched by the processor's DebugWatcher).
+type DebugFileSetter interface {
+	SetDebugFile(path string)
+}
+
+// WorktreeSetter is an optional AgenticProvider capability for providers that
+// support isolated execution in a git worktree.
+type WorktreeSetter interface {
+	SetWorktree(name string)
+	ClearWorktree()
+}
+
 // OllamaTagsResponse represents the response from Ollama's /api/tags endpoint
 type OllamaTagsResponse struct {
 	Models []OllamaModelTag `json:"models"`

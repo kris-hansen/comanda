@@ -305,6 +305,167 @@ func TestKimiCodeVerifyKimiBinary(t *testing.T) {
 	}
 }
 
+func TestKimiCodeBuildArgsAgentic(t *testing.T) {
+	provider := NewKimiCodeProvider()
+
+	tests := []struct {
+		name            string
+		model           string
+		allowedPaths    []string
+		contains        []string
+		notContains     []string
+		expectedPathCnt int
+	}{
+		{
+			name:            "basic agentic call",
+			model:           "kimi-code",
+			allowedPaths:    []string{"./"},
+			contains:        []string{"--prompt", "do the thing", "--output-format", "stream-json", "--add-dir"},
+			notContains:     []string{"--yolo", "--auto", "--model"},
+			expectedPathCnt: 1,
+		},
+		{
+			name:            "with model alias and multiple paths",
+			model:           "kimi-code-fast",
+			allowedPaths:    []string{"/tmp", "/var"},
+			contains:        []string{"--prompt", "--add-dir", "/tmp", "/var", "--model", "fast"},
+			notContains:     []string{"--yolo", "--auto"},
+			expectedPathCnt: 2,
+		},
+		{
+			name:            "no allowed paths",
+			model:           "kimi-code",
+			allowedPaths:    []string{},
+			contains:        []string{"--prompt", "--output-format", "stream-json"},
+			notContains:     []string{"--add-dir", "--yolo", "--auto"},
+			expectedPathCnt: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args := provider.buildArgsAgentic(tt.model, "do the thing", tt.allowedPaths)
+
+			for _, expected := range tt.contains {
+				found := false
+				for _, arg := range args {
+					if arg == expected {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("buildArgsAgentic() missing expected arg %q, got: %v", expected, args)
+				}
+			}
+
+			for _, notExpected := range tt.notContains {
+				for _, arg := range args {
+					if arg == notExpected {
+						t.Errorf("buildArgsAgentic() should not contain %q, got: %v", notExpected, args)
+					}
+				}
+			}
+
+			// Check that --add-dir paths are resolved to absolute paths
+			addDirCount := 0
+			for i, arg := range args {
+				if arg == "--add-dir" && i+1 < len(args) {
+					addDirCount++
+					if !strings.HasPrefix(args[i+1], "/") {
+						t.Errorf("buildArgsAgentic() --add-dir path should be absolute, got: %q", args[i+1])
+					}
+				}
+			}
+			if addDirCount != tt.expectedPathCnt {
+				t.Errorf("buildArgsAgentic() expected %d --add-dir flags, got %d", tt.expectedPathCnt, addDirCount)
+			}
+		})
+	}
+}
+
+// TestKimiCodeSendPromptAgentic verifies the agentic path end-to-end with a fake
+// kimi binary: allowed paths become --add-dir flags and the response is extracted
+// from the stream-json output.
+func TestKimiCodeSendPromptAgentic(t *testing.T) {
+	dir := t.TempDir()
+	capturePath := filepath.Join(dir, "capture.txt")
+
+	binaryPath := filepath.Join(dir, "fake-kimi")
+	script := "#!/bin/sh\n" +
+		"printf '%s\\n' \"$@\" > \"$FAKE_KIMI_CAPTURE\"\n" +
+		"printf '%s' '{\"role\":\"assistant\",\"content\":\"agentic ok\"}'\n"
+	if err := os.WriteFile(binaryPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake kimi: %v", err)
+	}
+	t.Setenv("FAKE_KIMI_CAPTURE", capturePath)
+
+	provider := NewKimiCodeProvider()
+	provider.binaryPath = binaryPath
+
+	got, err := provider.SendPromptAgentic("kimi-code", "do the thing", []string{dir}, []string{"Read", "Bash"}, dir)
+	if err != nil {
+		t.Fatalf("SendPromptAgentic() error: %v", err)
+	}
+	if got != "agentic ok" {
+		t.Fatalf("SendPromptAgentic() = %q, want %q", got, "agentic ok")
+	}
+
+	capture, err := os.ReadFile(capturePath)
+	if err != nil {
+		t.Fatalf("read capture: %v", err)
+	}
+	if !strings.Contains(string(capture), "--add-dir") || !strings.Contains(string(capture), dir) {
+		t.Errorf("expected --add-dir %q in captured args: %q", dir, string(capture))
+	}
+}
+
+func TestKimiCodeSendPromptAgenticPathValidation(t *testing.T) {
+	provider := NewKimiCodeProvider()
+	// Point at a bogus binary so the valid-path case fails fast after path
+	// validation instead of invoking a real kimi CLI (slow, requires auth).
+	provider.binaryPath = "/nonexistent/kimi"
+
+	tests := []struct {
+		name          string
+		allowedPaths  []string
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name:         "valid path",
+			allowedPaths: []string{"."},
+			expectError:  false,
+		},
+		{
+			name:          "invalid path",
+			allowedPaths:  []string{"/nonexistent/path/that/does/not/exist"},
+			expectError:   true,
+			errorContains: "do not exist",
+		},
+		{
+			name:          "mixed valid and invalid",
+			allowedPaths:  []string{".", "/nonexistent/path"},
+			expectError:   true,
+			errorContains: "do not exist",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := provider.SendPromptAgentic("kimi-code", "test", tt.allowedPaths, nil, "")
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("SendPromptAgentic() expected error, got nil")
+				} else if tt.errorContains != "" && !strings.Contains(err.Error(), tt.errorContains) {
+					t.Errorf("SendPromptAgentic() error = %v, want error containing %q", err, tt.errorContains)
+				}
+			}
+			// Note: valid paths may still fail if kimi binary not found, that's ok
+		})
+	}
+}
+
 func TestKimiCodeSetVerbose(t *testing.T) {
 	provider := NewKimiCodeProvider()
 
