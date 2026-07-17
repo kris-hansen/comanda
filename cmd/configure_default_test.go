@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"bytes"
 	"log"
 	"os"
@@ -226,5 +227,77 @@ func TestListConfigurationWithDefaultModel(t *testing.T) {
 	// Verify default model is displayed (accounting for log timestamp prefix)
 	if !strings.Contains(output, "Default Generation Model: claude-3-opus") && !strings.Contains(output, "claude-3-opus") {
 		t.Errorf("Expected output to contain default generation model, got: %s", output)
+	}
+}
+
+func TestListModelsAndProviders(t *testing.T) {
+	testConfig := &config.EnvConfig{
+		DefaultGenerationModel: "friendly-gpt",
+		Providers: map[string]*config.Provider{
+			"openai": {
+				Models: []config.Model{
+					{Name: "friendly-gpt", Target: "gpt-4.1"},
+				},
+			},
+			"anthropic": {
+				Models: []config.Model{
+					{Name: "claude-sonnet"},
+				},
+			},
+			"ollama": nil,
+		},
+	}
+
+	var buf bytes.Buffer
+	originalOutput := log.Writer()
+	log.SetOutput(&buf)
+	defer log.SetOutput(originalOutput)
+
+	listModelsAndProviders(testConfig)
+	output := buf.String()
+
+	for _, expected := range []string{
+		"Configured Models & Providers",
+		"anthropic",
+		"claude-sonnet",
+		"ollama",
+		"No models configured.",
+		"openai",
+		"friendly-gpt (default)",
+		"Target: gpt-4.1",
+	} {
+		if !strings.Contains(output, expected) {
+			t.Errorf("expected output to contain %q, got:\n%s", expected, output)
+		}
+	}
+
+	if strings.Index(output, "anthropic") > strings.Index(output, "openai") {
+		t.Errorf("expected providers to be sorted alphabetically, got:\n%s", output)
+	}
+}
+
+func TestModelsAndProvidersMenuListsConfiguration(t *testing.T) {
+	testConfig := &config.EnvConfig{
+		Providers: map[string]*config.Provider{
+			"openai": {
+				Models: []config.Model{{Name: "gpt-4.1"}},
+			},
+		},
+	}
+	reader := bufio.NewReader(strings.NewReader("7\n0\n"))
+
+	var buf bytes.Buffer
+	originalOutput := log.Writer()
+	log.SetOutput(&buf)
+	defer log.SetOutput(originalOutput)
+
+	configureModelsAndProviders(reader, testConfig)
+	output := buf.String()
+
+	if !strings.Contains(output, "7. List Models & Providers") {
+		t.Errorf("expected list action in submenu, got:\n%s", output)
+	}
+	if !strings.Contains(output, "gpt-4.1") {
+		t.Errorf("expected configured model to be listed, got:\n%s", output)
 	}
 }
