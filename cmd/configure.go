@@ -830,6 +830,7 @@ func configureModelsAndProviders(reader *bufio.Reader, envConfig *config.EnvConf
 		log.Printf("│  4. Set Default Generation Model    │\n")
 		log.Printf("│  5. Remove a Model                  │\n")
 		log.Printf("│  6. Update API Key                  │\n")
+		log.Printf("│  7. List Models & Providers         │\n")
 		log.Printf("│  0. Back to Main Menu               │\n")
 		log.Printf("└─────────────────────────────────────┘\n")
 		log.Printf("\nEnter choice: ")
@@ -849,10 +850,49 @@ func configureModelsAndProviders(reader *bufio.Reader, envConfig *config.EnvConf
 			removeModelInteractive(reader, envConfig)
 		case "6":
 			updateAPIKeyInteractive(reader, envConfig)
+		case "7":
+			listModelsAndProviders(envConfig)
 		case "0":
 			return
 		default:
 			log.Printf("Invalid selection.\n")
+		}
+	}
+}
+
+// listModelsAndProviders displays the providers and models currently configured
+// in Comanda without leaving the Models & Providers menu.
+func listModelsAndProviders(envConfig *config.EnvConfig) {
+	log.Printf("\nConfigured Models & Providers\n")
+
+	if envConfig == nil || len(envConfig.Providers) == 0 {
+		log.Printf("  No providers configured.\n")
+		return
+	}
+
+	providerNames := make([]string, 0, len(envConfig.Providers))
+	for name := range envConfig.Providers {
+		providerNames = append(providerNames, name)
+	}
+	sort.Strings(providerNames)
+
+	for _, name := range providerNames {
+		provider := envConfig.Providers[name]
+		log.Printf("\n  %s\n", name)
+		if provider == nil || len(provider.Models) == 0 {
+			log.Printf("    No models configured.\n")
+			continue
+		}
+
+		for _, model := range provider.Models {
+			defaultMarker := ""
+			if model.Name == envConfig.DefaultGenerationModel {
+				defaultMarker = " (default)"
+			}
+			log.Printf("    - %s%s\n", model.Name, defaultMarker)
+			if model.Target != "" && model.Target != model.Name {
+				log.Printf("      Target: %s\n", model.Target)
+			}
 		}
 	}
 }
