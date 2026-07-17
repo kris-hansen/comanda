@@ -410,7 +410,7 @@ func buildIndexEnhancer(requestedModel string) (string, func(string) (string, er
 	}
 
 	providerName := provider.Name()
-	isCLIAgent := providerName == "claude-code" || providerName == "gemini-cli" || providerName == "openai-codex"
+	isCLIAgent := providerName == "claude-code" || providerName == "gemini-cli" || providerName == "openai-codex" || providerName == "kimi-code"
 	providerConfig, err := envConfig.GetProviderConfig(providerName)
 	if err != nil {
 		if !isCLIAgent {
