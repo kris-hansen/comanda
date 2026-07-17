@@ -735,6 +735,12 @@ func getOpenAICodexModels() []string {
 	return []string{"openai-codex", "openai-codex-o3", "openai-codex-o4-mini", "openai-codex-mini", "openai-codex-gpt-4.1", "openai-codex-gpt-4o"}
 }
 
+// getKimiCodeModels returns the available Kimi Code CLI models
+// (kimi-code-<alias> variants map to user-defined aliases in ~/.kimi-code/config.toml)
+func getKimiCodeModels() []string {
+	return []string{"kimi-code"}
+}
+
 // configureCLIAgent handles the configuration flow for CLI-based agents
 func configureCLIAgent(reader *bufio.Reader, envConfig *config.EnvConfig, providerName string, displayName string, availableModels []string) {
 	log.Printf("\n%s %s CLI is installed and ready to use!\n", greenCheckmark, displayName)
@@ -1118,6 +1124,14 @@ func configureCLIAgents(reader *bufio.Reader, envConfig *config.EnvConfig) {
 		log.Printf("     Install: npm install -g @openai/codex\n")
 	}
 
+	if models.IsKimiCodeAvailable() {
+		log.Printf("  %s Kimi Code - available\n", greenCheckmark)
+		log.Printf("     Models: %v\n", getKimiCodeModels())
+	} else {
+		log.Printf("  ✗ Kimi Code - not installed\n")
+		log.Printf("     Install: npm install -g @moonshot-ai/kimi-code\n")
+	}
+
 	log.Printf("\nCLI agents are auto-configured. Install them and they're ready to use.\n")
 	log.Printf("Press Enter to continue...")
 	_, _ = reader.ReadString('\n')
@@ -1137,6 +1151,9 @@ func configureDefaultModel(reader *bufio.Reader, envConfig *config.EnvConfig) {
 	}
 	if models.IsOpenAICodexAvailable() {
 		cliModels = append(cliModels, getOpenAICodexModels()...)
+	}
+	if models.IsKimiCodeAvailable() {
+		cliModels = append(cliModels, getKimiCodeModels()...)
 	}
 
 	if len(allModels) == 0 && len(cliModels) == 0 {
@@ -1801,6 +1818,9 @@ Flag Groups:
 			if models.IsOpenAICodexAvailable() {
 				cliModels = append(cliModels, getOpenAICodexModels()...)
 			}
+			if models.IsKimiCodeAvailable() {
+				cliModels = append(cliModels, getKimiCodeModels()...)
+			}
 
 			if len(allModels) == 0 && len(cliModels) == 0 {
 				log.Printf("No models are currently available.")
@@ -1974,6 +1994,16 @@ Flag Groups:
 					return
 				}
 				configureCLIAgent(reader, envConfig, provider, "openai-codex", getOpenAICodexModels())
+				return
+			}
+			if provider == "kimi-code" {
+				if !models.IsKimiCodeAvailable() {
+					log.Printf("Error: Kimi Code CLI is not installed.\n")
+					log.Printf("Install it via: npm install -g @moonshot-ai/kimi-code\n")
+					log.Printf("Or run: curl -L code.kimi.com/install.sh | bash\n")
+					return
+				}
+				configureCLIAgent(reader, envConfig, provider, "kimi-code", getKimiCodeModels())
 				return
 			}
 
@@ -2217,6 +2247,9 @@ Flag Groups:
 					if models.IsOpenAICodexAvailable() {
 						cliModels = append(cliModels, getOpenAICodexModels()...)
 					}
+					if models.IsKimiCodeAvailable() {
+						cliModels = append(cliModels, getKimiCodeModels()...)
+					}
 
 					if len(allModels) == 0 && len(cliModels) == 0 {
 						log.Printf("No models are currently available. Cannot set a default generation model.")
@@ -2387,6 +2420,18 @@ func listConfiguration() {
 	} else {
 		log.Printf("\n✗ openai-codex: NOT INSTALLED\n")
 		log.Printf("  Install: npm install -g @openai/codex\n")
+	}
+
+	if models.IsKimiCodeAvailable() {
+		cliAgentFound = true
+		log.Printf("\n%s kimi-code: INSTALLED\n", greenCheckmark)
+		log.Printf("  Available models:\n")
+		for _, model := range getKimiCodeModels() {
+			log.Printf("    - %s\n", model)
+		}
+	} else {
+		log.Printf("\n✗ kimi-code: NOT INSTALLED\n")
+		log.Printf("  Install: npm install -g @moonshot-ai/kimi-code\n")
 	}
 
 	if !cliAgentFound {

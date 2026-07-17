@@ -295,6 +295,19 @@ func defaultDetectProvider(modelName string) Provider {
 		return nil
 	}
 
+	// Check Kimi Code (local CLI)
+	kimiCodeProvider := NewKimiCodeProvider()
+	if kimiCodeProvider.SupportsModel(modelName) {
+		// Check if the kimi binary is available
+		if IsKimiCodeAvailable() {
+			config.DebugLog("[Provider] Found local Kimi Code provider for model %s", modelName)
+			return kimiCodeProvider
+		}
+		// Model is a kimi-code model but binary not found - return nil to give clear error
+		config.DebugLog("[Provider] Model %s requires Kimi Code CLI but 'kimi' binary not found in PATH", modelName)
+		return nil
+	}
+
 	// Check AWS Bedrock (explicit bedrock/ prefix)
 	bedrockProvider := NewBedrockProvider()
 	if bedrockProvider.SupportsModel(modelName) {

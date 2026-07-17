@@ -326,7 +326,7 @@ func (p *Processor) buildCodebaseIndexEnhancer(requestedModel string) (string, f
 	}
 
 	providerName := provider.Name()
-	isCLIAgent := providerName == "claude-code" || providerName == "gemini-cli" || providerName == "openai-codex"
+	isCLIAgent := providerName == "claude-code" || providerName == "gemini-cli" || providerName == "openai-codex" || providerName == "kimi-code"
 	if providerConfig, err := p.envConfig.GetProviderConfig(providerName); err == nil {
 		if err := provider.Configure(providerConfig.APIKey); err != nil {
 			return "", nil, fmt.Errorf("failed to configure provider %s: %w", providerName, err)

@@ -177,6 +177,12 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 				p.debugf("Validation failed: %s", errMsg)
 				return fmt.Errorf("%s", errMsg)
 			}
+			// Check if this is a Kimi Code model - give specific error about missing CLI
+			if models.NewKimiCodeProvider().SupportsModel(resolvedModelName) {
+				errMsg := fmt.Sprintf("model %s requires Kimi Code CLI, but 'kimi' binary not found. Install Kimi Code via 'npm install -g @moonshot-ai/kimi-code' or 'curl -L code.kimi.com/install.sh | bash', or ensure it's in your PATH", modelName)
+				p.debugf("Validation failed: %s", errMsg)
+				return fmt.Errorf("%s", errMsg)
+			}
 			if models.NewLlamaCPPProvider().SupportsModel(resolvedModelName) {
 				errMsg := fmt.Sprintf("model %s requires llama.cpp with a local .gguf file, but 'llama-cli' was not found or the GGUF file does not exist. Install llama.cpp or set LLAMA_CPP_BINARY, and verify the model path is valid", modelName)
 				p.debugf("Validation failed: %s", errMsg)
@@ -252,6 +258,17 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 		}
 		// --- End OpenAI Codex specific check ---
 
+		// --- Skip envConfig checks for Kimi Code provider ---
+		// Kimi Code uses the local 'kimi' binary and doesn't require API key configuration here
+		if providerName == "kimi-code" {
+			p.debugf("Skipping envConfig check for kimi-code provider (uses local binary)")
+			provider.SetVerbose(p.verbose)
+			p.providers[provider.Name()] = provider
+			p.debugf("Model %s is supported by provider %s", modelName, provider.Name())
+			continue
+		}
+		// --- End Kimi Code specific check ---
+
 		// --- Skip envConfig checks for llama.cpp provider ---
 		// llama.cpp uses a local GGUF model path directly and does not require API keys.
 		if providerName == "llama.cpp" {
@@ -320,6 +337,7 @@ var localProviders = map[string]bool{
 	"claude-code":  true,
 	"gemini-cli":   true,
 	"openai-codex": true,
+	"kimi-code":    true,
 }
 
 // isLocalProvider checks if a provider uses local configuration (no API key needed)
