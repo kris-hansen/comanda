@@ -17,9 +17,9 @@ import (
 
 // Options configures the MCP server.
 type Options struct {
-	Name      string          // Server name reported to MCP clients
-	Version   string          // Server version reported to MCP clients
-	Verbose   bool            // Enable debug logging (to stderr)
+	Name      string // Server name reported to MCP clients
+	Version   string // Server version reported to MCP clients
+	Verbose   bool   // Enable debug logging (to stderr)
 	EnvConfig *config.EnvConfig
 	Workflows []WorkflowDef   // Workflows to expose as tools
 	Skills    []*skills.Skill // Skills to expose as prompts (nil/empty disables)
@@ -110,7 +110,7 @@ func toolError(err error) *mcpsdk.CallToolResult {
 }
 
 // ServeStdio serves the MCP server over stdin/stdout until the client
-// disconnects or ctx is cancelled. Nothing except MCP protocol frames may be
+// disconnects or ctx is canceled. Nothing except MCP protocol frames may be
 // written to stdout while this runs; cmd sets log output to stderr.
 func ServeStdio(ctx context.Context, s *mcpsdk.Server) error {
 	log.Printf("[INFO][MCP] Serving MCP over stdio\n")
@@ -122,8 +122,9 @@ func ServeStdio(ctx context.Context, s *mcpsdk.Server) error {
 func ServeHTTP(ctx context.Context, s *mcpsdk.Server, addr string) error {
 	handler := mcpsdk.NewStreamableHTTPHandler(func(*http.Request) *mcpsdk.Server { return s }, nil)
 	httpServer := &http.Server{
-		Addr:    addr,
-		Handler: handler,
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	go func() {

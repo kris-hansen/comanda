@@ -97,10 +97,10 @@ func TestRunWorkflowErrors(t *testing.T) {
 		t.Error("Run() with missing input file: expected error, got nil")
 	}
 
-	// Cancelled context.
-	cancelled, cancel := context.WithCancel(context.Background())
+	// Canceled context.
+	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := runner.Run(cancelled, defs[0], map[string]string{"filepath": "x"}); err == nil {
-		t.Error("Run() with cancelled context: expected error, got nil")
+	if _, err := runner.Run(canceled, defs[0], map[string]string{"filepath": "x"}); err == nil {
+		t.Error("Run() with canceled context: expected error, got nil")
 	}
 }
