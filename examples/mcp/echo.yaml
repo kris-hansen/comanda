@@ -1,0 +1,8 @@
+# Echo input back, optionally uppercased. Works without any LLM provider
+# (model: NA), so it is a good first MCP smoke test.
+echo:
+  input: STDIN
+  model: NA
+  action:
+    - Echo the input
+  output: STDOUT

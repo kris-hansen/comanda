@@ -77,6 +77,7 @@ cat notes.md | comanda process summarize.yaml
 - Codebase indexes for persistent project context
 - Git worktree workflows for parallel isolated implementation
 - Server-backed workflows callable over HTTP
+- MCP server mode exposing workflows as tools and skills as prompts
 
 ## More Examples
 
@@ -89,6 +90,17 @@ Most examples and walkthroughs live on [comanda.sh](https://comanda.sh):
 - [Agentic loops](examples/agentic-loop/)
 - [Tool use](examples/tool-use/README.md)
 - [Server API](docs/server-api.md)
+- [MCP server](docs/mcp-server.md)
+
+## MCP Server
+
+Run comanda as an MCP server so agent clients (Claude Code, Kimi Code, Codex) can call workflows as tools and use skills as prompts:
+
+```bash
+comanda mcp
+```
+
+Each discovered workflow file (from `~/.comanda/workflows/`, `.comanda/workflows/`, `--dir`, or `--workflow`) becomes one MCP tool; each skill becomes an MCP prompt. See [docs/mcp-server.md](docs/mcp-server.md) and [examples/mcp/](examples/mcp/README.md) for client setup and a walkthrough.
 
 ## Development
 
