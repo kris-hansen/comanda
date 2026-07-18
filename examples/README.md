@@ -266,6 +266,13 @@ Each example includes comments explaining its functionality and any specific req
    - `tool-use/beads-workflow-example.yaml` (integrate with external CLIs)
    - `tool-use/beads-walkthrough.yaml` (spec → issues workflow)
 
+8. **MCP Examples**: Serve workflows as MCP tools for agent clients
+   - `mcp/echo.yaml` (no provider needed, good first smoke test)
+   - `mcp/summarize.yaml` (variable substitution via tool arguments)
+   ```bash
+   comanda mcp --workflow examples/mcp/echo.yaml
+   ```
+
 ### Test Environment
 
 A Docker environment is provided for testing database operations:
