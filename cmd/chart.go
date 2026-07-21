@@ -862,6 +862,9 @@ func renderAgenticLoopBox(config *processor.AgenticLoopConfig, boxWidth int) {
 	if config.TimeoutSeconds > 0 {
 		configLine += fmt.Sprintf(" │ Timeout: %ds", config.TimeoutSeconds)
 	}
+	if config.CodexTimeoutSeconds > 0 {
+		configLine += fmt.Sprintf(" │ Codex: %ds", config.CodexTimeoutSeconds)
+	}
 	if config.Stateful {
 		configLine += " │ Stateful"
 	}

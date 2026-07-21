@@ -2,12 +2,22 @@ package models
 
 import (
 	"testing"
+	"time"
 )
 
 func TestOpenAICodexProviderName(t *testing.T) {
 	provider := NewOpenAICodexProvider()
 	if provider.Name() != "openai-codex" {
 		t.Errorf("Expected provider name 'openai-codex', got '%s'", provider.Name())
+	}
+}
+
+func TestOpenAICodexCommandTimeout(t *testing.T) {
+	if got := openAICodexCommandTimeout(0); got != 20*time.Minute {
+		t.Fatalf("openAICodexCommandTimeout(0) = %s, want 20m", got)
+	}
+	if got := openAICodexCommandTimeout(1800); got != 30*time.Minute {
+		t.Fatalf("openAICodexCommandTimeout(1800) = %s, want 30m", got)
 	}
 }
 
