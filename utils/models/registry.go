@@ -184,15 +184,8 @@ func (r *ModelRegistry) initializeDefaultModels() {
 		"gemini-cli",
 	})
 
-	// OpenAI Codex models (local CLI)
-	r.RegisterModels("openai-codex", []string{
-		"openai-codex",
-		"openai-codex-o3",
-		"openai-codex-o4-mini",
-		"openai-codex-mini",
-		"openai-codex-gpt-4.1",
-		"openai-codex-gpt-4o",
-	})
+	// OpenAI Codex models are discovered from the locally authenticated CLI.
+	r.RegisterModels("openai-codex", GetOpenAICodexModels())
 	r.RegisterFamilies("openai-codex", []string{
 		"openai-codex",
 	})

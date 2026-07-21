@@ -185,8 +185,7 @@ overridden with --model.`,
 
 		// Add OpenAI Codex models if the codex binary is available
 		if models.IsOpenAICodexAvailable() {
-			openaiCodexModels := []string{"openai-codex", "openai-codex-o3", "openai-codex-o4-mini", "openai-codex-mini", "openai-codex-gpt-4.1", "openai-codex-gpt-4o"}
-			availableModels = append(availableModels, openaiCodexModels...)
+			availableModels = append(availableModels, models.GetOpenAICodexModels()...)
 		}
 
 		// Add Kimi Code models if the kimi binary is available
@@ -404,8 +403,7 @@ overridden with --model.`,
 			availableModels = append(availableModels, geminiCLIModels...)
 		}
 		if models.IsOpenAICodexAvailable() {
-			openaiCodexModels := []string{"openai-codex", "openai-codex-o3", "openai-codex-o4-mini", "openai-codex-mini", "openai-codex-gpt-4.1", "openai-codex-gpt-4o"}
-			availableModels = append(availableModels, openaiCodexModels...)
+			availableModels = append(availableModels, models.GetOpenAICodexModels()...)
 		}
 		if models.IsKimiCodeAvailable() {
 			kimiCodeModels := []string{"kimi-code"}
