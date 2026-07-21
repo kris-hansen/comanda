@@ -16,6 +16,12 @@ import (
 	"github.com/kris-hansen/comanda/utils/retry"
 )
 
+// DefaultOpenAICodexCommandTimeoutSeconds is the per-command watchdog used
+// for Codex CLI executions unless a workflow overrides it.
+const DefaultOpenAICodexCommandTimeoutSeconds = 20 * 60
+
+const defaultOpenAICodexCommandTimeout = time.Duration(DefaultOpenAICodexCommandTimeoutSeconds) * time.Second
+
 // OpenAICodexProvider handles OpenAI Codex CLI for agentic programming tasks
 type OpenAICodexProvider struct {
 	verbose    bool
@@ -110,6 +116,12 @@ func (o *OpenAICodexProvider) findCodexBinary() (string, error) {
 
 // SendPrompt sends a prompt to OpenAI Codex and returns the response
 func (o *OpenAICodexProvider) SendPrompt(modelName string, prompt string) (string, error) {
+	return o.SendPromptWithTimeout(modelName, prompt, 0)
+}
+
+// SendPromptWithTimeout sends a prompt with an optional per-command timeout.
+// A timeout of zero uses the 20-minute provider default.
+func (o *OpenAICodexProvider) SendPromptWithTimeout(modelName string, prompt string, timeoutSeconds int) (string, error) {
 	o.debugf("Preparing to send prompt via OpenAI Codex")
 	o.debugf("Prompt length: %d characters", len(prompt))
 
@@ -124,10 +136,13 @@ func (o *OpenAICodexProvider) SendPrompt(modelName string, prompt string) (strin
 
 	o.debugf("Executing: %s %v", o.binaryPath, args)
 
+	timeout := openAICodexCommandTimeout(timeoutSeconds)
+	o.debugf("Codex command timeout: %s", timeout)
+
 	// Use retry mechanism for execution
 	result, err := retry.WithRetry(
 		func() (interface{}, error) {
-			return o.executeCommand(args, "")
+			return o.executeCommandWithTimeout(args, "", timeout)
 		},
 		func(err error) bool {
 			// Retry on timeout or transient errors
@@ -148,6 +163,13 @@ func (o *OpenAICodexProvider) SendPrompt(modelName string, prompt string) (strin
 
 // SendPromptWithFile sends a prompt along with file context to OpenAI Codex
 func (o *OpenAICodexProvider) SendPromptWithFile(modelName string, prompt string, file FileInput) (string, error) {
+	return o.SendPromptWithFileWithTimeout(modelName, prompt, file, 0)
+}
+
+// SendPromptWithFileWithTimeout sends a prompt with file context and an
+// optional per-command timeout. A timeout of zero uses the 20-minute provider
+// default.
+func (o *OpenAICodexProvider) SendPromptWithFileWithTimeout(modelName string, prompt string, file FileInput, timeoutSeconds int) (string, error) {
 	o.debugf("Preparing to send prompt with file to OpenAI Codex")
 	o.debugf("File path: %s", file.Path)
 
@@ -173,9 +195,12 @@ func (o *OpenAICodexProvider) SendPromptWithFile(modelName string, prompt string
 
 	o.debugf("Executing with file context: %s", file.Path)
 
+	timeout := openAICodexCommandTimeout(timeoutSeconds)
+	o.debugf("Codex command timeout: %s", timeout)
+
 	result, err := retry.WithRetry(
 		func() (interface{}, error) {
-			return o.executeCommand(args, filepath.Dir(file.Path))
+			return o.executeCommandWithTimeout(args, filepath.Dir(file.Path), timeout)
 		},
 		func(err error) bool {
 			return strings.Contains(err.Error(), "timeout") ||
@@ -228,6 +253,12 @@ func (o *OpenAICodexProvider) buildArgs(modelName string, prompt string, workDir
 
 // executeCommand runs the codex binary and captures output
 func (o *OpenAICodexProvider) executeCommand(args []string, workDir string) (string, error) {
+	return o.executeCommandWithTimeout(args, workDir, defaultOpenAICodexCommandTimeout)
+}
+
+// executeCommandWithTimeout runs the codex binary and captures output with a
+// per-command watchdog.
+func (o *OpenAICodexProvider) executeCommandWithTimeout(args []string, workDir string, timeout time.Duration) (string, error) {
 	// Create a temp file to capture the final response cleanly
 	tmpFile, err := os.CreateTemp("", "codex-output-*.txt")
 	if err != nil {
@@ -256,8 +287,6 @@ func (o *OpenAICodexProvider) executeCommand(args []string, workDir string) (str
 		done <- cmd.Run()
 	}()
 
-	// 10 minute timeout for complex tasks
-	timeout := 10 * time.Minute
 	select {
 	case err := <-done:
 		if err != nil {
@@ -284,6 +313,13 @@ func (o *OpenAICodexProvider) executeCommand(args []string, workDir string) (str
 		}
 		return "", fmt.Errorf("codex command timed out after %v", timeout)
 	}
+}
+
+func openAICodexCommandTimeout(timeoutSeconds int) time.Duration {
+	if timeoutSeconds <= 0 {
+		return defaultOpenAICodexCommandTimeout
+	}
+	return time.Duration(timeoutSeconds) * time.Second
 }
 
 // SetVerbose enables or disables verbose mode

@@ -139,7 +139,7 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 					}, nil
 				}
 			}
-			result, err := configuredProvider.SendPrompt(resolvedModelName, action)
+			result, err := p.sendPromptWithAgenticTimeout(configuredProvider, resolvedModelName, action, isAgenticMode, agenticConfig)
 			if err != nil {
 				return nil, err
 			}
@@ -249,8 +249,8 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 						}, nil
 					}
 				}
-				// Non-agentic mode: use SendPromptWithFile as before
-				result, err := configuredProvider.SendPromptWithFile(resolvedModelName, action, fileInputs[0])
+				// Non-agentic mode: use SendPromptWithFile as before.
+				result, err := p.sendPromptWithFileAgenticTimeout(configuredProvider, resolvedModelName, action, fileInputs[0], isAgenticMode, agenticConfig)
 				if err != nil {
 					return nil, err
 				}
@@ -279,7 +279,7 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 					combinedPrompt += fmt.Sprintf("File %d (%s):\n%s\n\n", i+1, file.Path, string(content))
 				}
 				combinedPrompt += fmt.Sprintf("\nAction: %s", action)
-				result, err := configuredProvider.SendPrompt(resolvedModelName, combinedPrompt)
+				result, err := p.sendPromptWithAgenticTimeout(configuredProvider, resolvedModelName, combinedPrompt, isAgenticMode, agenticConfig)
 				if err != nil {
 					return nil, err
 				}
@@ -302,8 +302,8 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 				// Build a clean prompt that discourages metadata wrapping
 				// Detect output format from action to provide appropriate instructions
 				// Try to process each file individually
-				result, err := configuredProvider.SendPromptWithFile(resolvedModelName,
-					fmt.Sprintf("%sFor this file: %s", PromptPrefix, action), file)
+				result, err := p.sendPromptWithFileAgenticTimeout(configuredProvider, resolvedModelName,
+					fmt.Sprintf("%sFor this file: %s", PromptPrefix, action), file, isAgenticMode, agenticConfig)
 
 				if err != nil {
 					// Log error but continue with other files if skipErrors is true
@@ -387,7 +387,7 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 				}
 			}
 
-			result, err := configuredProvider.SendPrompt(resolvedModelName, combinedPrompt)
+			result, err := p.sendPromptWithAgenticTimeout(configuredProvider, resolvedModelName, combinedPrompt, isAgenticMode, agenticConfig)
 			if err != nil {
 				return nil, err
 			}
@@ -399,4 +399,43 @@ func (p *Processor) processActions(modelNames []string, actions []string) (*Acti
 	}
 
 	return nil, fmt.Errorf("no actions processed")
+}
+
+// sendPromptWithAgenticTimeout applies an agentic loop's Codex-specific
+// watchdog without changing timeouts for other providers.
+func (p *Processor) sendPromptWithAgenticTimeout(provider models.Provider, modelName, prompt string, isAgenticMode bool, config *AgenticLoopConfig) (string, error) {
+	if isAgenticMode {
+		if codex, ok := provider.(*models.OpenAICodexProvider); ok {
+			timeoutSeconds := 0
+			if config != nil {
+				timeoutSeconds = config.CodexTimeoutSeconds
+			}
+			p.debugf("Using Codex per-command timeout of %d seconds", effectiveCodexTimeoutSeconds(timeoutSeconds))
+			return codex.SendPromptWithTimeout(modelName, prompt, timeoutSeconds)
+		}
+	}
+	return provider.SendPrompt(modelName, prompt)
+}
+
+// sendPromptWithFileAgenticTimeout is the file-input counterpart to
+// sendPromptWithAgenticTimeout.
+func (p *Processor) sendPromptWithFileAgenticTimeout(provider models.Provider, modelName, prompt string, file models.FileInput, isAgenticMode bool, config *AgenticLoopConfig) (string, error) {
+	if isAgenticMode {
+		if codex, ok := provider.(*models.OpenAICodexProvider); ok {
+			timeoutSeconds := 0
+			if config != nil {
+				timeoutSeconds = config.CodexTimeoutSeconds
+			}
+			p.debugf("Using Codex per-command timeout of %d seconds", effectiveCodexTimeoutSeconds(timeoutSeconds))
+			return codex.SendPromptWithFileWithTimeout(modelName, prompt, file, timeoutSeconds)
+		}
+	}
+	return provider.SendPromptWithFile(modelName, prompt, file)
+}
+
+func effectiveCodexTimeoutSeconds(timeoutSeconds int) int {
+	if timeoutSeconds > 0 {
+		return timeoutSeconds
+	}
+	return models.DefaultOpenAICodexCommandTimeoutSeconds
 }
