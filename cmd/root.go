@@ -149,6 +149,9 @@ overridden with --model.`,
 			if models.IsOpenAICodexAvailable() {
 				suggestions = append(suggestions, "openai-codex")
 			}
+			if models.IsKimiCodeAvailable() {
+				suggestions = append(suggestions, "kimi-code")
+			}
 
 			errMsg := "no model specified for generation and no default_generation_model configured"
 			if len(suggestions) > 0 {
@@ -185,6 +188,12 @@ overridden with --model.`,
 			availableModels = append(availableModels, models.GetOpenAICodexModels()...)
 		}
 
+		// Add Kimi Code models if the kimi binary is available
+		if models.IsKimiCodeAvailable() {
+			kimiCodeModels := []string{"kimi-code"}
+			availableModels = append(availableModels, kimiCodeModels...)
+		}
+
 		dslGuide := processor.GetEmbeddedLLMGuideWithModels(availableModels)
 
 		resolvedGenerationModel := modelForGeneration
@@ -203,7 +212,7 @@ overridden with --model.`,
 		// Attempt to configure the provider with API key from envConfig
 		// CLI agents don't need configuration from envConfig
 		providerName := provider.Name()
-		isCLIAgent := providerName == "claude-code" || providerName == "gemini-cli" || providerName == "openai-codex"
+		isCLIAgent := providerName == "claude-code" || providerName == "gemini-cli" || providerName == "openai-codex" || providerName == "kimi-code"
 
 		providerConfig, err := envConfig.GetProviderConfig(providerName)
 		if err != nil {
@@ -364,6 +373,9 @@ overridden with --model.`,
 			if models.IsOpenAICodexAvailable() {
 				suggestions = append(suggestions, "openai-codex")
 			}
+			if models.IsKimiCodeAvailable() {
+				suggestions = append(suggestions, "kimi-code")
+			}
 
 			errMsg := "no model specified for generation and no default_generation_model configured"
 			if len(suggestions) > 0 {
@@ -393,6 +405,10 @@ overridden with --model.`,
 		if models.IsOpenAICodexAvailable() {
 			availableModels = append(availableModels, models.GetOpenAICodexModels()...)
 		}
+		if models.IsKimiCodeAvailable() {
+			kimiCodeModels := []string{"kimi-code"}
+			availableModels = append(availableModels, kimiCodeModels...)
+		}
 
 		dslGuide := processor.GetEmbeddedLLMGuideWithModels(availableModels)
 
@@ -410,7 +426,7 @@ overridden with --model.`,
 		}
 
 		providerName := provider.Name()
-		isCLIAgent := providerName == "claude-code" || providerName == "gemini-cli" || providerName == "openai-codex"
+		isCLIAgent := providerName == "claude-code" || providerName == "gemini-cli" || providerName == "openai-codex" || providerName == "kimi-code"
 
 		providerConfig, err := envConfig.GetProviderConfig(providerName)
 		if err != nil {

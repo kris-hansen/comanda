@@ -93,6 +93,12 @@ func (s *Server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 		availableModels = append(availableModels, models.GetOpenAICodexModels()...)
 	}
 
+	// Add Kimi Code models if the kimi binary is available
+	if models.IsKimiCodeAvailable() {
+		kimiCodeModels := []string{"kimi-code"}
+		availableModels = append(availableModels, kimiCodeModels...)
+	}
+
 	dslGuide := processor.GetEmbeddedLLMGuideWithModels(availableModels)
 
 	resolvedGenerationModel := modelForGeneration

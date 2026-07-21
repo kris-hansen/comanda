@@ -730,6 +730,12 @@ func getGeminiCLIModels() []string {
 	return []string{"gemini-cli", "gemini-cli-pro", "gemini-cli-flash", "gemini-cli-flash-lite"}
 }
 
+// getKimiCodeModels returns the available Kimi Code CLI models
+// (kimi-code-<alias> variants map to user-defined aliases in ~/.kimi-code/config.toml)
+func getKimiCodeModels() []string {
+	return []string{"kimi-code"}
+}
+
 // configureCLIAgent handles the configuration flow for CLI-based agents
 func configureCLIAgent(reader *bufio.Reader, envConfig *config.EnvConfig, providerName string, displayName string, availableModels []string) {
 	log.Printf("\n%s %s CLI is installed and ready to use!\n", greenCheckmark, displayName)
@@ -825,6 +831,7 @@ func configureModelsAndProviders(reader *bufio.Reader, envConfig *config.EnvConf
 		log.Printf("│  4. Set Default Generation Model    │\n")
 		log.Printf("│  5. Remove a Model                  │\n")
 		log.Printf("│  6. Update API Key                  │\n")
+		log.Printf("│  7. List Models & Providers         │\n")
 		log.Printf("│  0. Back to Main Menu               │\n")
 		log.Printf("└─────────────────────────────────────┘\n")
 		log.Printf("\nEnter choice: ")
@@ -844,10 +851,49 @@ func configureModelsAndProviders(reader *bufio.Reader, envConfig *config.EnvConf
 			removeModelInteractive(reader, envConfig)
 		case "6":
 			updateAPIKeyInteractive(reader, envConfig)
+		case "7":
+			listModelsAndProviders(envConfig)
 		case "0":
 			return
 		default:
 			log.Printf("Invalid selection.\n")
+		}
+	}
+}
+
+// listModelsAndProviders displays the providers and models currently configured
+// in Comanda without leaving the Models & Providers menu.
+func listModelsAndProviders(envConfig *config.EnvConfig) {
+	log.Printf("\nConfigured Models & Providers\n")
+
+	if envConfig == nil || len(envConfig.Providers) == 0 {
+		log.Printf("  No providers configured.\n")
+		return
+	}
+
+	providerNames := make([]string, 0, len(envConfig.Providers))
+	for name := range envConfig.Providers {
+		providerNames = append(providerNames, name)
+	}
+	sort.Strings(providerNames)
+
+	for _, name := range providerNames {
+		provider := envConfig.Providers[name]
+		log.Printf("\n  %s\n", name)
+		if provider == nil || len(provider.Models) == 0 {
+			log.Printf("    No models configured.\n")
+			continue
+		}
+
+		for _, model := range provider.Models {
+			defaultMarker := ""
+			if model.Name == envConfig.DefaultGenerationModel {
+				defaultMarker = " (default)"
+			}
+			log.Printf("    - %s%s\n", model.Name, defaultMarker)
+			if model.Target != "" && model.Target != model.Name {
+				log.Printf("      Target: %s\n", model.Target)
+			}
 		}
 	}
 }
@@ -1073,6 +1119,14 @@ func configureCLIAgents(reader *bufio.Reader, envConfig *config.EnvConfig) {
 		log.Printf("     Install: npm install -g @openai/codex\n")
 	}
 
+	if models.IsKimiCodeAvailable() {
+		log.Printf("  %s Kimi Code - available\n", greenCheckmark)
+		log.Printf("     Models: %v\n", getKimiCodeModels())
+	} else {
+		log.Printf("  ✗ Kimi Code - not installed\n")
+		log.Printf("     Install: npm install -g @moonshot-ai/kimi-code\n")
+	}
+
 	log.Printf("\nCLI agents are auto-configured. Install them and they're ready to use.\n")
 	log.Printf("Press Enter to continue...")
 	_, _ = reader.ReadString('\n')
@@ -1092,6 +1146,9 @@ func configureDefaultModel(reader *bufio.Reader, envConfig *config.EnvConfig) {
 	}
 	if models.IsOpenAICodexAvailable() {
 		cliModels = append(cliModels, models.GetOpenAICodexModels()...)
+	}
+	if models.IsKimiCodeAvailable() {
+		cliModels = append(cliModels, getKimiCodeModels()...)
 	}
 
 	if len(allModels) == 0 && len(cliModels) == 0 {
@@ -1756,6 +1813,9 @@ Flag Groups:
 			if models.IsOpenAICodexAvailable() {
 				cliModels = append(cliModels, models.GetOpenAICodexModels()...)
 			}
+			if models.IsKimiCodeAvailable() {
+				cliModels = append(cliModels, getKimiCodeModels()...)
+			}
 
 			if len(allModels) == 0 && len(cliModels) == 0 {
 				log.Printf("No models are currently available.")
@@ -1929,6 +1989,16 @@ Flag Groups:
 					return
 				}
 				configureCLIAgent(reader, envConfig, provider, "openai-codex", models.GetOpenAICodexModels())
+				return
+			}
+			if provider == "kimi-code" {
+				if !models.IsKimiCodeAvailable() {
+					log.Printf("Error: Kimi Code CLI is not installed.\n")
+					log.Printf("Install it via: npm install -g @moonshot-ai/kimi-code\n")
+					log.Printf("Or run: curl -L code.kimi.com/install.sh | bash\n")
+					return
+				}
+				configureCLIAgent(reader, envConfig, provider, "kimi-code", getKimiCodeModels())
 				return
 			}
 
@@ -2172,6 +2242,9 @@ Flag Groups:
 					if models.IsOpenAICodexAvailable() {
 						cliModels = append(cliModels, models.GetOpenAICodexModels()...)
 					}
+					if models.IsKimiCodeAvailable() {
+						cliModels = append(cliModels, getKimiCodeModels()...)
+					}
 
 					if len(allModels) == 0 && len(cliModels) == 0 {
 						log.Printf("No models are currently available. Cannot set a default generation model.")
@@ -2342,6 +2415,18 @@ func listConfiguration() {
 	} else {
 		log.Printf("\n✗ openai-codex: NOT INSTALLED\n")
 		log.Printf("  Install: npm install -g @openai/codex\n")
+	}
+
+	if models.IsKimiCodeAvailable() {
+		cliAgentFound = true
+		log.Printf("\n%s kimi-code: INSTALLED\n", greenCheckmark)
+		log.Printf("  Available models:\n")
+		for _, model := range getKimiCodeModels() {
+			log.Printf("    - %s\n", model)
+		}
+	} else {
+		log.Printf("\n✗ kimi-code: NOT INSTALLED\n")
+		log.Printf("  Install: npm install -g @moonshot-ai/kimi-code\n")
 	}
 
 	if !cliAgentFound {

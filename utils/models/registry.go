@@ -190,6 +190,15 @@ func (r *ModelRegistry) initializeDefaultModels() {
 		"openai-codex",
 	})
 
+	// Kimi Code models (local CLI). The kimi-code-<alias> family covers
+	// user-defined model aliases from ~/.kimi-code/config.toml.
+	r.RegisterModels("kimi-code", []string{
+		"kimi-code",
+	})
+	r.RegisterFamilies("kimi-code", []string{
+		"kimi-code",
+	})
+
 	// AWS Bedrock models (via Converse API)
 	// Use bedrock/ prefix to explicitly route to Bedrock
 	r.RegisterModels("bedrock", []string{

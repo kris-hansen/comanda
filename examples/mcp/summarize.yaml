@@ -1,0 +1,9 @@
+# Summarize input text in a given style.
+# Exposed over MCP as the "summarize" tool with arguments: style, input.
+# Requires a configured model; swap the model below for one you have set up.
+summarize:
+  input: STDIN
+  model: gpt-4o
+  action:
+    - "Summarize the input in {{ style }} style. Be concise."
+  output: STDOUT

@@ -65,6 +65,29 @@ type ResponsesProvider interface {
 	SendPromptWithResponsesStream(config ResponsesConfig, handler ResponsesStreamHandler) error
 }
 
+// AgenticProvider extends Provider for CLI-based providers that can run prompts
+// with full tool access (file edits, shell commands) for agentic mode.
+// allowedPaths scopes the agent's workspace access; tools is a provider-specific
+// tool allowlist (providers without per-tool granularity may ignore it);
+// workDir is the working directory for the subprocess.
+type AgenticProvider interface {
+	Provider
+	SendPromptAgentic(modelName string, prompt string, allowedPaths []string, tools []string, workDir string) (string, error)
+}
+
+// DebugFileSetter is an optional AgenticProvider capability for providers that
+// can stream debug output to a file (watched by the processor's DebugWatcher).
+type DebugFileSetter interface {
+	SetDebugFile(path string)
+}
+
+// WorktreeSetter is an optional AgenticProvider capability for providers that
+// support isolated execution in a git worktree.
+type WorktreeSetter interface {
+	SetWorktree(name string)
+	ClearWorktree()
+}
+
 // OllamaTagsResponse represents the response from Ollama's /api/tags endpoint
 type OllamaTagsResponse struct {
 	Models []OllamaModelTag `json:"models"`
@@ -292,6 +315,19 @@ func defaultDetectProvider(modelName string) Provider {
 		}
 		// Model is an openai-codex model but binary not found - return nil to give clear error
 		config.DebugLog("[Provider] Model %s requires OpenAI Codex CLI but 'codex' binary not found in PATH", modelName)
+		return nil
+	}
+
+	// Check Kimi Code (local CLI)
+	kimiCodeProvider := NewKimiCodeProvider()
+	if kimiCodeProvider.SupportsModel(modelName) {
+		// Check if the kimi binary is available
+		if IsKimiCodeAvailable() {
+			config.DebugLog("[Provider] Found local Kimi Code provider for model %s", modelName)
+			return kimiCodeProvider
+		}
+		// Model is a kimi-code model but binary not found - return nil to give clear error
+		config.DebugLog("[Provider] Model %s requires Kimi Code CLI but 'kimi' binary not found in PATH", modelName)
 		return nil
 	}
 
