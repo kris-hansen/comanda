@@ -441,8 +441,9 @@ func (c *ClaudeCodeProvider) executeCommand(args []string, prompt string, workDi
 			elapsed := time.Since(startTime).Round(time.Second)
 			if err != nil {
 				stderrStr := stderr.String()
-				c.debugf("Command failed after %v: %v, stderr: %s", elapsed, err, stderrStr)
-				return "", fmt.Errorf("claude command failed: %w (stderr: %s)", err, stderrStr)
+				stdoutStr := stdout.String()
+				c.debugf("Command failed after %v: %v, stdout: %s, stderr: %s", elapsed, err, stdoutStr, stderrStr)
+				return "", formatClaudeCommandError(err, stdoutStr, stderrStr)
 			}
 			c.debugf("Command completed successfully in %v", elapsed)
 			return stdout.String(), nil
@@ -458,6 +459,33 @@ func (c *ClaudeCodeProvider) executeCommand(args []string, prompt string, workDi
 			return "", fmt.Errorf("claude command timed out after %v", timeout)
 		}
 	}
+}
+
+// formatClaudeCommandError preserves Claude Code's structured result payload.
+// In --output-format json mode the CLI commonly reports authentication, model,
+// and context failures on stdout while leaving stderr empty.
+func formatClaudeCommandError(commandErr error, stdout, stderr string) error {
+	message := strings.TrimSpace(stdout)
+	if message != "" {
+		var envelope struct {
+			Result         string `json:"result"`
+			APIErrorStatus int    `json:"api_error_status"`
+		}
+		if json.Unmarshal([]byte(message), &envelope) == nil && strings.TrimSpace(envelope.Result) != "" {
+			if envelope.APIErrorStatus != 0 {
+				message = fmt.Sprintf("API error %d: %s", envelope.APIErrorStatus, envelope.Result)
+			} else {
+				message = envelope.Result
+			}
+		}
+	}
+	if message == "" {
+		message = strings.TrimSpace(stderr)
+	}
+	if message == "" {
+		message = "no diagnostic output"
+	}
+	return fmt.Errorf("claude command failed: %w: %s", commandErr, message)
 }
 
 // SetVerbose enables or disables verbose mode

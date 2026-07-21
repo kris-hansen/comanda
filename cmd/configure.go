@@ -730,11 +730,6 @@ func getGeminiCLIModels() []string {
 	return []string{"gemini-cli", "gemini-cli-pro", "gemini-cli-flash", "gemini-cli-flash-lite"}
 }
 
-// getOpenAICodexModels returns the available OpenAI Codex CLI models
-func getOpenAICodexModels() []string {
-	return []string{"openai-codex", "openai-codex-o3", "openai-codex-o4-mini", "openai-codex-mini", "openai-codex-gpt-4.1", "openai-codex-gpt-4o"}
-}
-
 // getKimiCodeModels returns the available Kimi Code CLI models
 // (kimi-code-<alias> variants map to user-defined aliases in ~/.kimi-code/config.toml)
 func getKimiCodeModels() []string {
@@ -1118,7 +1113,7 @@ func configureCLIAgents(reader *bufio.Reader, envConfig *config.EnvConfig) {
 
 	if models.IsOpenAICodexAvailable() {
 		log.Printf("  %s OpenAI Codex - available\n", greenCheckmark)
-		log.Printf("     Models: %v\n", getOpenAICodexModels())
+		log.Printf("     Models: %v\n", models.GetOpenAICodexModels())
 	} else {
 		log.Printf("  ✗ OpenAI Codex - not installed\n")
 		log.Printf("     Install: npm install -g @openai/codex\n")
@@ -1150,7 +1145,7 @@ func configureDefaultModel(reader *bufio.Reader, envConfig *config.EnvConfig) {
 		cliModels = append(cliModels, getGeminiCLIModels()...)
 	}
 	if models.IsOpenAICodexAvailable() {
-		cliModels = append(cliModels, getOpenAICodexModels()...)
+		cliModels = append(cliModels, models.GetOpenAICodexModels()...)
 	}
 	if models.IsKimiCodeAvailable() {
 		cliModels = append(cliModels, getKimiCodeModels()...)
@@ -1816,7 +1811,7 @@ Flag Groups:
 				cliModels = append(cliModels, getGeminiCLIModels()...)
 			}
 			if models.IsOpenAICodexAvailable() {
-				cliModels = append(cliModels, getOpenAICodexModels()...)
+				cliModels = append(cliModels, models.GetOpenAICodexModels()...)
 			}
 			if models.IsKimiCodeAvailable() {
 				cliModels = append(cliModels, getKimiCodeModels()...)
@@ -1993,7 +1988,7 @@ Flag Groups:
 					log.Printf("Install it via: npm install -g @openai/codex\n")
 					return
 				}
-				configureCLIAgent(reader, envConfig, provider, "openai-codex", getOpenAICodexModels())
+				configureCLIAgent(reader, envConfig, provider, "openai-codex", models.GetOpenAICodexModels())
 				return
 			}
 			if provider == "kimi-code" {
@@ -2245,7 +2240,7 @@ Flag Groups:
 						cliModels = append(cliModels, getGeminiCLIModels()...)
 					}
 					if models.IsOpenAICodexAvailable() {
-						cliModels = append(cliModels, getOpenAICodexModels()...)
+						cliModels = append(cliModels, models.GetOpenAICodexModels()...)
 					}
 					if models.IsKimiCodeAvailable() {
 						cliModels = append(cliModels, getKimiCodeModels()...)
@@ -2414,7 +2409,7 @@ func listConfiguration() {
 		cliAgentFound = true
 		log.Printf("\n%s openai-codex: INSTALLED\n", greenCheckmark)
 		log.Printf("  Available models:\n")
-		for _, model := range getOpenAICodexModels() {
+		for _, model := range models.GetOpenAICodexModels() {
 			log.Printf("    - %s\n", model)
 		}
 	} else {
