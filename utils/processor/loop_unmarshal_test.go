@@ -15,6 +15,7 @@ loops:
     name: backend-processing
     max_iterations: 10
     timeout_seconds: 300
+    codex_timeout_seconds: 1800
     stateful: true
     checkpoint_interval: 3
     exit_condition: llm_decides
@@ -70,6 +71,9 @@ execute_loops:
 	}
 	if backend.TimeoutSeconds != 300 {
 		t.Errorf("backend.TimeoutSeconds = %d, want 300", backend.TimeoutSeconds)
+	}
+	if backend.CodexTimeoutSeconds != 1800 {
+		t.Errorf("backend.CodexTimeoutSeconds = %d, want 1800", backend.CodexTimeoutSeconds)
 	}
 	if !backend.Stateful {
 		t.Error("backend.Stateful should be true")

@@ -366,6 +366,7 @@ agentic-loop:
   config:
     max_iterations: 5           # Safety limit (default: 10)
     timeout_seconds: 300        # Total timeout (default: 300)
+    codex_timeout_seconds: 1200 # Per-Codex-command timeout (default: 20 minutes)
     exit_condition: llm_decides # or "pattern_match"
     exit_pattern: "DONE"        # For pattern_match
     context_window: 3           # Past iterations to include (default: 5)
@@ -393,6 +394,7 @@ agentic-loop:
 **Core Settings:**
 - ` + "`max_iterations`" + `: (int, default: 10) Maximum iterations before stopping.
 - ` + "`timeout_seconds`" + `: (int, default: 0) Total time limit in seconds. **0 = no timeout** (loop runs until max_iterations or exit condition).
+- ` + "`codex_timeout_seconds`" + `: (int, default: 1200) Per-command watchdog for ` + "`openai-codex`" + ` loop steps. Set a positive value to override it; **0 uses the 20-minute provider default**. This does not change the loop-wide ` + "`timeout_seconds`" + ` setting.
 - ` + "`exit_condition`" + `: (string) How to detect completion:
   - ` + "`llm_decides`" + `: Exits when output ends with "DONE", "COMPLETE", or "FINISHED" (case-insensitive). Works when these words appear at the very end of the output, at the end of any line, or as the entire output.
   - ` + "`pattern_match`" + `: Exits when output matches ` + "`exit_pattern`" + ` regex
@@ -1739,6 +1741,7 @@ agentic-loop:
   config:
     max_iterations: 5           # Safety limit (default: 10)
     timeout_seconds: 300        # Total timeout (default: 300)
+    codex_timeout_seconds: 1200 # Per-Codex-command timeout (default: 20 minutes)
     exit_condition: llm_decides # or "pattern_match"
     exit_pattern: "DONE"        # For pattern_match
     context_window: 3           # Past iterations to include (default: 5)
@@ -1766,6 +1769,7 @@ agentic-loop:
 **Core Settings:**
 - ` + "`max_iterations`" + `: (int, default: 10) Maximum iterations before stopping.
 - ` + "`timeout_seconds`" + `: (int, default: 0) Total time limit in seconds. **0 = no timeout** (loop runs until max_iterations or exit condition).
+- ` + "`codex_timeout_seconds`" + `: (int, default: 1200) Per-command watchdog for ` + "`openai-codex`" + ` loop steps. Set a positive value to override it; **0 uses the 20-minute provider default**. This does not change the loop-wide ` + "`timeout_seconds`" + ` setting.
 - ` + "`exit_condition`" + `: (string) How to detect completion:
   - ` + "`llm_decides`" + `: Exits when output ends with "DONE", "COMPLETE", or "FINISHED" (case-insensitive). Works when these words appear at the very end of the output, at the end of any line, or as the entire output.
   - ` + "`pattern_match`" + `: Exits when output matches ` + "`exit_pattern`" + ` regex
