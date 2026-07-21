@@ -730,11 +730,6 @@ func getGeminiCLIModels() []string {
 	return []string{"gemini-cli", "gemini-cli-pro", "gemini-cli-flash", "gemini-cli-flash-lite"}
 }
 
-// getOpenAICodexModels returns the available OpenAI Codex CLI models
-func getOpenAICodexModels() []string {
-	return []string{"openai-codex", "openai-codex-o3", "openai-codex-o4-mini", "openai-codex-mini", "openai-codex-gpt-4.1", "openai-codex-gpt-4o"}
-}
-
 // configureCLIAgent handles the configuration flow for CLI-based agents
 func configureCLIAgent(reader *bufio.Reader, envConfig *config.EnvConfig, providerName string, displayName string, availableModels []string) {
 	log.Printf("\n%s %s CLI is installed and ready to use!\n", greenCheckmark, displayName)
@@ -1072,7 +1067,7 @@ func configureCLIAgents(reader *bufio.Reader, envConfig *config.EnvConfig) {
 
 	if models.IsOpenAICodexAvailable() {
 		log.Printf("  %s OpenAI Codex - available\n", greenCheckmark)
-		log.Printf("     Models: %v\n", getOpenAICodexModels())
+		log.Printf("     Models: %v\n", models.GetOpenAICodexModels())
 	} else {
 		log.Printf("  ✗ OpenAI Codex - not installed\n")
 		log.Printf("     Install: npm install -g @openai/codex\n")
@@ -1096,7 +1091,7 @@ func configureDefaultModel(reader *bufio.Reader, envConfig *config.EnvConfig) {
 		cliModels = append(cliModels, getGeminiCLIModels()...)
 	}
 	if models.IsOpenAICodexAvailable() {
-		cliModels = append(cliModels, getOpenAICodexModels()...)
+		cliModels = append(cliModels, models.GetOpenAICodexModels()...)
 	}
 
 	if len(allModels) == 0 && len(cliModels) == 0 {
@@ -1759,7 +1754,7 @@ Flag Groups:
 				cliModels = append(cliModels, getGeminiCLIModels()...)
 			}
 			if models.IsOpenAICodexAvailable() {
-				cliModels = append(cliModels, getOpenAICodexModels()...)
+				cliModels = append(cliModels, models.GetOpenAICodexModels()...)
 			}
 
 			if len(allModels) == 0 && len(cliModels) == 0 {
@@ -1933,7 +1928,7 @@ Flag Groups:
 					log.Printf("Install it via: npm install -g @openai/codex\n")
 					return
 				}
-				configureCLIAgent(reader, envConfig, provider, "openai-codex", getOpenAICodexModels())
+				configureCLIAgent(reader, envConfig, provider, "openai-codex", models.GetOpenAICodexModels())
 				return
 			}
 
@@ -2175,7 +2170,7 @@ Flag Groups:
 						cliModels = append(cliModels, getGeminiCLIModels()...)
 					}
 					if models.IsOpenAICodexAvailable() {
-						cliModels = append(cliModels, getOpenAICodexModels()...)
+						cliModels = append(cliModels, models.GetOpenAICodexModels()...)
 					}
 
 					if len(allModels) == 0 && len(cliModels) == 0 {
@@ -2341,7 +2336,7 @@ func listConfiguration() {
 		cliAgentFound = true
 		log.Printf("\n%s openai-codex: INSTALLED\n", greenCheckmark)
 		log.Printf("  Available models:\n")
-		for _, model := range getOpenAICodexModels() {
+		for _, model := range models.GetOpenAICodexModels() {
 			log.Printf("    - %s\n", model)
 		}
 	} else {

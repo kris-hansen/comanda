@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -337,6 +338,24 @@ func TestClaudeCodeExecuteCommandSendsLargePromptOnStdin(t *testing.T) {
 	}
 	if got != prompt {
 		t.Fatalf("executeCommand() returned %d bytes, want %d", len(got), len(prompt))
+	}
+}
+
+func TestFormatClaudeCommandErrorUsesJSONStdout(t *testing.T) {
+	err := formatClaudeCommandError(
+		fmt.Errorf("exit status 1"),
+		`{"type":"result","is_error":true,"api_error_status":401,"result":"Failed to authenticate"}`,
+		"",
+	)
+	if got, want := err.Error(), "claude command failed: exit status 1: API error 401: Failed to authenticate"; got != want {
+		t.Fatalf("formatClaudeCommandError() = %q, want %q", got, want)
+	}
+}
+
+func TestFormatClaudeCommandErrorFallsBackToStderr(t *testing.T) {
+	err := formatClaudeCommandError(fmt.Errorf("exit status 1"), "", "permission denied\n")
+	if got, want := err.Error(), "claude command failed: exit status 1: permission denied"; got != want {
+		t.Fatalf("formatClaudeCommandError() = %q, want %q", got, want)
 	}
 }
 

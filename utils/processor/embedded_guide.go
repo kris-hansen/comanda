@@ -2681,7 +2681,7 @@ If the user's prompt mentions any of the following, they want to use an ` + "`op
 - just "codex" (when referring to the CLI tool)
 
 **What is OpenAI Codex?**
-OpenAI Codex (` + "`openai-codex`" + `, ` + "`openai-codex-o3`" + `, ` + "`openai-codex-o4-mini`" + `, ` + "`openai-codex-gpt-4.1`" + `, ` + "`openai-codex-gpt-4o`" + `) is a special model family that uses the local OpenAI Codex CLI (` + "`codex`" + ` binary) instead of API calls. It provides:
+OpenAI Codex is a special model family that uses the local OpenAI Codex CLI (` + "`codex`" + ` binary) instead of API calls. Comanda discovers the models available to the authenticated Codex CLI at runtime and exposes them as ` + "`openai-codex-<model-id>`" + ` (for example, ` + "`openai-codex-gpt-5.6-sol>`" + `). It provides:
 - **Agentic capabilities**: Can autonomously perform multi-step tasks
 - **Local execution**: Runs via the Codex CLI installed on the user's machine
 - **Tool use**: Can interact with files, run commands, and perform complex operations
@@ -2693,11 +2693,8 @@ OpenAI Codex (` + "`openai-codex`" + `, ` + "`openai-codex-o3`" + `, ` + "`opena
 - When local CLI execution is preferred over API calls
 
 **OpenAI Codex model variants:**
-- ` + "`openai-codex`" + `: Base variant (uses default Codex model)
-- ` + "`openai-codex-o3`" + `: Uses o3 model (most capable reasoning)
-- ` + "`openai-codex-o4-mini`" + ` or ` + "`openai-codex-mini`" + `: Uses o4-mini (fast/affordable)
-- ` + "`openai-codex-gpt-4.1`" + `: Uses GPT-4.1
-- ` + "`openai-codex-gpt-4o`" + `: Uses GPT-4o
+- ` + "`openai-codex`" + `: Uses the configured Codex default.
+- ` + "`openai-codex-<model-id>`" + `: Uses one of the model IDs currently listed by the local Codex CLI. Use ` + "`comanda configure`" + ` to see the available values.
 
 **Example using OpenAI Codex:**
 ` + "```yaml" + `
