@@ -1,0 +1,25 @@
+# Review source code through complementary architecture and performance lenses,
+# then synthesize the findings into one prioritized report.
+#
+# Usage:
+#   cat main.go | comanda process examples/multi-agent/code-review.yaml
+parallel-process:
+  architecture:
+    input: STDIN
+    model: claude-code
+    action: "Analyze the input for architecture and security issues."
+    output: .comanda/claude-review.md
+
+  performance:
+    input: STDIN
+    model: gemini-cli
+    action: "Identify performance bottlenecks and unnecessary complexity."
+    output: .comanda/gemini-review.md
+
+synthesize:
+  input:
+    - .comanda/claude-review.md
+    - .comanda/gemini-review.md
+  model: gpt-4o
+  action: "Combine the reviews into prioritized recommendations."
+  output: STDOUT

@@ -12,7 +12,18 @@ These examples demonstrate how to leverage multiple agentic coding tools togethe
 
 ## Workflow Patterns
 
-### 1. Parallel Analysis → Synthesis (`architecture-planning.yaml`)
+### 1. Multi-Agent Code Review (`code-review.yaml`)
+
+Claude Code reviews architecture and security while Gemini CLI looks for
+performance issues. Comanda then synthesizes both reviews into a prioritized
+set of recommendations.
+
+**Usage:**
+```bash
+cat main.go | comanda process code-review.yaml
+```
+
+### 2. Parallel Analysis → Synthesis (`architecture-planning.yaml`)
 
 All agents analyze the problem simultaneously, then results are synthesized:
 
@@ -45,7 +56,7 @@ All agents analyze the problem simultaneously, then results are synthesized:
 echo "Build a real-time collaborative document editor" | comanda process architecture-planning.yaml
 ```
 
-### 2. Sequential Refinement (`architecture-review.yaml`)
+### 3. Sequential Refinement (`architecture-review.yaml`)
 
 Each agent builds upon and improves the previous agent's work:
 
@@ -78,7 +89,7 @@ Each agent builds upon and improves the previous agent's work:
 echo "Microservices platform for e-commerce" | comanda process architecture-review.yaml
 ```
 
-### 3. Voting / Consensus (`architecture-decision.yaml`)
+### 4. Voting / Consensus (`architecture-decision.yaml`)
 
 All agents independently evaluate options, then vote:
 
