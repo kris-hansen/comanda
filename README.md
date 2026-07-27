@@ -2,105 +2,160 @@
 
 # comanda
 
-Declarative AI workflows for the command line.
+> **Make coding agents earn their exit.**
+>
+> Comanda is the terminal-native runtime for durable, self-improving agent work in a repository. Describe a workflow in English, inspect the generated program, run the coding agents you already use, and stop only when your own quality gates say the work is done.
 
-Comanda turns repeatable AI work into YAML pipelines you can run, review, and
-version control. Use it to generate workflows from natural language, run
-multi-model pipelines, orchestrate agentic loops, process files, call tools, and
-wire Claude Code, Gemini CLI, OpenAI Codex, Kimi Code, and API models together.
+[![GitHub Stars](https://img.shields.io/github/stars/kris-hansen/comanda?style=social)](https://github.com/kris-hansen/comanda)
+[![Release](https://img.shields.io/github/v/release/kris-hansen/comanda)](https://github.com/kris-hansen/comanda/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-For the full guide, feature tour, and copy-ready workflow templates, start at
-[comanda.sh](https://comanda.sh):
+## From an idea to a governed workflow
 
-- [Features](https://comanda.sh/features)
-- [Templates](https://comanda.sh/templates)
-- [GitHub examples](examples/README.md)
+Comanda starts with English, but ends with a YAML program you can inspect, version, and improve.
+
+```bash
+# Describe the outcome
+comanda generate feature-loop.yaml \
+  "Implement this feature until tests and security checks pass"
+
+# Inspect the generated workflow as a graph
+comanda chart feature-loop.yaml --format mermaid
+
+# Run it in your repository
+comanda process feature-loop.yaml
+
+# Evolve the program with plain-English feedback
+comanda improve feature-loop.yaml \
+  "Add a Codex reviewer and require typecheck before completion"
+```
+
+**Describe it. Inspect it. Run it. Improve it. Commit it.**
+
+## A loop does not finish because an agent says “DONE”
+
+Long-running work needs an observable exit criterion. Comanda's agentic loops persist state, refine subsequent prompts from prior results, and run automated quality gates after each iteration. Interrupt a run and resume it from its last checkpoint.
+
+```yaml
+agentic-loop:
+  config:
+    name: code-quality-improvement
+    stateful: true
+    checkpoint_interval: 2
+    max_iterations: 10
+    prompt_improvement:
+      enabled: true
+    quality_gates:
+      - name: syntax-check
+        type: syntax
+        on_fail: abort
+      - name: tests
+        command: "make test"
+        on_fail: retry
+    allowed_paths: ["./src", "./tests"]
+```
+
+Run the complete [code-quality loop](examples/agentic-loop/code-quality-loop.yaml), then inspect or resume it:
+
+```bash
+comanda process examples/agentic-loop/code-quality-loop.yaml
+comanda loop status code-quality-improvement
+comanda loop resume code-quality-improvement
+```
+
+Comanda supports retry, abort, and skip policies; syntax, security, and custom-command gates; bounded or indefinite runs; and creator/checker or dependent multi-loop workflows. See [agentic-loop examples](examples/agentic-loop/README.md).
+
+## Use the agents you already have
+
+Coordinate Claude Code, Gemini CLI, OpenAI Codex, Kimi Code, API models, and local models in one workflow. Give agents distinct roles, pass work through files or standard input/output, and keep the results visible in your repository.
+
+```yaml
+parallel-process:
+  architecture:
+    input: STDIN
+    model: claude-code
+    action: "Review the design and identify implementation risks."
+    output: .comanda/architecture-review.md
+
+  implementation:
+    input: STDIN
+    model: openai-codex
+    action: "Review the implementation plan and identify practical risks."
+    output: .comanda/implementation-review.md
+
+synthesize:
+  input:
+    - .comanda/architecture-review.md
+    - .comanda/implementation-review.md
+  model: gemini-cli
+  action: "Produce one prioritized recommendation."
+  output: STDOUT
+```
+
+Run this exact [parallel-review workflow](examples/multi-agent/parallel-review.yaml) with `git diff | comanda process examples/multi-agent/parallel-review.yaml`, or explore [multi-agent workflows](examples/multi-agent/README.md) and [parallel processing](examples/parallel-processing/).
+
+## Keep agent work inside the repository model
+
+- **Git worktrees** — run parallel implementations in isolated branches, then inspect and compare their diffs.
+- **Codebase indexes** — capture repository structure, symbols, conventions, operational notes, and risk areas for later agent work; incrementally update or diff an index as the code changes.
+- **Explicit boundaries** — constrain agentic loops to allowed paths and named tools.
+- **Quality gates** — use your own tests, linters, and security checks as the definition of done.
+
+```bash
+comanda index capture --enhance
+comanda index diff my-project
+comanda index update my-project
+```
+
+See [codebase-index examples](examples/codebase-index/README.md).
+
+## Build a workflow once. Run it everywhere.
+
+Workflows are plain files. Review them in pull requests, run them from the terminal or CI, serve them over HTTP, or expose them to MCP clients.
+
+```bash
+# Expose checked-in workflows as MCP tools and skills as MCP prompts
+comanda mcp
+
+# Run a workflow as part of a shell pipeline
+git diff | comanda process review.yaml
+```
+
+See the [MCP server guide](docs/mcp-server.md), [server API](docs/server-api.md), and [skills examples](examples/skills/README.md).
+
+## Why Comanda?
+
+| If you need to… | Reach for… |
+| --- | --- |
+| Build an AI-powered application in code | An agent framework such as LangGraph, CrewAI, or an SDK |
+| Design a business automation on a visual canvas | A visual workflow platform |
+| Ask one coding agent to complete a task | Its native CLI |
+| Generate, govern, resume, and reuse durable agent work in a repository | **Comanda** |
+
+Comanda sits between a coding agent and an agent framework: it turns agent work into a durable, reviewable program that runs where developers already work.
 
 ## Install
 
 ```bash
+# macOS
 brew install kris-hansen/comanda/comanda
-```
 
-Or install with Go:
-
-```bash
+# Go
 go install github.com/kris-hansen/comanda@latest
 ```
 
-See [GitHub Releases](https://github.com/kris-hansen/comanda/releases) for
-prebuilt binaries.
+See [GitHub Releases](https://github.com/kris-hansen/comanda/releases) for prebuilt binaries for macOS, Linux, and Windows.
 
-## Quick Start
+## More capabilities
 
-```bash
-comanda configure
-comanda generate workflow.yaml "review this code for bugs"
-comanda process workflow.yaml
-```
+- Generate and improve workflows from natural-language feedback
+- Render workflow structure as terminal or Mermaid graphs with validation
+- Process files, URLs, images, PDFs, databases, and batches with chunking
+- Use shell tools with explicit allowlists
+- Call OpenAI, Anthropic, Google, xAI, DeepSeek, Moonshot, Sakana, Ollama, vLLM, llama.cpp, and compatible providers
+- Run workflows as HTTP endpoints or OpenAI-compatible server routes
 
-Pipe input through a workflow:
-
-```bash
-cat main.go | comanda process workflow.yaml
-```
-
-Inspect or iterate on a workflow:
-
-```bash
-comanda chart workflow.yaml
-comanda improve workflow.yaml "Add security findings and suggested fixes"
-```
-
-## Minimal Workflow
-
-```yaml
-summarize:
-  input: STDIN
-  model: gpt-4o
-  action: "Summarize the input in three bullets."
-  output: STDOUT
-```
-
-Run it:
-
-```bash
-cat notes.md | comanda process summarize.yaml
-```
-
-## What You Can Build
-
-- Multi-agent reviews with Claude Code, Gemini CLI, OpenAI Codex, Kimi Code, and API models
-- Agentic loops that iterate until work is complete
-- File, URL, image, PDF, database, and batch-processing workflows
-- Tool-enabled workflows with explicit command allowlists
-- Codebase indexes for persistent project context
-- Git worktree workflows for parallel isolated implementation
-- Server-backed workflows callable over HTTP
-- MCP server mode exposing workflows as tools and skills as prompts
-
-## More Examples
-
-Most examples and walkthroughs live on [comanda.sh](https://comanda.sh):
-
-- [Browse workflow templates](https://comanda.sh/templates)
-- [Explore all features](https://comanda.sh/features)
-- [Local examples directory](examples/README.md)
-- [Multi-agent patterns](examples/multi-agent/README.md)
-- [Agentic loops](examples/agentic-loop/)
-- [Tool use](examples/tool-use/README.md)
-- [Server API](docs/server-api.md)
-- [MCP server](docs/mcp-server.md)
-
-## MCP Server
-
-Run comanda as an MCP server so agent clients (Claude Code, Kimi Code, Codex) can call workflows as tools and use skills as prompts:
-
-```bash
-comanda mcp
-```
-
-Each discovered workflow file (from `~/.comanda/workflows/`, `.comanda/workflows/`, `--dir`, or `--workflow`) becomes one MCP tool; each skill becomes an MCP prompt. See [docs/mcp-server.md](docs/mcp-server.md) and [examples/mcp/](examples/mcp/README.md) for client setup and a walkthrough.
+Browse [all examples](examples/README.md) or visit [comanda.sh](https://comanda.sh) for documentation and templates.
 
 ## Development
 
