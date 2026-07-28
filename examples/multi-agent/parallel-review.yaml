@@ -1,0 +1,25 @@
+# Parallel repository review with independent architecture and implementation
+# perspectives. The final step combines both durable artifacts.
+#
+# Usage:
+#   git diff | comanda process examples/multi-agent/parallel-review.yaml
+parallel-process:
+  architecture:
+    input: STDIN
+    model: claude-code
+    action: "Review the design and identify implementation risks."
+    output: .comanda/architecture-review.md
+
+  implementation:
+    input: STDIN
+    model: openai-codex
+    action: "Review the implementation plan and identify practical risks."
+    output: .comanda/implementation-review.md
+
+synthesize:
+  input:
+    - .comanda/architecture-review.md
+    - .comanda/implementation-review.md
+  model: gemini-cli
+  action: "Produce one prioritized recommendation."
+  output: STDOUT
