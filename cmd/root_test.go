@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -48,6 +49,26 @@ func TestExpandPathsInYAML(t *testing.T) {
 			result := expandPathsInYAML(tt.input)
 			if result != tt.expected {
 				t.Errorf("expandPathsInYAML() =\n%s\nwant:\n%s", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGenerationPromptsExplainSemanticMemoryPlacement(t *testing.T) {
+	for name, prompt := range map[string]string{
+		"generate": buildGeneratePrompt("guide", "build a long improvement loop that reuses project decisions", nil, "", nil),
+		"improve":  buildImprovePrompt("guide", "existing: workflow", "reuse prior decisions in the loop", nil, "", nil),
+	} {
+		t.Run(name, func(t *testing.T) {
+			for _, want := range []string{
+				"DURABLE SEMANTIC MEMORY — USE DELIBERATELY:",
+				"types: [decision, constraint, failure]",
+				"Never put it under agentic-loop.config",
+				"memory: true is the separate legacy mode",
+			} {
+				if !strings.Contains(prompt, want) {
+					t.Errorf("prompt missing semantic-memory guidance %q", want)
+				}
 			}
 		})
 	}

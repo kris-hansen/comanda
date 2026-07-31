@@ -148,6 +148,7 @@ All examples are in this directory:
 - **`quality-gate-retry.yaml`** - Quality gates with retry
 - **`quality-gate-abort.yaml`** - Quality gates with abort
 - **`code-quality-loop.yaml`** - Real-world code improvement loop
+- **`durable-memory-improvement.yaml`** - Stateful improvement loop with bounded durable recall on its inner steps
 
 ### Multi-Loop Orchestration
 - **`simple-multi-loop.yaml`** - Basic sequential execution
