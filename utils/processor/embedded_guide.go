@@ -319,6 +319,29 @@ step_name_for_processing:
 - ` + "`inputs`" + `: (map, optional) A map of key-value pairs to pass as initial variables to the sub-workflow. These can be accessed within the sub-workflow (e.g., as ` + "`$parent.key1`" + `).
 - **Note:** The ` + "`input`" + ` field for a ` + "`process`" + ` step is optional. If ` + "`input: STDIN`" + ` is used, the output of the previous step in the parent workflow will be available as the initial ` + "`STDIN`" + ` for the *first* step of the sub-workflow if that first step expects ` + "`STDIN`" + `.
 
+## Durable Semantic Memory (memory)
+
+Use semantic memory only when a step needs durable facts from separate runs or sessions, such as previous decisions, constraints, failures, or findings. It is optional; ordinary one-shot workflows and loops that only need current-iteration context should omit it.
+
+Example:
+
+    review:
+      input: STDIN
+      model: openai-codex
+      memory:
+        namespace: project
+        recall:
+          query: input
+          limit: 6
+          max_chars: 6000
+          types: [decision, constraint, failure]
+      action: "Use relevant durable facts as evidence and cite their IDs."
+      output: STDOUT
+
+- memory: true is the legacy mode that injects the full configured COMANDA.md file. Use the mapping above for bounded semantic recall.
+- Memory is seeded explicitly with comanda memory add; model output is not automatically stored as durable memory.
+- In a block-style agentic-loop with explicit steps:, put memory: on every inner step that needs recall. Do not put it under agentic-loop.config and do not assume a parent setting is inherited.
+
 ## 4. Agentic Loop Step Definition (` + "`agentic_loop`" + ` / ` + "`agentic-loop`" + `)
 
 Agentic loops enable iterative LLM processing until an exit condition is met. This is powerful for tasks that require refinement, multi-step reasoning, or autonomous decision-making.
@@ -1693,6 +1716,29 @@ step_name_for_processing:
 - ` + "`workflow_file`" + `: (string, required) The path to the Comanda workflow YAML file to be executed. This can be a statically defined path or the output of a ` + "`generate`" + ` step.
 - ` + "`inputs`" + `: (map, optional) A map of key-value pairs to pass as initial variables to the sub-workflow. These can be accessed within the sub-workflow (e.g., as ` + "`$parent.key1`" + `).
 - **Note:** The ` + "`input`" + ` field for a ` + "`process`" + ` step is optional. If ` + "`input: STDIN`" + ` is used, the output of the previous step in the parent workflow will be available as the initial ` + "`STDIN`" + ` for the *first* step of the sub-workflow if that first step expects ` + "`STDIN`" + `.
+
+## Durable Semantic Memory (memory)
+
+Use semantic memory only when a step needs durable facts from separate runs or sessions, such as previous decisions, constraints, failures, or findings. It is optional; ordinary one-shot workflows and loops that only need current-iteration context should omit it.
+
+Example:
+
+    review:
+      input: STDIN
+      model: openai-codex
+      memory:
+        namespace: project
+        recall:
+          query: input
+          limit: 6
+          max_chars: 6000
+          types: [decision, constraint, failure]
+      action: "Use relevant durable facts as evidence and cite their IDs."
+      output: STDOUT
+
+- memory: true is the legacy mode that injects the full configured COMANDA.md file. Use the mapping above for bounded semantic recall.
+- Memory is seeded explicitly with comanda memory add; model output is not automatically stored as durable memory.
+- In a block-style agentic-loop with explicit steps:, put memory: on every inner step that needs recall. Do not put it under agentic-loop.config and do not assume a parent setting is inherited.
 
 ## 4. Agentic Loop Step Definition (` + "`agentic_loop`" + ` / ` + "`agentic-loop`" + `)
 
