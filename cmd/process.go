@@ -186,7 +186,7 @@ Input can be provided via:
 					log.Printf("  - Output: %v\n", proc.NormalizeStringSlice(step.Config.Output))
 
 					// Display memory information if enabled
-					if step.Config.Memory {
+					if step.Config.Memory.Legacy {
 						memoryPath := proc.GetMemoryFilePath()
 						if memoryPath != "" {
 							log.Printf("  - Memory: [Using %s]\n", memoryPath)
@@ -253,7 +253,7 @@ Input can be provided via:
 				}
 
 				// Display memory information if enabled
-				if step.Config.Memory {
+				if step.Config.Memory.Legacy {
 					memoryPath := proc.GetMemoryFilePath()
 					if memoryPath != "" {
 						log.Printf("- Memory: [Using %s]\n", memoryPath)

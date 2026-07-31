@@ -155,6 +155,48 @@ See [GitHub Releases](https://github.com/kris-hansen/comanda/releases) for prebu
 - Call OpenAI, Anthropic, Google, xAI, DeepSeek, Moonshot, Sakana, Ollama, vLLM, llama.cpp, and compatible providers
 - Run workflows as HTTP endpoints or OpenAI-compatible server routes
 
+## Durable Semantic Memory
+
+Comanda has two complementary memory modes:
+
+- `memory: true` retains the original behavior: inject the configured
+  `COMANDA.md` file in full.
+- A `memory:` mapping performs bounded, project-local semantic recall from a
+  SQLite FTS5 database. It is opt-in, namespace-scoped, and each recalled
+  record keeps a durable ID and source reference.
+
+Seed a project memory with independently understandable facts:
+
+```bash
+comanda memory add --namespace project --type decision \
+  --source architecture-2026-07 "Use SQLite FTS5 for local durable-memory retrieval."
+comanda memory search --namespace project "local memory retrieval"
+```
+
+Then enable recall for only the step that needs it:
+
+```yaml
+review:
+  input: STDIN
+  model: openai-codex
+  memory:
+    namespace: project
+    recall:
+      query: input
+      limit: 6
+      max_chars: 6000
+      types: [decision, constraint, failure]
+  action: "Review this change and cite relevant memory IDs."
+  output: STDOUT
+```
+
+The database is stored at `.comanda/memory/<namespace>.db` by default. Use
+`comanda memory show <id>` to inspect recalled evidence and its provenance.
+See [examples/semantic-memory.yaml](examples/semantic-memory.yaml) for a
+complete workflow. Automatic fact extraction, deduplication, and project-state
+compaction are planned as the next layer; this first release deliberately
+keeps persistence explicit and inspectable.
+
 Browse [all examples](examples/README.md) or visit [comanda.sh](https://comanda.sh) for documentation and templates.
 
 ## Development
