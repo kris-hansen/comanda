@@ -1577,7 +1577,7 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 		}
 
 		// If memory is enabled for this step, inject memory content
-		if step.Config.Memory {
+		if step.Config.Memory.Legacy {
 			var memoryContent string
 
 			// Combine file-based memory and external memory context
@@ -1600,6 +1600,10 @@ func (p *Processor) processStep(step Step, isParallel bool, parallelID string) (
 				substituted = memoryPrefix + substituted
 				p.debugf("Injected memory context into action (memory length: %d chars)", len(memoryContent))
 			}
+		}
+
+		if semanticMemory := p.semanticMemoryContext(step); semanticMemory != "" {
+			substituted = semanticMemory + substituted
 		}
 
 		// If incremental output mode, load existing file content as context

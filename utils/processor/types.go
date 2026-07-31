@@ -112,6 +112,59 @@ type WorktreeSpec struct {
 	BaseBranch string `yaml:"base,omitempty"`       // Base branch for new branch (default: HEAD)
 }
 
+// MemoryConfig preserves the original `memory: true` file-memory behavior and
+// adds an opt-in semantic-memory mapping. Both forms are intentionally valid:
+//
+//	memory: true
+//	memory:
+//	  namespace: repo
+//	  recall: {query: input, limit: 6, max_chars: 6000}
+//
+// Keeping the boolean mode intact avoids changing existing workflows.
+type MemoryConfig struct {
+	Legacy    bool
+	Namespace string
+	Recall    *MemoryRecallConfig
+}
+
+// MemoryRecallConfig bounds semantic retrieval injected ahead of a step.
+type MemoryRecallConfig struct {
+	Query    string   `yaml:"query,omitempty"`
+	Limit    int      `yaml:"limit,omitempty"`
+	MaxChars int      `yaml:"max_chars,omitempty"`
+	Types    []string `yaml:"types,omitempty"`
+}
+
+// UnmarshalYAML accepts both the legacy boolean and the semantic-memory map.
+func (m *MemoryConfig) UnmarshalYAML(node *yaml.Node) error {
+	*m = MemoryConfig{}
+	switch node.Kind {
+	case yaml.ScalarNode:
+		if err := node.Decode(&m.Legacy); err != nil {
+			return fmt.Errorf("memory must be a boolean or mapping: %w", err)
+		}
+		return nil
+	case yaml.MappingNode:
+		var raw struct {
+			Legacy    bool                `yaml:"legacy,omitempty"`
+			Namespace string              `yaml:"namespace,omitempty"`
+			Recall    *MemoryRecallConfig `yaml:"recall,omitempty"`
+		}
+		if err := node.Decode(&raw); err != nil {
+			return fmt.Errorf("decode memory configuration: %w", err)
+		}
+		m.Legacy = raw.Legacy
+		m.Namespace = raw.Namespace
+		m.Recall = raw.Recall
+		return nil
+	default:
+		return fmt.Errorf("memory must be a boolean or mapping")
+	}
+}
+
+// SemanticEnabled reports whether a step requested bounded semantic recall.
+func (m MemoryConfig) SemanticEnabled() bool { return m.Recall != nil }
+
 // StepConfig represents the configuration for a single step
 type StepConfig struct {
 	Type       string          `yaml:"type"`            // Step type (default is standard LLM step)
@@ -124,7 +177,7 @@ type StepConfig struct {
 	BatchMode  string          `yaml:"batch_mode"`      // How to process multiple files: "combined" (default) or "individual"
 	SkipErrors bool            `yaml:"skip_errors"`     // Whether to continue processing if some files fail
 	Chunk      *ChunkConfig    `yaml:"chunk,omitempty"` // Configuration for chunking large files
-	Memory     bool            `yaml:"memory"`          // Whether to include memory context in this step
+	Memory     MemoryConfig    `yaml:"memory"`          // Legacy file memory or bounded semantic recall
 	ToolConfig *ToolListConfig `yaml:"tool,omitempty"`  // Tool execution configuration for this step
 
 	// OpenAI Responses API specific fields
