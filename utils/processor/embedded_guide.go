@@ -342,6 +342,32 @@ Example:
 - Memory is seeded explicitly with comanda memory add; model output is not automatically stored as durable memory.
 - In a block-style agentic-loop with explicit steps:, put memory: on every inner step that needs recall. Do not put it under agentic-loop.config and do not assume a parent setting is inherited.
 
+## Knowledge Graph Context (graph_node recall)
+
+A codebase index can be turned into a knowledge graph stored in the semantic memory database: typed nodes for components, packages, files, types, and functions, connected by confidence-tagged edges (EXTRACTED vs INFERRED). The graph is built outside workflows with the CLI: comanda index capture -n <name> --graph, or comanda graph build <name> on a registered index. There is no workflow step type for building graphs, and no knowledge_graph or graph: field in the DSL.
+
+Every graph node is mirrored as a graph_node memory record in the <name> namespace, so steps consume the graph through the standard memory mapping by adding graph_node to recall.types, typically alongside decision and constraint. The memory namespace must match the index name.
+
+Use graph_node recall when a step or agentic loop needs durable codebase structure context (which files, packages, types, and functions exist and how they connect) instead of re-scanning the repository each iteration. Recall is bounded by limit and max_chars, so long loops get focused context rather than the whole index.
+
+Example (agentic loop step with codebase context):
+
+    implement:
+      input: $PLAN
+      model: openai-codex
+      memory:
+        namespace: myproject
+        recall:
+          query: input
+          limit: 8
+          max_chars: 6000
+          types: [graph_node, decision, constraint]
+      action: "Implement using the recalled graph nodes as a codebase map; cite node IDs you rely on."
+      output: STDOUT
+
+- Build or refresh the graph before running the workflow (comanda graph update <name>); workflows only read it.
+- Graph recall works only through memory.recall.types; do not invent graph-specific DSL fields.
+
 ## 4. Agentic Loop Step Definition (` + "`agentic_loop`" + ` / ` + "`agentic-loop`" + `)
 
 Agentic loops enable iterative LLM processing until an exit condition is met. This is powerful for tasks that require refinement, multi-step reasoning, or autonomous decision-making.
@@ -1045,6 +1071,7 @@ step_name:
 - ` + "`max_files`" + `: (int, default: 10000) Maximum source files selected for indexing; ` + "`0`" + ` means unlimited.
 - ` + "`enhance`" + `: (bool, default: false) Run a second AI pass with the default generation model to add macro architecture analysis, component boundaries, frontend/backend patterns, and an agent change playbook.
 - ` + "`enhance_model`" + `: (string, optional) Model for ` + "`enhance`" + `; defaults to configured ` + "`default_generation_model`" + `.
+- Knowledge graph: after capturing an index, comanda index capture --graph or comanda graph build <name> turns it into a queryable knowledge graph stored in semantic memory; steps consume it via memory recall with types: [graph_node]. See the Knowledge Graph Context section.
 - ` + "`qmd.collection`" + `: (string, optional) Register index as a qmd collection with this name.
 - ` + "`qmd.context`" + `: (string, optional) Description for the collection (improves search relevance).
 - ` + "`qmd.embed`" + `: (bool, default: false) Run ` + "`qmd embed`" + ` after indexing (enables semantic search, slow).
@@ -1739,6 +1766,32 @@ Example:
 - memory: true is the legacy mode that injects the full configured COMANDA.md file. Use the mapping above for bounded semantic recall.
 - Memory is seeded explicitly with comanda memory add; model output is not automatically stored as durable memory.
 - In a block-style agentic-loop with explicit steps:, put memory: on every inner step that needs recall. Do not put it under agentic-loop.config and do not assume a parent setting is inherited.
+
+## Knowledge Graph Context (graph_node recall)
+
+A codebase index can be turned into a knowledge graph stored in the semantic memory database: typed nodes for components, packages, files, types, and functions, connected by confidence-tagged edges (EXTRACTED vs INFERRED). The graph is built outside workflows with the CLI: comanda index capture -n <name> --graph, or comanda graph build <name> on a registered index. There is no workflow step type for building graphs, and no knowledge_graph or graph: field in the DSL.
+
+Every graph node is mirrored as a graph_node memory record in the <name> namespace, so steps consume the graph through the standard memory mapping by adding graph_node to recall.types, typically alongside decision and constraint. The memory namespace must match the index name.
+
+Use graph_node recall when a step or agentic loop needs durable codebase structure context (which files, packages, types, and functions exist and how they connect) instead of re-scanning the repository each iteration. Recall is bounded by limit and max_chars, so long loops get focused context rather than the whole index.
+
+Example (agentic loop step with codebase context):
+
+    implement:
+      input: $PLAN
+      model: openai-codex
+      memory:
+        namespace: myproject
+        recall:
+          query: input
+          limit: 8
+          max_chars: 6000
+          types: [graph_node, decision, constraint]
+      action: "Implement using the recalled graph nodes as a codebase map; cite node IDs you rely on."
+      output: STDOUT
+
+- Build or refresh the graph before running the workflow (comanda graph update <name>); workflows only read it.
+- Graph recall works only through memory.recall.types; do not invent graph-specific DSL fields.
 
 ## 4. Agentic Loop Step Definition (` + "`agentic_loop`" + ` / ` + "`agentic-loop`" + `)
 
@@ -2439,6 +2492,7 @@ step_name:
 - ` + "`max_output_kb`" + `: (int, default: 100) Maximum size of generated index.
 - ` + "`enhance`" + `: (bool, default: false) Run a second AI pass with the default generation model to add macro architecture analysis, component boundaries, frontend/backend patterns, and an agent change playbook.
 - ` + "`enhance_model`" + `: (string, optional) Model for ` + "`enhance`" + `; defaults to configured ` + "`default_generation_model`" + `.
+- Knowledge graph: after capturing an index, comanda index capture --graph or comanda graph build <name> turns it into a queryable knowledge graph stored in semantic memory; steps consume it via memory recall with types: [graph_node]. See the Knowledge Graph Context section.
 - ` + "`qmd.collection`" + `: (string, optional) Register index as a qmd collection with this name.
 - ` + "`qmd.context`" + `: (string, optional) Description for the collection (improves search relevance).
 - ` + "`qmd.embed`" + `: (bool, default: false) Run ` + "`qmd embed`" + ` after indexing (enables semantic search, slow).
