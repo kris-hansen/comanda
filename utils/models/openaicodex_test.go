@@ -1,6 +1,7 @@
 package models
 
 import (
+	"reflect"
 	"testing"
 	"time"
 )
@@ -119,6 +120,29 @@ func TestOpenAICodexBuildArgs(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestWithOutputLastMessageDoesNotMutateRetryArgs(t *testing.T) {
+	args := make([]string, 3, 8)
+	copy(args, []string{"exec", "--skip-git-repo-check", "Reply with exactly: OK"})
+	wantOriginal := append([]string(nil), args...)
+	wantCommand := []string{
+		"exec",
+		"--skip-git-repo-check",
+		"--output-last-message",
+		"/tmp/codex-output.txt",
+		"Reply with exactly: OK",
+	}
+
+	for attempt := 1; attempt <= 2; attempt++ {
+		got := withOutputLastMessage(args, "/tmp/codex-output.txt")
+		if !reflect.DeepEqual(got, wantCommand) {
+			t.Fatalf("attempt %d command args = %q, want %q", attempt, got, wantCommand)
+		}
+		if !reflect.DeepEqual(args, wantOriginal) {
+			t.Fatalf("attempt %d mutated retry args: got %q, want %q", attempt, args, wantOriginal)
+		}
 	}
 }
 
