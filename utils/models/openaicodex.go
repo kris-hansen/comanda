@@ -268,10 +268,11 @@ func (o *OpenAICodexProvider) executeCommandWithTimeout(args []string, workDir s
 	tmpFile.Close()
 	defer os.Remove(tmpPath)
 
-	// Add --output-last-message flag to capture clean output
-	args = append(args[:len(args)-1], "--output-last-message", tmpPath, args[len(args)-1])
+	// Add --output-last-message without modifying args. Callers reuse args when
+	// retrying transient Codex failures.
+	cmdArgs := withOutputLastMessage(args, tmpPath)
 
-	cmd := exec.Command(o.binaryPath, args...)
+	cmd := exec.Command(o.binaryPath, cmdArgs...)
 
 	if workDir != "" {
 		cmd.Dir = workDir
@@ -313,6 +314,19 @@ func (o *OpenAICodexProvider) executeCommandWithTimeout(args []string, workDir s
 		}
 		return "", fmt.Errorf("codex command timed out after %v", timeout)
 	}
+}
+
+// withOutputLastMessage adds Codex's output flag immediately before the prompt.
+// It always allocates a new slice so a retry can safely reuse the original args.
+func withOutputLastMessage(args []string, outputPath string) []string {
+	if len(args) == 0 {
+		return []string{"--output-last-message", outputPath}
+	}
+
+	cmdArgs := append([]string(nil), args[:len(args)-1]...)
+	cmdArgs = append(cmdArgs, "--output-last-message", outputPath)
+	cmdArgs = append(cmdArgs, args[len(args)-1])
+	return cmdArgs
 }
 
 func openAICodexCommandTimeout(timeoutSeconds int) time.Duration {
