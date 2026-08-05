@@ -149,6 +149,7 @@ All examples are in this directory:
 - **`quality-gate-abort.yaml`** - Quality gates with abort
 - **`code-quality-loop.yaml`** - Real-world code improvement loop
 - **`durable-memory-improvement.yaml`** - Stateful improvement loop with bounded durable recall on its inner steps
+- **[`../knowledge-graph/codebase-context-loop.yaml`](../knowledge-graph/codebase-context-loop.yaml)** - Stateful loop recalling knowledge-graph nodes + durable facts as per-iteration codebase context
 
 ### Multi-Loop Orchestration
 - **`simple-multi-loop.yaml`** - Basic sequential execution
