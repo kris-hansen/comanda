@@ -217,7 +217,23 @@ comanda graph export -o graph.json              # graphify-style JSON
 
 Graph nodes are mirrored into the memory FTS index as `graph_node` records, so
 workflow steps recall them with the existing memory mapping
-(`types: [graph_node]`). See [examples/knowledge-graph/](examples/knowledge-graph/README.md)
+(`types: [graph_node]`).
+
+The same namespace doubles as long-lived agentic context: seed it with project
+decisions and constraints, then let a stateful loop recall graph structure and
+project rules on every iteration — bounded by `limit` and `max_chars`, so the
+loop gets focused context instead of the whole index.
+
+```bash
+comanda index capture -n myproject --graph    # index + knowledge graph
+comanda memory add --namespace myproject --type decision \
+  --source architecture "Keep provider interfaces stable across refactors."
+
+echo "Improve error handling in the storage layer" | \
+  comanda process examples/knowledge-graph/codebase-context-loop.yaml
+```
+
+See [examples/knowledge-graph/](examples/knowledge-graph/README.md)
 and the [design doc](docs/design/knowledge-graph.md).
 
 Browse [all examples](examples/README.md) or visit [comanda.sh](https://comanda.sh) for documentation and templates.
