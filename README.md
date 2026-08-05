@@ -197,6 +197,29 @@ complete workflow. Automatic fact extraction, deduplication, and project-state
 compaction are planned as the next layer; this first release deliberately
 keeps persistence explicit and inspectable.
 
+## Knowledge Graphs
+
+A codebase index can be turned into a traversable knowledge graph stored in
+the semantic memory database. Extraction is deterministic and local: the index
+scan contributes components, packages, files, symbols, and imports as typed
+edges tagged `EXTRACTED` (explicit in the source) or `INFERRED` (name
+resolution, or an optional AI pass).
+
+```bash
+comanda index capture -n myproject --graph      # index + graph in one run
+comanda graph build myproject                   # or build from a registered index
+comanda graph explain Store                     # a node and its connections
+comanda graph path main Store                   # shortest connection between nodes
+comanda graph query "what uses the store?"      # scoped subgraph for a question
+comanda graph stats                             # counts and hub nodes
+comanda graph export -o graph.json              # graphify-style JSON
+```
+
+Graph nodes are mirrored into the memory FTS index as `graph_node` records, so
+workflow steps recall them with the existing memory mapping
+(`types: [graph_node]`). See [examples/knowledge-graph/](examples/knowledge-graph/README.md)
+and the [design doc](docs/design/knowledge-graph.md).
+
 Browse [all examples](examples/README.md) or visit [comanda.sh](https://comanda.sh) for documentation and templates.
 
 ## Development
