@@ -75,7 +75,7 @@ var graphExplainCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer closeStore()
+		defer func() { _ = closeStore() }()
 		ctx := context.Background()
 		if graphJSON {
 			node, err := q.Resolve(ctx, args[0])
@@ -106,7 +106,7 @@ var graphPathCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer closeStore()
+		defer func() { _ = closeStore() }()
 		ctx := context.Background()
 		if graphJSON {
 			hops, err := q.PathHops(ctx, args[0], args[1])
@@ -135,7 +135,7 @@ var graphQueryCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer closeStore()
+		defer func() { _ = closeStore() }()
 		ctx := context.Background()
 		if graphJSON {
 			seeds, err := q.FindNodes(ctx, args[0], 5)
@@ -166,7 +166,7 @@ var graphStatsCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer closeStore()
+		defer func() { _ = closeStore() }()
 		out, err := q.Stats(context.Background())
 		if err != nil {
 			return err
@@ -185,7 +185,7 @@ var graphExportCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer closeStore()
+		defer func() { _ = closeStore() }()
 		exported, err := q.Export(context.Background())
 		if err != nil {
 			return err

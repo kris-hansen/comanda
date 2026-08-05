@@ -3,6 +3,7 @@ package semanticmemory
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -273,8 +274,7 @@ func (s *Store) GraphNeighbors(ctx context.Context, namespace, nodeID string) ([
 	}
 
 	seen := make(map[string]bool, len(edges))
-	var ids []any
-	var placeholders []string
+	var ids []string
 	for _, edge := range edges {
 		other := edge.TargetID
 		if other == nodeID {
@@ -283,11 +283,14 @@ func (s *Store) GraphNeighbors(ctx context.Context, namespace, nodeID string) ([
 		if !seen[other] {
 			seen[other] = true
 			ids = append(ids, other)
-			placeholders = append(placeholders, "?")
 		}
 	}
+	idsJSON, err := json.Marshal(ids)
+	if err != nil {
+		return nil, nil, fmt.Errorf("encode neighbor IDs: %w", err)
+	}
 	nodeRows, err := s.db.QueryContext(ctx, `SELECT id, namespace, kind, name, path, package, summary, degree, created_at, updated_at
-        FROM graph_nodes WHERE id IN (`+strings.Join(placeholders, ",")+`)`, ids...)
+        FROM graph_nodes WHERE id IN (SELECT value FROM json_each(?))`, string(idsJSON))
 	if err != nil {
 		return nil, nil, fmt.Errorf("load graph neighbor nodes: %w", err)
 	}

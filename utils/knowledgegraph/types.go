@@ -6,9 +6,8 @@
 package knowledgegraph
 
 import (
-	"crypto/sha1"
-	"encoding/hex"
 	"fmt"
+	"hash/fnv"
 
 	"github.com/kris-hansen/comanda/utils/semanticmemory"
 )
@@ -56,10 +55,12 @@ func NodeID(namespace, local string) string {
 	return namespace + "|" + local
 }
 
-// EdgeID builds a stable edge ID from its endpoints and kind.
+// EdgeID builds a stable edge ID from its endpoints and kind. FNV-1a is used
+// for compactness; the ID is a dedup key, not a security primitive.
 func EdgeID(namespace, sourceID, targetID, kind string) string {
-	sum := sha1.Sum([]byte(sourceID + ">" + targetID + "|" + kind))
-	return namespace + "|e" + hex.EncodeToString(sum[:8])
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(sourceID + ">" + targetID + "|" + kind))
+	return fmt.Sprintf("%s|e%016x", namespace, h.Sum64())
 }
 
 // AddNode inserts or replaces a node. The node's ID and namespace are set
