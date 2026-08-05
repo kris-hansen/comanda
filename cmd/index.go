@@ -25,6 +25,7 @@ var (
 	indexForce          bool
 	indexEnhance        bool
 	indexEnhanceModel   string
+	indexGraph          bool
 	indexMaxFiles       int
 	indexMaxFilesPerDir int
 
@@ -176,6 +177,7 @@ func init() {
 	captureCmd.Flags().BoolVar(&indexForce, "force", false, "Overwrite existing index")
 	captureCmd.Flags().BoolVar(&indexEnhance, "enhance", false, "Run a second-pass AI macro analysis using default_generation_model")
 	captureCmd.Flags().StringVar(&indexEnhanceModel, "enhance-model", "", "Model for --enhance (default: configured default_generation_model)")
+	captureCmd.Flags().BoolVar(&indexGraph, "graph", false, "Also build a knowledge graph into semantic memory (namespace = index name)")
 	captureCmd.Flags().IntVar(&indexMaxFiles, "max-files", codebaseindex.DefaultMaxFiles, "Max source files included in the index (0 = unlimited)")
 	captureCmd.Flags().IntVar(&indexMaxFilesPerDir, "max-files-per-dir", codebaseindex.DefaultMaxFilesPerDir, "Max files listed per directory in the layout tree (0 = unlimited)")
 
@@ -183,6 +185,7 @@ func init() {
 	updateCmd.Flags().BoolVar(&updateFull, "full", false, "Force full regeneration")
 	updateCmd.Flags().BoolVar(&indexEnhance, "enhance", false, "Run a second-pass AI macro analysis during update")
 	updateCmd.Flags().StringVar(&indexEnhanceModel, "enhance-model", "", "Model for --enhance (default: configured default_generation_model)")
+	updateCmd.Flags().BoolVar(&indexGraph, "graph", false, "Also rebuild the knowledge graph in semantic memory")
 	updateCmd.Flags().IntVar(&indexMaxFiles, "max-files", codebaseindex.DefaultMaxFiles, "Max source files included in the index (0 = unlimited)")
 	updateCmd.Flags().IntVar(&indexMaxFilesPerDir, "max-files-per-dir", codebaseindex.DefaultMaxFilesPerDir, "Max files listed per directory in the layout tree (0 = unlimited)")
 
@@ -328,6 +331,13 @@ func runCapture(cmd *cobra.Command, args []string) error {
 		log.Printf("Index was generated at: %s\n", result.OutputPath)
 	} else {
 		log.Printf("Index registered as '%s'\n", name)
+	}
+
+	// Optionally build the knowledge graph into semantic memory
+	if indexGraph {
+		if err := buildKnowledgeGraph(name, absPath, indexEnhance, indexEnhanceModel); err != nil {
+			log.Printf("Warning: knowledge graph build failed: %v\n", err)
+		}
 	}
 
 	// Print summary
@@ -510,6 +520,13 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	// Update registry
 	if err := registerIndex(name, entry.Path, result, manager.GetConfig()); err != nil {
 		log.Printf("Warning: failed to update registry: %v\n", err)
+	}
+
+	// Optionally rebuild the knowledge graph
+	if indexGraph {
+		if err := buildKnowledgeGraph(name, entry.Path, indexEnhance, indexEnhanceModel); err != nil {
+			log.Printf("Warning: knowledge graph rebuild failed: %v\n", err)
+		}
 	}
 
 	log.Printf("\nIndex updated:")
