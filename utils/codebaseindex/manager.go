@@ -43,21 +43,21 @@ func NewManager(config *Config, verbose bool) (*Manager, error) {
 	return m, nil
 }
 
-// Generate creates the codebase index
-func (m *Manager) Generate() (*Result, error) {
-	startTime := time.Now()
-
-	m.logf("Starting codebase index generation for: %s", m.config.Root)
-
+// Scan runs the deterministic front half of index generation — adapter
+// detection, repository scan, symbol extraction, and component analysis —
+// without synthesizing markdown. It returns the populated ScanResult and the
+// detected language names. Knowledge-graph building and other consumers use
+// this to get structured data without producing an index file.
+func (m *Manager) Scan() (*ScanResult, []string, error) {
 	// Check if root path exists
 	if _, err := os.Stat(m.config.Root); os.IsNotExist(err) {
-		return nil, fmt.Errorf("repository path does not exist: %s", m.config.Root)
+		return nil, nil, fmt.Errorf("repository path does not exist: %s", m.config.Root)
 	}
 
 	// Step 1: Detect or use specified adapters
 	m.adapters = m.detectAdapters()
 	if len(m.adapters) == 0 {
-		return nil, fmt.Errorf("no language adapters detected for repository at %s (supported: Go, Python, TypeScript, Flutter, Java)", m.config.Root)
+		return nil, nil, fmt.Errorf("no language adapters detected for repository at %s (supported: Go, Python, TypeScript, Flutter, Java)", m.config.Root)
 	}
 
 	languages := make([]string, len(m.adapters))
@@ -70,19 +70,33 @@ func (m *Manager) Generate() (*Result, error) {
 	m.logf("Scanning repository...")
 	scanResult, err := m.scanRepository()
 	if err != nil {
-		return nil, fmt.Errorf("scan failed: %w", err)
+		return nil, nil, fmt.Errorf("scan failed: %w", err)
 	}
 	m.logf("Found %d files, selected %d candidates", scanResult.TotalFiles, len(scanResult.Candidates))
 
 	// Step 3: Extract symbols from candidates
 	m.logf("Extracting symbols...")
 	if err := m.extractSymbols(scanResult.Candidates); err != nil {
-		return nil, fmt.Errorf("symbol extraction failed: %w", err)
+		return nil, nil, fmt.Errorf("symbol extraction failed: %w", err)
 	}
 
 	// Step 3b: Infer macro components after symbol extraction so monorepos retain
 	// frontend/backend/package boundaries in the generated index.
 	m.analyzeComponents(scanResult)
+
+	return scanResult, languages, nil
+}
+
+// Generate creates the codebase index
+func (m *Manager) Generate() (*Result, error) {
+	startTime := time.Now()
+
+	m.logf("Starting codebase index generation for: %s", m.config.Root)
+
+	scanResult, languages, err := m.Scan()
+	if err != nil {
+		return nil, err
+	}
 
 	// Step 4: Synthesize markdown
 	m.logf("Synthesizing index...")

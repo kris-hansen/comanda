@@ -109,6 +109,7 @@ func (s *Store) migrate(ctx context.Context) error {
             tokenize='unicode61'
         )`,
 	}
+	statements = append(statements, graphMigrateStatements...)
 	for _, statement := range statements {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {
 			return fmt.Errorf("initialize memory store: %w", err)

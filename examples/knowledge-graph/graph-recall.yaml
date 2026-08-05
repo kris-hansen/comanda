@@ -1,0 +1,24 @@
+# Knowledge-graph recall. Build the graph first:
+#
+#   comanda index capture -n myproject --graph
+#   # or: comanda graph build myproject
+#
+# Graph nodes live in the semantic memory database as graph_node records, so a
+# normal memory mapping recalls them. Ask questions with `comanda graph query`
+# / `explain` / `path` for full traversal.
+
+explain_change:
+  input: STDIN
+  model: openai-codex
+  memory:
+    namespace: myproject
+    recall:
+      query: input
+      limit: 8
+      max_chars: 6000
+      types: [graph_node]
+  action: |
+    Explain how this change fits into the codebase. Treat recalled graph nodes
+    as a map of the surrounding structure (files, packages, types) and cite
+    node IDs when you rely on them.
+  output: STDOUT
