@@ -316,12 +316,13 @@ type AdapterOverride struct {
 
 // QualityGateConfig represents the configuration for a quality gate
 type QualityGateConfig struct {
-	Name    string       `yaml:"name"`              // Gate name
-	Command string       `yaml:"command,omitempty"` // Shell command to execute
-	Type    string       `yaml:"type,omitempty"`    // Built-in type: syntax, security, test
-	OnFail  string       `yaml:"on_fail"`           // Action on failure: retry, skip, abort
-	Timeout int          `yaml:"timeout,omitempty"` // Timeout in seconds
-	Retry   *RetryConfig `yaml:"retry,omitempty"`   // Retry configuration
+	Name          string       `yaml:"name"`                     // Gate name
+	Command       string       `yaml:"command,omitempty"`        // Shell command to execute
+	Type          string       `yaml:"type,omitempty"`           // Built-in type: syntax, security, test
+	OnFail        string       `yaml:"on_fail"`                  // Action on failure: retry, skip, abort, repair
+	RepairCommand string       `yaml:"repair_command,omitempty"` // Command to run once before verifying a failed repair gate
+	Timeout       int          `yaml:"timeout,omitempty"`        // Timeout in seconds
+	Retry         *RetryConfig `yaml:"retry,omitempty"`          // Retry configuration
 }
 
 // RetryConfig configures retry behavior for quality gates

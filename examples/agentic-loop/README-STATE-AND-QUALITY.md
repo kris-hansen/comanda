@@ -58,9 +58,19 @@ agentic-loop:
 
 **On Failure Actions:**
 
-- `retry` - Retry with backoff (default: 3 attempts)
+- `retry` - Retry the same gate command with backoff (default: 3 attempts). This is fail-open after all attempts fail, so use it only for genuinely flaky checks; the failure is recorded in `comanda loop status` and printed as a warning.
 - `abort` - Stop loop and save state as "failed"
 - `skip` - Log warning and continue
+- `repair` - Run `repair_command` once, then verify the gate again. If it still fails, stop the loop. Use this for deterministic checks that need to fix or quarantine bad state.
+
+For example:
+
+```yaml
+- name: validate-report
+  command: "./scripts/validate-report.sh"
+  on_fail: repair
+  repair_command: "./scripts/quarantine-invalid-report.sh"
+```
 
 ### 3. No Timeout by Default
 Loops can now run indefinitely (and that's a very long time!):
@@ -72,6 +82,13 @@ agentic-loop:
     max_iterations: 1000
 ```
 Control is via `max_iterations` and exit conditions instead of time limits. Set this for safety if you are leaving your loops unattended.
+
+### Completion Sentinels
+
+`llm_decides` stops only when the final non-empty line is exactly `DONE`,
+`COMPLETE`, `FINISHED`, or `TASK_COMPLETE`. This avoids accidental exits when
+long-form output mentions completion or remaining work in normal prose. For a
+custom sentinel, use `exit_condition: pattern_match` with `exit_pattern`.
 
 ### 4. Loop Management CLI
 New `comanda loop` command for managing loop state:
@@ -195,7 +212,8 @@ State files are stored in `~/.comanda/loop-states/{loop-name}.json`:
 | `name` | string | ✓ | Gate name |
 | `command` | string | - | Shell command to execute |
 | `type` | string | - | Built-in type: syntax, security, test |
-| `on_fail` | string | ✓ | Action: retry, skip, abort |
+| `on_fail` | string | ✓ | Action: retry, skip, abort, repair |
+| `repair_command` | string | with `repair` | Command run once before the gate is checked again |
 | `timeout` | int | - | Timeout in seconds |
 | `retry` | RetryConfig | - | Retry configuration |
 
