@@ -144,11 +144,7 @@ func (o *OpenAICodexProvider) SendPromptWithTimeout(modelName string, prompt str
 		func() (interface{}, error) {
 			return o.executeCommandWithTimeout(args, "", timeout)
 		},
-		func(err error) bool {
-			// Retry on timeout or transient errors
-			return strings.Contains(err.Error(), "timeout") ||
-				strings.Contains(err.Error(), "connection")
-		},
+		retry.IsTransient,
 		retry.DefaultRetryConfig,
 	)
 
@@ -202,10 +198,7 @@ func (o *OpenAICodexProvider) SendPromptWithFileWithTimeout(modelName string, pr
 		func() (interface{}, error) {
 			return o.executeCommandWithTimeout(args, filepath.Dir(file.Path), timeout)
 		},
-		func(err error) bool {
-			return strings.Contains(err.Error(), "timeout") ||
-				strings.Contains(err.Error(), "connection")
-		},
+		retry.IsTransient,
 		retry.DefaultRetryConfig,
 	)
 

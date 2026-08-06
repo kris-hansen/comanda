@@ -1,9 +1,12 @@
 package retry
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log"
 	"math"
+	"net"
 	"strings"
 	"time"
 
@@ -60,7 +63,7 @@ func WithRetry(operation func() (interface{}, error), shouldRetry func(error) bo
 			err, retryWait, attempt+1, config.MaxRetries)
 
 		// Also print a brief message in non-debug mode
-		log.Printf("Rate limit detected, retrying in %v (attempt %d/%d)...\n",
+		log.Printf("Transient failure detected, retrying in %v (attempt %d/%d)...\n",
 			retryWait, attempt+1, config.MaxRetries)
 
 		// Wait before next retry
@@ -74,17 +77,45 @@ func WithRetry(operation func() (interface{}, error), shouldRetry func(error) bo
 	return nil, fmt.Errorf("unexpected error in retry logic")
 }
 
-// Is429Error checks if the error is a rate limit (429) error
-func Is429Error(err error) bool {
+// IsTransient reports whether an error is safe to retry without changing the
+// request. It deliberately excludes ordinary client/configuration failures so
+// those remain fast-fail. Providers use this shared classifier to avoid drift
+// between HTTP APIs and local agent CLIs.
+func IsTransient(err error) bool {
 	if err == nil {
 		return false
 	}
 
-	errMsg := err.Error()
-	return strings.Contains(errMsg, "429") ||
-		strings.Contains(errMsg, "rate limit") ||
-		strings.Contains(errMsg, "quota exceeded") ||
-		strings.Contains(errMsg, "too many requests")
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+
+	var networkErr net.Error
+	if errors.As(err, &networkErr) && networkErr.Timeout() {
+		return true
+	}
+
+	errMsg := strings.ToLower(err.Error())
+	transientPhrases := []string{
+		"429", "rate limit", "quota exceeded", "too many requests",
+		"500", "502", "503", "504", "overloaded", "server error",
+		"response stalled", "eof", "broken pipe", "connection reset",
+		"connection refused", "connection aborted", "network is unreachable",
+		"context deadline exceeded", "deadline exceeded", "timeout", "timed out",
+	}
+	for _, phrase := range transientPhrases {
+		if strings.Contains(errMsg, phrase) {
+			return true
+		}
+	}
+	return false
+}
+
+// Is429Error is retained for existing API providers. Despite its historical
+// name, it now delegates to the shared transient classifier so every provider
+// receives the same retry coverage.
+func Is429Error(err error) bool {
+	return IsTransient(err)
 }
 
 // extractRetryTime attempts to extract a retry time from an error message
