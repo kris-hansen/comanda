@@ -96,16 +96,19 @@ var loopStatusCmd = &cobra.Command{
 
 			// Print table
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
-			fmt.Fprintln(w, "LOOP NAME\tSTATUS\tITERATION\tELAPSED\tLAST UPDATED")
+			fmt.Fprintln(w, "LOOP NAME\tSTATUS\tITERATION\tELAPSED\tLAST GATE\tLAST ERROR\tLAST UPDATED")
 			for _, state := range states {
 				elapsed := state.LastUpdateTime.Sub(state.StartTime)
 				lastUpdate := time.Since(state.LastUpdateTime)
-				fmt.Fprintf(w, "%s\t%s\t%d/%d\t%s\t%s\n",
+				gate, lastError := loopGateSummary(state)
+				fmt.Fprintf(w, "%s\t%s\t%d/%d\t%s\t%s\t%s\t%s\n",
 					state.LoopName,
 					state.Status,
 					state.Iteration,
 					state.MaxIterations,
 					formatDuration(elapsed),
+					gate,
+					lastError,
 					formatDuration(lastUpdate)+" ago",
 				)
 			}
@@ -190,6 +193,24 @@ var loopStatusCmd = &cobra.Command{
 
 		return nil
 	},
+}
+
+// loopGateSummary returns a compact health summary for the status table.
+func loopGateSummary(state *processor.LoopState) (string, string) {
+	if len(state.QualityGateResults) == 0 {
+		return "-", "-"
+	}
+
+	last := state.QualityGateResults[len(state.QualityGateResults)-1]
+	if last.Passed {
+		return "PASS " + last.GateName, "-"
+	}
+
+	message := strings.TrimSpace(last.Message)
+	if len(message) > 80 {
+		message = message[:77] + "..."
+	}
+	return "FAIL " + last.GateName, message
 }
 
 var loopCancelCmd = &cobra.Command{

@@ -61,26 +61,16 @@ func TestCheckExitCondition_LLMDecides(t *testing.T) {
 			output:     "  DONE  ",
 			shouldExit: true,
 		},
-		// New test cases for end-of-output detection
+		// Completion words in ordinary prose must not stop a long-running loop.
 		{
-			name:       "DONE at end of sentence exits",
+			name:       "DONE at end of prose continues",
 			output:     "There is nothing further to document. DONE",
-			shouldExit: true,
+			shouldExit: false,
 		},
 		{
-			name:       "DONE at end with period exits",
-			output:     "All tasks completed. DONE.",
-			shouldExit: true,
-		},
-		{
-			name:       "COMPLETE at end of output exits",
-			output:     "All work has been finished. COMPLETE",
-			shouldExit: true,
-		},
-		{
-			name:       "FINISHED at end of output exits",
-			output:     "The implementation is ready. FINISHED",
-			shouldExit: true,
+			name:       "context exhaustion prose continues",
+			output:     "Unable to complete the remaining work in this iteration.",
+			shouldExit: false,
 		},
 		{
 			name:       "DONE in middle of sentence does NOT exit",
@@ -88,8 +78,8 @@ func TestCheckExitCondition_LLMDecides(t *testing.T) {
 			shouldExit: false,
 		},
 		{
-			name:       "multiline with DONE at end of last line exits",
-			output:     "Step 1 complete.\nStep 2 complete.\nAll work DONE",
+			name:       "multiline final sentinel exits",
+			output:     "Step 1 complete.\nStep 2 complete.\nDONE",
 			shouldExit: true,
 		},
 		{

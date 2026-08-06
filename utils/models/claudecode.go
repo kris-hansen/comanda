@@ -166,11 +166,7 @@ func (c *ClaudeCodeProvider) SendPrompt(modelName string, prompt string) (string
 		func() (interface{}, error) {
 			return c.executeCommand(args, prompt, "")
 		},
-		func(err error) bool {
-			// Retry on timeout or transient errors
-			return strings.Contains(err.Error(), "timeout") ||
-				strings.Contains(err.Error(), "connection")
-		},
+		retry.IsTransient,
 		retry.DefaultRetryConfig,
 	)
 
@@ -214,10 +210,7 @@ func (c *ClaudeCodeProvider) SendPromptWithFile(modelName string, prompt string,
 		func() (interface{}, error) {
 			return c.executeCommand(args, combinedPrompt, filepath.Dir(file.Path))
 		},
-		func(err error) bool {
-			return strings.Contains(err.Error(), "timeout") ||
-				strings.Contains(err.Error(), "connection")
-		},
+		retry.IsTransient,
 		retry.DefaultRetryConfig,
 	)
 
@@ -273,10 +266,7 @@ func (c *ClaudeCodeProvider) SendPromptAgentic(modelName string, prompt string, 
 		func() (interface{}, error) {
 			return c.executeCommand(args, prompt, workDir)
 		},
-		func(err error) bool {
-			return strings.Contains(err.Error(), "timeout") ||
-				strings.Contains(err.Error(), "connection")
-		},
+		retry.IsTransient,
 		retry.DefaultRetryConfig,
 	)
 

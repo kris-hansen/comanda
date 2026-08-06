@@ -3,6 +3,7 @@ package processor
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -24,26 +25,7 @@ const (
 // Pre-compiled regex patterns for exit condition detection (better performance)
 var (
 	completionPatterns = []*regexp.Regexp{
-		regexp.MustCompile(`(?i)^\s*DONE\.?\s*$`),      // DONE as entire output
-		regexp.MustCompile(`(?i)^\s*COMPLETE\.?\s*$`),  // COMPLETE as entire output
-		regexp.MustCompile(`(?i)^\s*FINISHED\.?\s*$`),  // FINISHED as entire output
-		regexp.MustCompile(`(?i)\bDONE\.?\s*$`),        // DONE at end of output
-		regexp.MustCompile(`(?i)\bCOMPLETE\.?\s*$`),    // COMPLETE at end of output
-		regexp.MustCompile(`(?i)\bFINISHED\.?\s*$`),    // FINISHED at end of output
-		regexp.MustCompile(`(?i)^.*\bDONE\.?\s*$`),     // DONE at end of any line (multiline)
-		regexp.MustCompile(`(?i)^.*\bCOMPLETE\.?\s*$`), // COMPLETE at end of any line
-		regexp.MustCompile(`(?i)^.*\bFINISHED\.?\s*$`), // FINISHED at end of any line
-		regexp.MustCompile(`(?i)TASK[_\s-]?COMPLETE`),  // TASK_COMPLETE anywhere
-	}
-	contextExhaustionPatterns = []*regexp.Regexp{
-		regexp.MustCompile(`(?i)completion[_\-\s]?plan`),
-		regexp.MustCompile(`(?i)context[_\s]*(limit|exhaust|full|window)`),
-		regexp.MustCompile(`(?i)remaining[_\s]*work`),
-		regexp.MustCompile(`(?i)continue[_\s]*in[_\s]*(a\s+)?new[_\s]*session`),
-		regexp.MustCompile(`(?i)documented.*remaining`),
-		regexp.MustCompile(`(?i)out\s+of\s+(context|tokens?)`),
-		regexp.MustCompile(`(?i)cannot\s+continue`),
-		regexp.MustCompile(`(?i)unable\s+to\s+complete`),
+		regexp.MustCompile(`(?i)^(?:DONE|COMPLETE|FINISHED|TASK[_\s-]?COMPLETE)\.?$`),
 	}
 )
 
@@ -280,6 +262,19 @@ func (p *Processor) processAgenticLoopWithFile(loopName string, config *AgenticL
 					p.debugf("Quality gate '%s' passed (attempts: %d, duration: %v)", result.GateName, result.Attempts, result.Duration)
 				} else {
 					p.debugf("Quality gate '%s' failed after %d attempts: %s", result.GateName, result.Attempts, result.Message)
+					log.Printf("WARNING: quality gate '%s' failed after %d attempt(s): %s", result.GateName, result.Attempts, result.Message)
+				}
+			}
+
+			// Persist gate outcomes even when a fail-open retry/skip allows the
+			// loop to continue. Otherwise `loop status` cannot reveal a chronic
+			// gate failure after a successful checkpoint.
+			if config.Stateful {
+				state := loopStateFromContext(loopCtx, config.Name, config, workflowFile, p.variables)
+				state.Status = "running"
+				state.QualityGateResults = gateResults
+				if saveErr := stateManager.SaveState(state); saveErr != nil {
+					p.debugf("Warning: Failed to save quality gate results: %v", saveErr)
 				}
 			}
 		}
@@ -628,23 +623,16 @@ func (p *Processor) checkExitCondition(config *AgenticLoopConfig, output string)
 
 	switch config.ExitCondition {
 	case "llm_decides", "":
-		// Look for common completion indicators using pre-compiled patterns
-		// Patterns match DONE/COMPLETE/FINISHED:
-		// - As the entire output (with optional whitespace)
-		// - At the end of output (e.g., "All tasks completed. DONE")
-		// - On their own line
+		// Require an explicit sentinel on the final line. Long-form research and
+		// audit work commonly uses words such as "done", "remaining work", and
+		// "unable to complete" in ordinary prose; treating those as completion
+		// silently stops useful loops after one iteration.
 		trimmedOutput := strings.TrimSpace(output)
+		lines := strings.Split(trimmedOutput, "\n")
+		lastLine := strings.TrimSpace(lines[len(lines)-1])
 		for _, pattern := range completionPatterns {
-			if pattern.MatchString(trimmedOutput) {
+			if pattern.MatchString(lastLine) {
 				return true, "LLM indicated completion"
-			}
-		}
-
-		// Check for context exhaustion / completion plan signals
-		// These indicate the agent realized it can't continue and documented remaining work
-		for _, pattern := range contextExhaustionPatterns {
-			if pattern.MatchString(output) {
-				return true, "Agent signaled context exhaustion or documented remaining work"
 			}
 		}
 

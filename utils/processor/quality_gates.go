@@ -340,7 +340,29 @@ func RunQualityGates(configs []QualityGateConfig, workDir string) ([]QualityGate
 				// Continue to next gate
 				continue
 			case "retry":
-				// Already retried, continue
+				// Retry only re-runs the command against unchanged state. It is
+				// intentionally fail-open once exhausted; the recorded result makes
+				// that outcome visible to operators and loop status.
+				continue
+			case "repair":
+				repairOutput, repairErr := runGateRepair(ctx, config, workDir)
+				if repairErr != nil {
+					return results, fmt.Errorf("quality gate '%s' repair failed: %w", config.Name, repairErr)
+				}
+
+				verified, verifyErr := runGateWithRetry(ctx, gate, workDir, config)
+				if verifyErr != nil {
+					return results, fmt.Errorf("quality gate '%s' failed after repair: %w", config.Name, verifyErr)
+				}
+				verified.Attempts += result.Attempts
+				if verified.Details == nil {
+					verified.Details = make(map[string]interface{})
+				}
+				verified.Details["repair_output"] = repairOutput
+				results[len(results)-1] = *verified
+				if !verified.Passed {
+					return results, fmt.Errorf("quality gate '%s' failed after repair", config.Name)
+				}
 				continue
 			default:
 				// Default to abort
@@ -350,6 +372,30 @@ func RunQualityGates(configs []QualityGateConfig, workDir string) ([]QualityGate
 	}
 
 	return results, nil
+}
+
+// runGateRepair runs a gate's repair command once before the gate is verified
+// again. Repair is for deterministic failures where retrying unchanged state
+// cannot help.
+func runGateRepair(ctx context.Context, config QualityGateConfig, workDir string) (string, error) {
+	if strings.TrimSpace(config.RepairCommand) == "" {
+		return "", fmt.Errorf("on_fail: repair requires repair_command")
+	}
+
+	timeout := config.Timeout
+	if timeout <= 0 {
+		timeout = 60
+	}
+	commandCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(commandCtx, "bash", "-c", config.RepairCommand)
+	cmd.Dir = workDir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return string(output), fmt.Errorf("%w: %s", err, strings.TrimSpace(string(output)))
+	}
+	return string(output), nil
 }
 
 // createGate creates a QualityGate from config
