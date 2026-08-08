@@ -14,6 +14,17 @@ import (
 // logger is a custom logger for HTTP requests, shared across the package
 var logger = log.New(os.Stdout, "", log.LstdFlags)
 
+// maskAuthHeader redacts the credential portion of an Authorization
+// header value. It tolerates malformed or truncated values (e.g. a bare
+// "Bearer" with no token) instead of panicking.
+func maskAuthHeader(auth string) string {
+	const bearerPrefix = "Bearer "
+	if rest, ok := strings.CutPrefix(auth, bearerPrefix); ok && rest != "" {
+		return bearerPrefix + "********"
+	}
+	return "********"
+}
+
 func logRequest(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -22,7 +33,7 @@ func logRequest(handler http.HandlerFunc) http.HandlerFunc {
 		// Build auth info string, masking the token
 		var authInfo string
 		if auth := r.Header.Get("Authorization"); auth != "" {
-			authInfo = strings.Replace(auth, auth[7:], "********", 1)
+			authInfo = maskAuthHeader(auth)
 		}
 
 		// Debug level logging - more detailed internal information
