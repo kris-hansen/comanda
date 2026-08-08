@@ -190,62 +190,42 @@ summarize:
 `)
 
 	// CLI-style parsing (from cmd/process.go)
-	var cliRawConfig map[string]processor.StepConfig
-	err := yaml.Unmarshal(yamlContent, &cliRawConfig)
+	var cliConfig processor.DSLConfig
+	err := yaml.Unmarshal(yamlContent, &cliConfig)
 	assert.NoError(t, err, "CLI parsing should not error")
 
-	var cliConfig processor.DSLConfig
-	for name, config := range cliRawConfig {
-		cliConfig.Steps = append(cliConfig.Steps, processor.Step{
-			Name:   name,
-			Config: config,
-		})
-	}
-
-	// Server-style parsing (from utils/server/handlers.go)
-	var serverRawConfig map[string]processor.StepConfig
-	err = yaml.Unmarshal(yamlContent, &serverRawConfig)
+	// Server-style parsing (from utils/server/handlers.go) now uses the same
+	// DSLConfig custom unmarshaler as the CLI
+	var serverConfig processor.DSLConfig
+	err = yaml.Unmarshal(yamlContent, &serverConfig)
 	assert.NoError(t, err, "Server parsing should not error")
 
-	var serverConfig processor.DSLConfig
-	for name, config := range serverRawConfig {
-		serverConfig.Steps = append(serverConfig.Steps, processor.Step{
-			Name:   name,
-			Config: config,
-		})
-	}
-
-	// Verify both methods produce identical results
+	// Verify both methods produce identical, ordered results
 	assert.Equal(t, len(cliConfig.Steps), len(serverConfig.Steps),
 		"CLI and server should parse the same number of steps")
+	assert.Equal(t, 2, len(serverConfig.Steps), "Both steps should be parsed")
 
-	// Create maps for easier comparison since order isn't guaranteed
-	cliSteps := make(map[string]processor.Step)
-	serverSteps := make(map[string]processor.Step)
+	// Step order must be preserved exactly as written in the YAML
+	assert.Equal(t, "analyze_text", serverConfig.Steps[0].Name, "First step should be analyze_text")
+	assert.Equal(t, "summarize", serverConfig.Steps[1].Name, "Second step should be summarize")
 
-	for _, step := range cliConfig.Steps {
-		cliSteps[step.Name] = step
-	}
-	for _, step := range serverConfig.Steps {
-		serverSteps[step.Name] = step
-	}
-
-	// Compare steps by name
-	for name, cliStep := range cliSteps {
-		serverStep, exists := serverSteps[name]
-		assert.True(t, exists, "Step %s should exist in both configs", name)
+	// Compare steps positionally
+	for i, cliStep := range cliConfig.Steps {
+		serverStep := serverConfig.Steps[i]
+		assert.Equal(t, cliStep.Name, serverStep.Name,
+			"Step order should match at index %d", i)
 
 		// Compare StepConfig fields
 		assert.Equal(t, cliStep.Config.Input, serverStep.Config.Input,
-			"Input should match for step %s", name)
+			"Input should match for step %s", cliStep.Name)
 		assert.Equal(t, cliStep.Config.Model, serverStep.Config.Model,
-			"Model should match for step %s", name)
+			"Model should match for step %s", cliStep.Name)
 		assert.Equal(t, cliStep.Config.Action, serverStep.Config.Action,
-			"Action should match for step %s", name)
+			"Action should match for step %s", cliStep.Name)
 		assert.Equal(t, cliStep.Config.Output, serverStep.Config.Output,
-			"Output should match for step %s", name)
+			"Output should match for step %s", cliStep.Name)
 		assert.Equal(t, cliStep.Config.NextAction, serverStep.Config.NextAction,
-			"NextAction should match for step %s", name)
+			"NextAction should match for step %s", cliStep.Name)
 	}
 
 	// Create test server config
@@ -299,6 +279,57 @@ analyze_text:
 	assert.Equal(t, "gpt-4o", dslConfig.Steps[0].Config.Model, "Step model should be 'gpt-4o'")
 	assert.Equal(t, "Test action", dslConfig.Steps[0].Config.Action, "Step action should be 'Test action'")
 	assert.Equal(t, "STDOUT", dslConfig.Steps[0].Config.Output, "Step output should be 'STDOUT'")
+}
+
+// Test that the parsing used by the server handles top-level DSL blocks
+// (parallel, loops, execute_loops, defer) instead of only flat linear steps
+func TestServerParsesComplexWorkflows(t *testing.T) {
+	yamlContent := []byte(`
+prepare:
+  input: NA
+  model: gpt-4o
+  action: "Prepare the data"
+  output: STDOUT
+
+group_one:
+  analyze:
+    input: NA
+    model: gpt-4o
+    action: "Analyze"
+    output: STDOUT
+  summarize:
+    input: NA
+    model: gpt-4o
+    action: "Summarize"
+    output: STDOUT
+
+loops:
+  build:
+    max_iterations: 5
+    exit_condition: "tests pass"
+
+execute_loops:
+  - build
+
+defer:
+  cleanup:
+    input: NA
+    model: gpt-4o
+    action: "Clean up"
+    output: STDOUT
+`)
+
+	var dslConfig processor.DSLConfig
+	err := yaml.Unmarshal(yamlContent, &dslConfig)
+	assert.NoError(t, err, "Complex workflow should parse without error")
+
+	assert.Equal(t, 1, len(dslConfig.Steps), "Should have one sequential step")
+	assert.Equal(t, "prepare", dslConfig.Steps[0].Name)
+	assert.Contains(t, dslConfig.ParallelSteps, "group_one", "Parallel group should be parsed")
+	assert.Equal(t, 2, len(dslConfig.ParallelSteps["group_one"]), "Parallel group should contain both steps")
+	assert.Contains(t, dslConfig.Loops, "build", "Named loop should be parsed")
+	assert.Equal(t, []string{"build"}, dslConfig.ExecuteLoops, "execute_loops should be parsed")
+	assert.Contains(t, dslConfig.Defer, "cleanup", "Deferred step should be parsed")
 }
 
 func TestHandleProcessStreaming(t *testing.T) {

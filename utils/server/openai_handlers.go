@@ -2,7 +2,6 @@ package server
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kris-hansen/comanda/utils/config"
 	"github.com/kris-hansen/comanda/utils/fileutil"
 	"github.com/kris-hansen/comanda/utils/processor"
 	"gopkg.in/yaml.v3"
@@ -207,18 +207,13 @@ func (s *Server) handleNonStreamingChatCompletion(w http.ResponseWriter, r *http
 		return
 	}
 
-	var rawConfig map[string]processor.StepConfig
-	if err := yaml.Unmarshal(yamlContent, &rawConfig); err != nil {
+	// Unmarshal using the DSLConfig custom unmarshaler (same as CLI) so that
+	// ordered steps and top-level blocks (parallel, loops, defer, workflow)
+	// are all handled correctly
+	var dslConfig processor.DSLConfig
+	if err := yaml.Unmarshal(yamlContent, &dslConfig); err != nil {
 		sendOpenAIError(w, http.StatusInternalServerError, "server_error", "Failed to parse workflow: "+err.Error())
 		return
-	}
-
-	var dslConfig processor.DSLConfig
-	for name, stepConfig := range rawConfig {
-		dslConfig.Steps = append(dslConfig.Steps, processor.Step{
-			Name:   name,
-			Config: stepConfig,
-		})
 	}
 
 	// Create processor
@@ -323,18 +318,13 @@ func (s *Server) handleStreamingChatCompletion(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	var rawConfig map[string]processor.StepConfig
-	if err := yaml.Unmarshal(yamlContent, &rawConfig); err != nil {
+	// Unmarshal using the DSLConfig custom unmarshaler (same as CLI) so that
+	// ordered steps and top-level blocks (parallel, loops, defer, workflow)
+	// are all handled correctly
+	var dslConfig processor.DSLConfig
+	if err := yaml.Unmarshal(yamlContent, &dslConfig); err != nil {
 		sendStreamError(w, flusher, "Failed to parse workflow: "+err.Error())
 		return
-	}
-
-	var dslConfig processor.DSLConfig
-	for name, stepConfig := range rawConfig {
-		dslConfig.Steps = append(dslConfig.Steps, processor.Step{
-			Name:   name,
-			Config: stepConfig,
-		})
 	}
 
 	// Create processor
@@ -357,8 +347,14 @@ func (s *Server) handleStreamingChatCompletion(w http.ResponseWriter, r *http.Re
 	progressWriter := processor.NewChannelProgressWriter(progressChan)
 	proc.SetProgressWriter(progressWriter)
 
-	// Create context with timeout
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+	// Long-running workflows can stream for a long time; clear the server's
+	// write deadline for this response and only apply a timeout if one is
+	// explicitly configured
+	rc := http.NewResponseController(w)
+	if err := rc.SetWriteDeadline(time.Time{}); err != nil {
+		config.DebugLog("Could not clear write deadline for streaming: %v", err)
+	}
+	ctx, cancel := streamingContext(r.Context(), s.config)
 	defer cancel()
 
 	// Run processor in goroutine

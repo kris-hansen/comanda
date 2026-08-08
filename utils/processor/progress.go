@@ -10,6 +10,7 @@ const (
 	ProgressError
 	ProgressOutput       // New type for output events
 	ProgressParallelStep // New type for parallel step updates
+	ProgressLog          // Stream log line (loop iterations, context usage, tool activity)
 )
 
 // StepInfo contains detailed information about a processing step

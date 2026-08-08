@@ -239,11 +239,11 @@ type NormalizeOptions struct {
 
 // PerformanceMetrics tracks timing information for processing steps
 type PerformanceMetrics struct {
-	InputProcessingTime  int64 // Time in milliseconds to process inputs
-	ModelProcessingTime  int64 // Time in milliseconds for model processing
-	ActionProcessingTime int64 // Time in milliseconds for action processing
-	OutputProcessingTime int64 // Time in milliseconds for output processing
-	TotalProcessingTime  int64 // Total time in milliseconds for the step
+	InputProcessingTime  int64 `json:"input_ms"`  // Time in milliseconds to process inputs
+	ModelProcessingTime  int64 `json:"model_ms"`  // Time in milliseconds for model processing
+	ActionProcessingTime int64 `json:"action_ms"` // Time in milliseconds for action processing
+	OutputProcessingTime int64 `json:"output_ms"` // Time in milliseconds for output processing
+	TotalProcessingTime  int64 `json:"total_ms"`  // Total time in milliseconds for the step
 }
 
 // CodebaseIndexConfig represents the configuration for codebase-index step
