@@ -11,9 +11,10 @@ import (
 
 // StreamLogger handles real-time logging to a file for monitoring long-running operations
 type StreamLogger struct {
-	file    *os.File
-	mu      sync.Mutex
-	enabled bool
+	file     *os.File
+	mu       sync.Mutex
+	enabled  bool
+	callback func(line string) // optional sink invoked with each formatted log line
 }
 
 // NewStreamLogger creates a new stream logger that writes to the specified file
@@ -33,8 +34,31 @@ func NewStreamLogger(path string) (*StreamLogger, error) {
 	}, nil
 }
 
+// NewCallbackStreamLogger creates a stream logger that delivers each formatted
+// line to a callback instead of (or in addition to) a file. Lines use the same
+// format as the file-based log, so existing tail/parse tooling works unchanged.
+func NewCallbackStreamLogger(cb func(line string)) *StreamLogger {
+	return &StreamLogger{
+		enabled:  cb != nil,
+		callback: cb,
+	}
+}
+
+// SetCallback attaches a line callback to an existing logger
+func (s *StreamLogger) SetCallback(cb func(line string)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.callback = cb
+	if cb != nil {
+		s.enabled = true
+	}
+}
+
 // Close closes the stream log file
 func (s *StreamLogger) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.callback = nil
 	if s.file != nil {
 		return s.file.Close()
 	}
@@ -48,17 +72,27 @@ func (s *StreamLogger) IsEnabled() bool {
 
 // Log writes a message to the stream log with timestamp
 func (s *StreamLogger) Log(format string, args ...interface{}) {
-	if !s.enabled || s.file == nil {
+	if !s.enabled {
 		return
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if s.file == nil && s.callback == nil {
+		return
+	}
+
 	timestamp := time.Now().Format("15:04:05")
 	message := fmt.Sprintf(format, args...)
-	fmt.Fprintf(s.file, "[%s] %s\n", timestamp, message)
-	_ = s.file.Sync() // Flush immediately for tail -f
+	line := fmt.Sprintf("[%s] %s", timestamp, message)
+	if s.file != nil {
+		fmt.Fprintf(s.file, "%s\n", line)
+		_ = s.file.Sync() // Flush immediately for tail -f
+	}
+	if s.callback != nil {
+		s.callback(line)
+	}
 }
 
 // LogSection writes a section header to the stream log

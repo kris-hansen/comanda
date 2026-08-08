@@ -73,31 +73,8 @@ func (s *Server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 	config.VerboseLog("Generating workflow using model: %s", modelForGeneration)
 	config.DebugLog("Generate request: prompt_length=%d, model=%s", len(req.Prompt), modelForGeneration)
 
-	// Get available models from the environment config
-	availableModels := s.envConfig.GetAllConfiguredModels()
-
-	// Add Claude Code models if the claude binary is available
-	if models.IsClaudeCodeAvailable() {
-		claudeCodeModels := []string{"claude-code", "claude-code-opus", "claude-code-sonnet", "claude-code-haiku"}
-		availableModels = append(availableModels, claudeCodeModels...)
-	}
-
-	// Add Gemini CLI models if the gemini binary is available
-	if models.IsGeminiCLIAvailable() {
-		geminiCLIModels := []string{"gemini-cli", "gemini-cli-pro", "gemini-cli-flash", "gemini-cli-flash-lite"}
-		availableModels = append(availableModels, geminiCLIModels...)
-	}
-
-	// Add OpenAI Codex models if the codex binary is available
-	if models.IsOpenAICodexAvailable() {
-		availableModels = append(availableModels, models.GetOpenAICodexModels()...)
-	}
-
-	// Add Kimi Code models if the kimi binary is available
-	if models.IsKimiCodeAvailable() {
-		kimiCodeModels := []string{"kimi-code"}
-		availableModels = append(availableModels, kimiCodeModels...)
-	}
+	// Get available models from the environment config plus detected CLI providers
+	availableModels := collectAvailableModels(s.envConfig)
 
 	dslGuide := processor.GetEmbeddedLLMGuideWithModels(availableModels)
 

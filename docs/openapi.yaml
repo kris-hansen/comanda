@@ -256,21 +256,20 @@ components:
       properties:
         input:
           type: string
-          description: Input for YAML processing (required for POST requests)
+          description: Optional input for YAML processing (may also be supplied via the input query parameter)
         streaming:
           type: boolean
           description: |
             Enable real-time output streaming using Server-Sent Events (SSE).
             When true, the response will be in text/event-stream format with the following event types:
             - data: Regular output data
-            - progress: Progress updates
+            - progress: Progress updates (plain string for start/completion messages, JSON object with step info and metrics for step updates)
+            - log: Stream-log lines (loop iterations, context usage, tool activity) in the same format as the CLI's --stream-log file
             - spinner: Spinner/loading status updates
             - complete: Processing completion message
             - error: Error messages
             - heartbeat: Connection keep-alive signals
             - output: JSON-encoded output from YAML processing when output is set to STDOUT (format: {"content": "output text"})
-      required:
-        - input
 
     StepInfo:
       type: object
@@ -300,8 +299,44 @@ components:
         step:
           $ref: '#/components/schemas/StepInfo'
           description: Step information (if available)
+        metrics:
+          $ref: '#/components/schemas/PerformanceMetrics'
+          description: Per-step performance metrics (if available)
       required:
         - message
+
+    PerformanceMetrics:
+      type: object
+      description: Per-step processing times in milliseconds
+      properties:
+        input_ms:
+          type: integer
+          format: int64
+        model_ms:
+          type: integer
+          format: int64
+        action_ms:
+          type: integer
+          format: int64
+        output_ms:
+          type: integer
+          format: int64
+        total_ms:
+          type: integer
+          format: int64
+
+    LogData:
+      type: object
+      description: |
+        Stream-log line emitted during workflow execution. Lines use the same
+        format as the CLI's --stream-log file ("[HH:MM:SS] message") and include
+        loop iterations ("ITERATION x/y - name"), context usage ("CONTEXT: ..."),
+        tool activity, and exit conditions ("★ EXIT: ...").
+      properties:
+        line:
+          type: string
+      required:
+        - line
 
     OutputData:
       type: object
@@ -319,12 +354,13 @@ components:
       properties:
         event:
           type: string
-          enum: [data, progress, complete, error, heartbeat, output]
+          enum: [data, progress, log, spinner, complete, error, heartbeat, output]
           description: Type of SSE event
         data:
           oneOf:
             - type: string
             - $ref: '#/components/schemas/ProgressData'
+            - $ref: '#/components/schemas/LogData'
             - $ref: '#/components/schemas/OutputData'
             - type: object
               properties:
@@ -1088,6 +1124,17 @@ paths:
   /health:
     get:
       summary: Server Health Check
+      description: |
+        Returns server health, the comanda version, and the feature capabilities
+        this server supports so clients can progressively enable functionality.
+
+        Capability flags:
+        - full-dsl: /process and /yaml/process parse the complete workflow DSL (ordered steps, parallel groups, agentic loops, defer, workflow nodes)
+        - yaml-validate: POST /yaml/validate is available
+        - log-events: streaming responses emit "log" SSE events with stream-log lines
+        - progress-metrics: step "progress" SSE events include performance metrics
+        - stream-no-timeout: streaming runs are not time-limited unless streamTimeoutSeconds is configured
+        - openai-compat: OpenAI-compatible endpoints are enabled
       responses:
         '200':
           description: Server health status
@@ -1096,17 +1143,22 @@ paths:
               schema:
                 type: object
                 properties:
-                  success:
-                    type: boolean
-                  message:
+                  status:
                     type: string
-                  statusCode:
-                    type: integer
-                  response:
+                    example: ok
+                  timestamp:
                     type: string
+                    format: date-time
+                  version:
+                    type: string
+                    example: v0.1.0
+                  capabilities:
+                    type: array
+                    items:
+                      type: string
                 required:
-                  - success
-                  - message
+                  - status
+                  - timestamp
         '401':
           description: Unauthorized
           content:
@@ -1197,6 +1249,79 @@ paths:
             text/event-stream:
               schema:
                 $ref: '#/components/schemas/SSEEvent'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /yaml/validate:
+    post:
+      summary: Validate Workflow YAML
+      description: |
+        Validate workflow YAML without executing it, using the same structural
+        validation as the /generate endpoint's retry loop. Optionally verifies
+        that referenced models are configured on this server.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                  description: YAML content to validate
+                checkModels:
+                  type: boolean
+                  description: Also validate model names against this server's configured models
+              required:
+                - content
+      responses:
+        '200':
+          description: Validation result (returned for both valid and invalid workflows)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  valid:
+                    type: boolean
+                  errors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        line:
+                          type: integer
+                          description: Line number (omitted if unknown)
+                        field:
+                          type: string
+                          description: Field or step name involved
+                        message:
+                          type: string
+                        fix:
+                          type: string
+                          description: Suggested fix
+                      required:
+                        - message
+                  invalidModels:
+                    type: array
+                    items:
+                      type: string
+                    description: Model names not configured on this server (when checkModels is true)
+                required:
+                  - success
+                  - valid
+        '400':
+          description: Missing or invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           description: Unauthorized
           content:
@@ -1298,15 +1423,25 @@ paths:
     post:
       summary: Process YAML File by Path
       description: |
-        Process a YAML file by path with required input and optional real-time output streaming.
+        Process a YAML file by path with optional input and optional real-time output streaming.
         YAML processing is only available via POST requests.
-        
+
+        The complete workflow DSL is supported — ordered sequential steps, parallel
+        groups, agentic loops (agentic-loop, loops, execute_loops), defer blocks, and
+        workflow nodes — using the same parser as the CLI.
+
+        Streaming runs are not time-limited by default; long-running workflows stream
+        until they finish or the client disconnects (heartbeats keep the connection
+        alive). A server-side limit can be enforced with the streamTimeoutSeconds
+        server configuration setting.
+
         When streaming is enabled (streaming=true):
         - Response will be in Server-Sent Events (SSE) format
         - Client must set Accept: text/event-stream header
         - Server will send various event types:
           * data: Regular output data
-          * progress: Processing progress updates
+          * progress: Processing progress updates (plain string for start/completion messages, JSON object with step info and metrics for step updates)
+          * log: Stream-log lines (loop iterations, context usage, tool activity) in the same format as the CLI's --stream-log file
           * spinner: Loading/status indicators
           * complete: Final completion message
           * error: Error information

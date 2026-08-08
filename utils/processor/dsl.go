@@ -464,6 +464,19 @@ func (p *Processor) SetStreamLog(path string) error {
 	return nil
 }
 
+// SetStreamLogCallback routes stream log lines (loop iterations, context usage,
+// tool activity, exit conditions) to a callback instead of requiring a file.
+// Lines use the same format as the file-based stream log. If a file-based
+// stream log is already configured, the callback receives a copy of each line.
+func (p *Processor) SetStreamLogCallback(cb func(line string)) {
+	if p.streamLog != nil {
+		p.streamLog.SetCallback(cb)
+		return
+	}
+	p.streamLog = NewCallbackStreamLogger(cb)
+	p.debugf("Stream log callback enabled")
+}
+
 // GetStreamLogPath returns the path to the stream log file
 func (p *Processor) GetStreamLogPath() string {
 	return p.streamLogPath
