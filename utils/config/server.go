@@ -9,6 +9,10 @@ type ServerConfig struct {
 	BearerToken  string             `yaml:"bearerToken"`
 	CORS         CORS               `yaml:"cors"`
 	OpenAICompat OpenAICompatConfig `yaml:"openai_compat,omitempty"`
+	// StreamTimeoutSeconds bounds streaming (SSE) workflow executions.
+	// 0 (the default) means no server-side timeout: long-running workflows
+	// such as agentic loops stream until they finish or the client disconnects.
+	StreamTimeoutSeconds int `yaml:"streamTimeoutSeconds,omitempty"`
 }
 
 // CORS holds Cross-Origin Resource Sharing settings

@@ -27,8 +27,10 @@ type ProcessResponse struct {
 
 // HealthResponse represents the health check response
 type HealthResponse struct {
-	Status    string `json:"status"`
-	Timestamp string `json:"timestamp"`
+	Status       string   `json:"status"`
+	Timestamp    string   `json:"timestamp"`
+	Version      string   `json:"version,omitempty"`
+	Capabilities []string `json:"capabilities,omitempty"`
 }
 
 // FileInfo represents detailed information about a file
@@ -155,6 +157,11 @@ func (fw *flushingResponseWriter) Flush() {
 	fw.flusher.Flush()
 }
 
+// Unwrap exposes the underlying writer so http.ResponseController can reach it
+func (fw *flushingResponseWriter) Unwrap() http.ResponseWriter {
+	return fw.ResponseWriter
+}
+
 // responseWriter wraps http.ResponseWriter to capture the status code and implement http.Flusher
 type responseWriter struct {
 	http.ResponseWriter
@@ -167,6 +174,11 @@ func (rw *responseWriter) Flush() {
 	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
+}
+
+// Unwrap exposes the underlying writer so http.ResponseController can reach it
+func (rw *responseWriter) Unwrap() http.ResponseWriter {
+	return rw.ResponseWriter
 }
 
 func (rw *responseWriter) WriteHeader(code int) {
@@ -362,6 +374,28 @@ func (sw *sseWriter) SendHeartbeat() (n int, err error) {
 	}
 	sw.f.Flush()
 	debugLog("[SSE] Successfully sent heartbeat event: bytes=%d", n)
+	return
+}
+
+// SendLog sends a stream log line (loop iterations, context usage, tool
+// activity) as a structured SSE event. Lines use the same format as the
+// CLI's --stream-log file output.
+func (sw *sseWriter) SendLog(line string) (n int, err error) {
+	data := map[string]string{
+		"line": line,
+	}
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		debugLog("[SSE] Error marshaling log data: %v", err)
+		return 0, err
+	}
+	event := fmt.Sprintf("event: log\ndata: %s\n\n", string(jsonData))
+	n, err = sw.w.Write([]byte(event))
+	if err != nil {
+		debugLog("[SSE] Error writing log event: %v", err)
+		return
+	}
+	sw.f.Flush()
 	return
 }
 

@@ -245,14 +245,42 @@ func New(envConfig *config.EnvConfig) (*http.Server, error) {
 	return server, nil
 }
 
+// serverVersion is the comanda version reported by /health. It is injected
+// at startup (see SetVersion) because the version string lives in the cmd
+// package, which imports this one.
+var serverVersion string
+
+// SetVersion sets the version string reported by the /health endpoint
+func SetVersion(v string) {
+	serverVersion = v
+}
+
+// capabilities returns the feature flags reported by /health so clients can
+// progressively enable functionality based on what this server supports
+func (s *Server) capabilities() []string {
+	caps := []string{
+		"full-dsl",          // /process, /yaml/process parse the complete DSL (parallel, loops, defer, workflow)
+		"yaml-validate",     // POST /yaml/validate
+		"log-events",        // SSE "log" events with stream-log lines during streaming execution
+		"progress-metrics",  // SSE "progress" events include per-step performance metrics
+		"stream-no-timeout", // streaming runs are not time-limited unless configured
+	}
+	if s.config.OpenAICompat.Enabled {
+		caps = append(caps, "openai-compat")
+	}
+	return caps
+}
+
 // routes sets up the server routes
 func (s *Server) routes() {
 	// Health check endpoint - no auth required
 	s.mux.HandleFunc("/health", s.combinedMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(HealthResponse{
-			Status:    "ok",
-			Timestamp: time.Now().Format(time.RFC3339),
+			Status:       "ok",
+			Timestamp:    time.Now().Format(time.RFC3339),
+			Version:      serverVersion,
+			Capabilities: s.capabilities(),
 		})
 	}))
 
@@ -374,6 +402,7 @@ func (s *Server) routes() {
 	// YAML operations - require auth
 	s.mux.HandleFunc("/yaml/upload", s.combinedMiddleware(s.handleYAMLUpload))
 	s.mux.HandleFunc("/yaml/process", s.combinedMiddleware(s.handleYAMLProcess))
+	s.mux.HandleFunc("/yaml/validate", s.combinedMiddleware(s.handleYAMLValidate))
 
 	// Process endpoint - requires auth
 	s.mux.HandleFunc("/process", s.combinedMiddleware(func(w http.ResponseWriter, r *http.Request) {

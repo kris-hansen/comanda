@@ -49,6 +49,7 @@ OpenAI-Compatible Endpoints (when enabled):
 			return
 		}
 
+		server.SetVersion(getVersion())
 		if err := server.Run(envConfig); err != nil {
 			log.Printf("Server failed to start: %v\n", err)
 			return

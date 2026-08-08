@@ -293,17 +293,33 @@ GET /health
 Authorization: Bearer <token>
 ```
 
-Returns the current health status of the server.
+Returns the current health status of the server, the comanda version, and the
+feature capabilities this server supports. Clients can use `capabilities` to
+progressively enable functionality.
 
 Response:
 ```json
 {
-  "success": true,
-  "message": "Server is healthy",
-  "statusCode": 200,
-  "response": "OK"
+  "status": "ok",
+  "timestamp": "2026-01-01T00:00:00Z",
+  "version": "v0.1.0",
+  "capabilities": [
+    "full-dsl",
+    "yaml-validate",
+    "log-events",
+    "progress-metrics",
+    "stream-no-timeout"
+  ]
 }
 ```
+
+Capability flags:
+- `full-dsl`: `/process` and `/yaml/process` parse the complete workflow DSL (ordered steps, parallel groups, agentic loops, `defer`, `workflow` nodes) using the same parser as the CLI
+- `yaml-validate`: the `POST /yaml/validate` endpoint is available
+- `log-events`: streaming responses emit `log` SSE events with stream-log lines (loop iterations, context usage, tool activity)
+- `progress-metrics`: step `progress` SSE events include per-step performance metrics
+- `stream-no-timeout`: streaming runs are not time-limited unless `streamTimeoutSeconds` is configured
+- `openai-compat`: OpenAI-compatible endpoints are enabled
 
 ### YAML Operations
 
@@ -369,6 +385,40 @@ data: Model response: ...
 data: Processing step 2...
 
 data: Processing complete
+```
+
+#### Validate YAML
+```http
+POST /yaml/validate
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "content": "your yaml content here",
+  "checkModels": true
+}
+```
+
+Validates workflow YAML without executing it, using the same structural
+validation as the `/generate` endpoint's retry loop. Set `checkModels` to also
+verify that every referenced model is configured on this server (including
+locally detected CLI providers).
+
+Response:
+```json
+{
+  "success": true,
+  "valid": false,
+  "errors": [
+    {
+      "line": 3,
+      "field": "step_one",
+      "message": "Step is missing required 'model' field",
+      "fix": "Add a model, e.g. model: gpt-4o-mini"
+    }
+  ],
+  "invalidModels": ["unknown-model"]
+}
 ```
 
 ### Generate Endpoint
@@ -456,6 +506,35 @@ data: Processing complete
   "success": false,
   "error": "YAML processing is only available via POST requests. Please use POST with your YAML content."
 }
+```
+
+Both `/process` and `/yaml/process` parse the complete workflow DSL — ordered
+sequential steps, parallel groups, agentic loops (`agentic-loop`, `loops`,
+`execute_loops`), `defer` blocks, and `workflow` nodes — using the same parser
+as the CLI, so any workflow that runs locally runs identically over HTTP.
+
+#### Streaming Events
+
+Streaming responses use Server-Sent Events with the following event types:
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `progress` | plain string or JSON object | Step progress. Start/completion messages are plain strings; step updates are JSON: `{"message": "...", "step": {"name", "model", "action"}, "metrics": {"input_ms", "model_ms", "action_ms", "output_ms", "total_ms"}}` (`step`/`metrics` present when available) |
+| `log` | `{"line": "[HH:MM:SS] ..."}` | Stream-log lines emitted during execution: loop iterations (`ITERATION x/y - name`), context usage (`CONTEXT: ...`), tool activity, exit conditions (`★ EXIT: ...`). Same line format as the CLI's `--stream-log` file, so the same parsers work for local and remote runs |
+| `spinner` | plain string | Transient status messages |
+| `output` | `{"content": "..."}` | Output produced by a step |
+| `complete` | plain string | Workflow completed |
+| `error` | `{"success": false, "error": "..."}` | Processing error |
+| `: heartbeat` | comment | Sent every 15 seconds to keep the connection alive |
+
+Streaming runs are not time-limited by default: long-running workflows such as
+agentic loops stream until they finish or the client disconnects (heartbeats
+keep the connection alive). To enforce a server-side limit, set
+`streamTimeoutSeconds` in the server configuration:
+
+```yaml
+server:
+  streamTimeoutSeconds: 3600  # optional; 0 or omitted = no timeout
 ```
 
 Note: All YAML processing must be done via POST requests. The endpoint no longer supports GET requests for processing.
