@@ -250,8 +250,26 @@ func GetVLLMModels() ([]VLLMModel, error) {
 	return response.Data, nil
 }
 
+// getCLIAgentModels returns the static model list for a CLI agent provider.
+// These mirror the models shown by `comanda configure --list`.
+func getCLIAgentModels(providerName string) ([]string, error) {
+	switch providerName {
+	case "claude-code":
+		return []string{"claude-code", "claude-code-opus", "claude-code-sonnet", "claude-code-haiku"}, nil
+	case "gemini-cli":
+		return []string{"gemini-cli", "gemini-cli-pro", "gemini-cli-flash", "gemini-cli-flash-lite"}, nil
+	case "openai-codex":
+		return models.GetOpenAICodexModels(), nil
+	case "kimi-code":
+		return []string{"kimi-code"}, nil
+	default:
+		return nil, fmt.Errorf("unknown CLI agent provider: %s", providerName)
+	}
+}
+
 // GetAvailableModels retrieves the list of available models for a given provider.
 // For providers like OpenAI and Ollama, it requires the API key or connection.
+// For CLI agents, it returns the static model list when the binary is detected.
 // For others, it returns a hardcoded list.
 func GetAvailableModels(providerName string, apiKey string) ([]string, error) {
 	switch providerName {
@@ -289,6 +307,8 @@ func GetAvailableModels(providerName string, apiKey string) ([]string, error) {
 		return modelNames, nil
 	case "llama.cpp":
 		return GetLlamaCPPModels()
+	case "claude-code", "gemini-cli", "openai-codex", "kimi-code":
+		return getCLIAgentModels(providerName)
 	default:
 		return nil, fmt.Errorf("unknown provider: %s", providerName)
 	}
