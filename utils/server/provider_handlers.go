@@ -21,7 +21,56 @@ func sendJSONError(w http.ResponseWriter, statusCode int, message string) {
 	})
 }
 
-// handleGetProviders returns the list of configured providers and their models
+// cliAgentInfo describes a CLI-based agent provider that is auto-detected
+// from the local environment rather than configured with an API key.
+type cliAgentInfo struct {
+	name      string
+	models    []string
+	available func() bool
+}
+
+// cliAgentProviders returns the supported CLI agent providers and their
+// model lists. These are kept in sync with the model registry and the
+// interactive configure command.
+func cliAgentProviders() []cliAgentInfo {
+	return []cliAgentInfo{
+		{
+			name:      "claude-code",
+			models:    []string{"claude-code", "claude-code-opus", "claude-code-sonnet", "claude-code-haiku"},
+			available: models.IsClaudeCodeAvailable,
+		},
+		{
+			name:      "gemini-cli",
+			models:    []string{"gemini-cli", "gemini-cli-pro", "gemini-cli-flash", "gemini-cli-flash-lite"},
+			available: models.IsGeminiCLIAvailable,
+		},
+		{
+			name:      "openai-codex",
+			models:    models.GetOpenAICodexModels(),
+			available: models.IsOpenAICodexAvailable,
+		},
+		{
+			name:      "kimi-code",
+			models:    []string{"kimi-code"},
+			available: models.IsKimiCodeAvailable,
+		},
+	}
+}
+
+// isCLIAgentProvider reports whether the given provider name is a CLI agent.
+func isCLIAgentProvider(name string) bool {
+	for _, agent := range cliAgentProviders() {
+		if agent.name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// handleGetProviders returns the list of configured providers and their models.
+// CLI agent providers (claude-code, gemini-cli, openai-codex, kimi-code) are
+// included automatically when their binaries are detected, even if they have
+// not been explicitly added to the configuration file.
 func (s *Server) handleGetProviders(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -30,6 +79,7 @@ func (s *Server) handleGetProviders(w http.ResponseWriter, r *http.Request) {
 	}
 
 	providers := []ProviderInfo{}
+	seen := make(map[string]bool)
 
 	// Get provider instances
 	providerList := []struct {
@@ -55,7 +105,33 @@ func (s *Server) handleGetProviders(w http.ResponseWriter, r *http.Request) {
 					Models:  getModelNames(provider.Models),
 					Enabled: provider.APIKey != "",
 				})
+				seen[p.name] = true
 			}
+		}
+	}
+
+	// Add CLI agent providers. If a CLI agent was also present in the
+	// configuration file, merge with the auto-detected entry and use binary
+	// availability as the enabled signal.
+	for _, agent := range cliAgentProviders() {
+		info := ProviderInfo{
+			Name:    agent.name,
+			Models:  agent.models,
+			Enabled: agent.available(),
+		}
+		if seen[agent.name] {
+			for i := range providers {
+				if providers[i].Name == agent.name {
+					// Preserve any configured models but reflect actual availability.
+					if len(providers[i].Models) > 0 {
+						info.Models = providers[i].Models
+					}
+					providers[i] = info
+					break
+				}
+			}
+		} else {
+			providers = append(providers, info)
 		}
 	}
 
@@ -108,7 +184,7 @@ func (s *Server) handleGetAvailableModels(w http.ResponseWriter, r *http.Request
 	apiKey := ""
 	if err == nil { // Provider exists, get its key
 		apiKey = providerConfig.APIKey
-	} else if providerName != "ollama" && providerName != "vllm" && providerName != "llama.cpp" && providerName != "anthropic" && providerName != "google" && providerName != "xai" && providerName != "deepseek" && providerName != "sakana" {
+	} else if !isKeylessProvider(providerName) {
 		// If provider doesn't exist and requires a key, we can't proceed
 		sendJSONError(w, http.StatusBadRequest, fmt.Sprintf("Provider '%s' not configured or requires an API key to list models", providerName))
 		return
@@ -293,7 +369,41 @@ func (s *Server) handleDeleteModel(w http.ResponseWriter, r *http.Request, provi
 	})
 }
 
-// handleValidateProvider validates a provider's API key
+// createProviderByName returns a provider instance for the given provider name.
+// It recognizes both API/local providers and CLI agent providers.
+func createProviderByName(name string) models.Provider {
+	switch name {
+	case "openai":
+		return models.NewOpenAIProvider()
+	case "anthropic":
+		return models.NewAnthropicProvider()
+	case "google":
+		return models.NewGoogleProvider()
+	case "xai":
+		return models.NewXAIProvider()
+	case "sakana":
+		return models.NewSakanaProvider()
+	case "ollama":
+		return models.NewOllamaProvider()
+	case "vllm":
+		return models.NewVLLMProvider()
+	case "llama.cpp":
+		return models.NewLlamaCPPProvider()
+	case "claude-code":
+		return models.NewClaudeCodeProvider()
+	case "gemini-cli":
+		return models.NewGeminiCLIProvider()
+	case "openai-codex":
+		return models.NewOpenAICodexProvider()
+	case "kimi-code":
+		return models.NewKimiCodeProvider()
+	default:
+		return nil
+	}
+}
+
+// handleValidateProvider validates a provider's API key. For CLI agent
+// providers, it validates that the underlying CLI binary is available.
 func (s *Server) handleValidateProvider(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -311,29 +421,26 @@ func (s *Server) handleValidateProvider(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Create provider instance
-	var provider models.Provider
-	switch req.Name {
-	case "openai":
-		provider = models.NewOpenAIProvider()
-	case "anthropic":
-		provider = models.NewAnthropicProvider()
-	case "google":
-		provider = models.NewGoogleProvider()
-	case "xai":
-		provider = models.NewXAIProvider()
-	case "sakana":
-		provider = models.NewSakanaProvider()
-	case "ollama":
-		provider = models.NewOllamaProvider()
-	case "vllm":
-		provider = models.NewVLLMProvider()
-	case "llama.cpp":
-		provider = models.NewLlamaCPPProvider()
-	default:
+	provider := createProviderByName(req.Name)
+	if provider == nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{
 			"error": fmt.Sprintf("Unknown provider: %s", req.Name),
+		})
+		return
+	}
+
+	// CLI agents do not require an API key; verify the binary is available.
+	if isCLIAgentProvider(req.Name) {
+		if !isCLIAgentAvailable(req.Name) {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{
+				"error": fmt.Sprintf("%s CLI binary is not available", req.Name),
+			})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]string{
+			"message": fmt.Sprintf("%s CLI binary is available", req.Name),
 		})
 		return
 	}
@@ -350,6 +457,33 @@ func (s *Server) handleValidateProvider(w http.ResponseWriter, r *http.Request) 
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": "API key is valid",
 	})
+}
+
+// isCLIAgentAvailable reports whether the named CLI agent binary is installed.
+func isCLIAgentAvailable(name string) bool {
+	switch name {
+	case "claude-code":
+		return models.IsClaudeCodeAvailable()
+	case "gemini-cli":
+		return models.IsGeminiCLIAvailable()
+	case "openai-codex":
+		return models.IsOpenAICodexAvailable()
+	case "kimi-code":
+		return models.IsKimiCodeAvailable()
+	}
+	return false
+}
+
+// isKeylessProvider reports whether a provider can list models without an
+// API key (local providers and CLI agents).
+func isKeylessProvider(name string) bool {
+	switch name {
+	case "ollama", "vllm", "llama.cpp",
+		"anthropic", "google", "xai", "deepseek", "sakana",
+		"claude-code", "gemini-cli", "openai-codex", "kimi-code":
+		return true
+	}
+	return false
 }
 
 // getModelNames extracts model names from config.Model slice
@@ -389,6 +523,26 @@ func (s *Server) handleUpdateProvider(w http.ResponseWriter, r *http.Request) {
 		s.envConfig.AddProvider(req.Name, *provider)
 	}
 
+	// Validate that the provider name is known before mutating config.
+	providerInstance := createProviderByName(req.Name)
+	if providerInstance == nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": fmt.Sprintf("Unknown provider: %s", req.Name),
+		})
+		return
+	}
+
+	// CLI agents do not use API keys; ensure the binary is available when
+	// explicitly configuring one.
+	if isCLIAgentProvider(req.Name) && !isCLIAgentAvailable(req.Name) {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": fmt.Sprintf("%s CLI binary is not available", req.Name),
+		})
+		return
+	}
+
 	// Update API key if provided
 	if req.APIKey != "" {
 		if err := s.envConfig.UpdateAPIKey(req.Name, req.APIKey); err != nil {
@@ -399,41 +553,12 @@ func (s *Server) handleUpdateProvider(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Configure the provider with the new API key
-		var provider models.Provider
-		switch req.Name {
-		case "openai":
-			provider = models.NewOpenAIProvider()
-		case "anthropic":
-			provider = models.NewAnthropicProvider()
-		case "google":
-			provider = models.NewGoogleProvider()
-		case "xai":
-			provider = models.NewXAIProvider()
-		case "sakana":
-			provider = models.NewSakanaProvider()
-		case "ollama":
-			provider = models.NewOllamaProvider()
-		case "vllm":
-			provider = models.NewVLLMProvider()
-		case "llama.cpp":
-			provider = models.NewLlamaCPPProvider()
-		default:
-			w.WriteHeader(http.StatusBadRequest)
+		if err := providerInstance.Configure(req.APIKey); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]string{
-				"error": fmt.Sprintf("Unknown provider: %s", req.Name),
+				"error": fmt.Sprintf("Error configuring provider: %v", err),
 			})
 			return
-		}
-
-		if provider != nil {
-			if err := provider.Configure(req.APIKey); err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				json.NewEncoder(w).Encode(map[string]string{
-					"error": fmt.Sprintf("Error configuring provider: %v", err),
-				})
-				return
-			}
 		}
 	}
 
