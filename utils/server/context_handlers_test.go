@@ -80,6 +80,39 @@ func TestPreflightFindsMissingIndexBeforeRun(t *testing.T) {
 	}
 }
 
+func TestPreflightRejectsCodebaseRootOutsideProject(t *testing.T) {
+	root := t.TempDir()
+	indexPath := filepath.Join(root, ".comanda", "index.md")
+	if err := os.MkdirAll(filepath.Dir(indexPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(indexPath, []byte("# Index"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	server := newContextTestServer(t, root, indexPath)
+	workflow := `index:
+  type: codebase-index
+  codebase_index:
+    root: ../outside
+`
+	body, err := json.Marshal(PreflightRequest{Workflow: workflow, ProjectID: "demo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/preflight", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer test-token")
+	rec := httptest.NewRecorder()
+	server.mux.ServeHTTP(rec, req)
+
+	var response PreflightResponse
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Ready || len(response.Issues) != 1 || response.Issues[0].Code != "source_invalid" {
+		t.Fatalf("expected unsafe source root to block run, got %#v", response)
+	}
+}
+
 func newContextTestServer(t *testing.T, root, indexPath string) *Server {
 	t.Helper()
 	server := &Server{

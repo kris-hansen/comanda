@@ -467,15 +467,59 @@ func (p *Processor) processRegularInput(inputPath string) error {
 	return p.processFile(filePath) // Pass the final, validated filePath
 }
 
-// resolveProjectInputPath confines an untrusted workflow input to the source
-// root selected by the server. filepath.IsLocal rejects absolute paths and
-// any traversal that could escape the registered project directory.
-func resolveProjectInputPath(sourceRoot, inputPath string) (string, error) {
+// ResolveProjectPath confines an untrusted workflow path to the source root
+// selected by the server. In addition to rejecting absolute paths and lexical
+// traversal, it resolves symlinks before checking the final boundary. That
+// prevents a project-local symlink from turning a selected project into an
+// alias for another part of the host filesystem.
+//
+// The leaf need not exist: this is useful when callers want an actionable
+// missing-path diagnostic. In that case, the nearest existing ancestor is
+// canonicalized first, so an existing symlink in the path cannot escape.
+func ResolveProjectPath(sourceRoot, inputPath string) (string, error) {
 	cleaned := filepath.Clean(inputPath)
-	if !filepath.IsLocal(cleaned) {
-		return "", fmt.Errorf("input path %q escapes the selected project root", inputPath)
+	if filepath.IsAbs(cleaned) || !filepath.IsLocal(cleaned) {
+		return "", fmt.Errorf("path %q escapes the selected project root", inputPath)
 	}
-	return filepath.Join(sourceRoot, cleaned), nil
+
+	canonicalRoot, err := filepath.EvalSymlinks(sourceRoot)
+	if err != nil {
+		return "", fmt.Errorf("resolve selected project root: %w", err)
+	}
+	candidate := filepath.Join(canonicalRoot, cleaned)
+	canonicalCandidate, err := canonicalizeProjectCandidate(candidate)
+	if err != nil {
+		return "", err
+	}
+	relative, err := filepath.Rel(canonicalRoot, canonicalCandidate)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
+		return "", fmt.Errorf("path %q escapes the selected project root", inputPath)
+	}
+	return canonicalCandidate, nil
+}
+
+func canonicalizeProjectCandidate(candidate string) (string, error) {
+	for ancestor := candidate; ; ancestor = filepath.Dir(ancestor) {
+		canonicalAncestor, err := filepath.EvalSymlinks(ancestor)
+		if err == nil {
+			remainder, relErr := filepath.Rel(ancestor, candidate)
+			if relErr != nil {
+				return "", fmt.Errorf("resolve project path: %w", relErr)
+			}
+			return filepath.Join(canonicalAncestor, remainder), nil
+		}
+		if !os.IsNotExist(err) {
+			return "", fmt.Errorf("resolve project path: %w", err)
+		}
+		parent := filepath.Dir(ancestor)
+		if parent == ancestor {
+			return "", fmt.Errorf("resolve project path: %w", err)
+		}
+	}
+}
+
+func resolveProjectInputPath(sourceRoot, inputPath string) (string, error) {
+	return ResolveProjectPath(sourceRoot, inputPath)
 }
 
 // processFile handles a single file input or glob pattern

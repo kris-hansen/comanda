@@ -3,7 +3,6 @@ package processor
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -197,8 +196,12 @@ func (p *Processor) buildCodebaseIndexConfigWithError(stepConfig StepConfig) (*c
 		ci := stepConfig.CodebaseIndex
 
 		if ci.Root != "" {
-			if p.sourceRoot != "" && !filepath.IsAbs(ci.Root) {
-				config.Root = filepath.Join(p.sourceRoot, ci.Root)
+			if p.sourceRoot != "" {
+				projectRoot, err := ResolveProjectPath(p.sourceRoot, ci.Root)
+				if err != nil {
+					return nil, err
+				}
+				config.Root = projectRoot
 			} else {
 				// Expand ~ in root path
 				expandedRoot, err := fileutil.ExpandPath(ci.Root)

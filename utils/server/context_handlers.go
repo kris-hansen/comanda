@@ -235,8 +235,13 @@ func (s *Server) preflightIndexStep(add func(string, string, string), project *C
 			}
 		}
 	}
-	if project != nil && index.Root != "" && !filepath.IsAbs(index.Root) {
-		if !isDirectory(filepath.Join(project.SourceRoot, index.Root)) {
+	if project != nil && index.Root != "" {
+		root, err := processor.ResolveProjectPath(project.SourceRoot, index.Root)
+		if err != nil {
+			add("error", "source_invalid", err.Error())
+			return
+		}
+		if !isDirectory(root) {
 			add("error", "source_missing", fmt.Sprintf("Codebase root %q is not present in project %q", index.Root, project.Name))
 		}
 	}
