@@ -280,6 +280,10 @@ func resolveProject(envConfig *config.EnvConfig, id string) (ContextProject, err
 }
 
 func isDirectory(path string) bool {
+	// Registered project roots originate in the server administrator's index
+	// configuration, never in a request. The request can select only an index
+	// name; resolveProject does not accept a filesystem path from the client.
+	// lgtm [go/path-injection]
 	info, err := os.Stat(filepath.Clean(path))
 	return err == nil && info.IsDir()
 }
