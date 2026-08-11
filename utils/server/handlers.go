@@ -273,6 +273,14 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *config.
 	// Create and configure processor with runtime directory
 	config.DebugLog("Creating processor instance with validation enabled")
 	proc := processor.NewProcessor(&dslConfig, envConfig, serverConfig, true, runtimeDir)
+	projectID := r.URL.Query().Get("project")
+	if sourceRoot, err := projectSourceRoot(envConfig, projectID); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ProcessResponse{Success: false, Error: err.Error()})
+		return
+	} else if sourceRoot != "" {
+		proc.SetSourceRoot(sourceRoot)
+	}
 	config.DebugLog("Processor created successfully with config: steps=%d, runtimeDir=%s", len(dslConfig.Steps), runtimeDir)
 
 	// Handle POST input with detailed logging

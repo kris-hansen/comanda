@@ -326,6 +326,23 @@ func (p *Processor) processRegularInput(inputPath string) error {
 	pathSource := "provided" // Track where the path was resolved from for error messages
 
 	if !filepath.IsAbs(inputPath) {
+		// A selected project is the source-of-truth for regular source inputs.
+		// Runtime output from another step still wins so normal file-based flow
+		// (`output: ./a` -> `input: ./a`) remains isolated to this run.
+		if serverMode && p.sourceRoot != "" && !p.isOutputInOtherSteps(inputPath) {
+			projectPath := filepath.Join(p.sourceRoot, inputPath)
+			if _, err := os.Stat(projectPath); err == nil {
+				filePath = projectPath
+				pathSource = fmt.Sprintf("project root '%s'", p.sourceRoot)
+				p.debugf("Resolved input '%s' from project root: %s", inputPath, projectPath)
+			} else if !os.IsNotExist(err) {
+				return fmt.Errorf("error checking path '%s' in project root: %w", projectPath, err)
+			}
+		}
+
+		if filePath != "" {
+			// The selected project supplied the input; skip runtime/data fallbacks.
+		} else
 		// Input is a relative path
 		if p.runtimeDir != "" && serverMode {
 			// In server mode with runtime directory, check relative to DataDir/runtimeDir

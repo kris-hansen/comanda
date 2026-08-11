@@ -3,6 +3,7 @@ package processor
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -196,13 +197,17 @@ func (p *Processor) buildCodebaseIndexConfigWithError(stepConfig StepConfig) (*c
 		ci := stepConfig.CodebaseIndex
 
 		if ci.Root != "" {
-			// Expand ~ in root path
-			expandedRoot, err := fileutil.ExpandPath(ci.Root)
-			if err != nil {
-				p.debugf("Warning: failed to expand root path %s: %v", ci.Root, err)
-				config.Root = ci.Root // Fall back to unexpanded path
+			if p.sourceRoot != "" && !filepath.IsAbs(ci.Root) {
+				config.Root = filepath.Join(p.sourceRoot, ci.Root)
 			} else {
-				config.Root = expandedRoot
+				// Expand ~ in root path
+				expandedRoot, err := fileutil.ExpandPath(ci.Root)
+				if err != nil {
+					p.debugf("Warning: failed to expand root path %s: %v", ci.Root, err)
+					config.Root = ci.Root // Fall back to unexpanded path
+				} else {
+					config.Root = expandedRoot
+				}
 			}
 		}
 
