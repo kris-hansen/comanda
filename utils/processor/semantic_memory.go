@@ -30,7 +30,10 @@ func (p *Processor) semanticMemoryContext(step Step) string {
 		return ""
 	}
 
-	root := p.getEffectiveWorkDir()
+	root := p.sourceRoot
+	if root == "" {
+		root = p.getEffectiveWorkDir()
+	}
 	if root == "" {
 		var err error
 		root, err = os.Getwd()

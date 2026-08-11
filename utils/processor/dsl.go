@@ -51,6 +51,7 @@ type Processor struct {
 	progress             ProgressWriter     // Progress writer for streaming updates
 	progressDisplay      *ProgressDisplay   // Visual progress display for terminal output
 	runtimeDir           string             // Runtime directory for file operations
+	sourceRoot           string             // Stable project root for source inputs and context
 	memory               *MemoryManager     // Memory manager for COMANDA.md file
 	externalMemory       string             // External memory context (e.g., from OpenAI messages)
 	mu                   sync.Mutex         // Mutex for thread-safe debug logging
@@ -61,6 +62,18 @@ type Processor struct {
 	currentStepWorktree  string             // Current step's worktree name (if any)
 	workflowFile         string             // Workflow file that created this processor, for loop state/checksums
 }
+
+// SetSourceRoot binds this processor to a stable project source tree. Runtime
+// outputs remain in runtimeDir; only source-oriented lookups fall back here.
+func (p *Processor) SetSourceRoot(root string) {
+	p.sourceRoot = root
+	if root != "" {
+		p.debugf("Processor initialized with project source root: %s", root)
+	}
+}
+
+// SourceRoot returns the stable project source tree, when one was selected.
+func (p *Processor) SourceRoot() string { return p.sourceRoot }
 
 // getEffectiveWorkDir returns the working directory for the current step
 // If a worktree is set for the current step, returns that path
