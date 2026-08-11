@@ -468,34 +468,54 @@ func (p *Processor) processRegularInput(inputPath string) error {
 }
 
 // ResolveProjectPath confines an untrusted workflow path to the source root
-// selected by the server. In addition to rejecting absolute paths and lexical
-// traversal, it resolves symlinks before checking the final boundary. That
-// prevents a project-local symlink from turning a selected project into an
-// alias for another part of the host filesystem.
+// selected by the server. Relative paths are confined to that root. Absolute
+// paths are accepted only when they lexically name the selected root (or a
+// child of it), which keeps existing local workflows portable without turning
+// this resolver into a host-filesystem probe. In every case, symlinks are
+// resolved before the final boundary check. That prevents a project-local
+// symlink from turning a selected project into an alias for another part of
+// the host filesystem.
 //
 // The leaf need not exist: this is useful when callers want an actionable
 // missing-path diagnostic. In that case, the nearest existing ancestor is
 // canonicalized first, so an existing symlink in the path cannot escape.
 func ResolveProjectPath(sourceRoot, inputPath string) (string, error) {
 	cleaned := filepath.Clean(inputPath)
-	if filepath.IsAbs(cleaned) || !filepath.IsLocal(cleaned) {
-		return "", fmt.Errorf("path %q escapes the selected project root", inputPath)
-	}
-
 	canonicalRoot, err := filepath.EvalSymlinks(sourceRoot)
 	if err != nil {
 		return "", fmt.Errorf("resolve selected project root: %w", err)
 	}
-	candidate := filepath.Join(canonicalRoot, cleaned)
+
+	var candidate string
+	if filepath.IsAbs(cleaned) {
+		// Reject an arbitrary absolute path before evaluating it. Checking both
+		// spellings supports a registered root that itself contains symlinks.
+		if !isWithinProjectRoot(filepath.Clean(sourceRoot), cleaned) &&
+			!isWithinProjectRoot(canonicalRoot, cleaned) {
+			return "", fmt.Errorf("path %q escapes the selected project root", inputPath)
+		}
+		candidate = cleaned
+	} else {
+		if !filepath.IsLocal(cleaned) {
+			return "", fmt.Errorf("path %q escapes the selected project root", inputPath)
+		}
+		candidate = filepath.Join(canonicalRoot, cleaned)
+	}
 	canonicalCandidate, err := canonicalizeProjectCandidate(candidate)
 	if err != nil {
 		return "", err
 	}
-	relative, err := filepath.Rel(canonicalRoot, canonicalCandidate)
-	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
+	if !isWithinProjectRoot(canonicalRoot, canonicalCandidate) {
 		return "", fmt.Errorf("path %q escapes the selected project root", inputPath)
 	}
 	return canonicalCandidate, nil
+}
+
+func isWithinProjectRoot(root, candidate string) bool {
+	relative, err := filepath.Rel(root, candidate)
+	return err == nil && relative != ".." &&
+		!strings.HasPrefix(relative, ".."+string(filepath.Separator)) &&
+		!filepath.IsAbs(relative)
 }
 
 func canonicalizeProjectCandidate(candidate string) (string, error) {
