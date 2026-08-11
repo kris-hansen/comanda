@@ -38,12 +38,26 @@ func TestProjectInputPathCannotEscapeSelectedRoot(t *testing.T) {
 	}
 }
 
-func TestResolveProjectPathRejectsAbsoluteAndSymlinkEscapes(t *testing.T) {
+func TestResolveProjectPathAllowsAbsolutePathsWithinSelectedRoot(t *testing.T) {
 	root := t.TempDir()
 	outside := t.TempDir()
 
+	resolvedRoot, err := ResolveProjectPath(root, root)
+	if err != nil {
+		t.Fatalf("resolve absolute project root: %v", err)
+	}
+	if resolvedRoot != root {
+		t.Fatalf("resolved root = %q, want %q", resolvedRoot, root)
+	}
+	resolvedChild, err := ResolveProjectPath(root, filepath.Join(root, "src"))
+	if err != nil {
+		t.Fatalf("resolve absolute project child: %v", err)
+	}
+	if resolvedChild != filepath.Join(root, "src") {
+		t.Fatalf("resolved child = %q, want %q", resolvedChild, filepath.Join(root, "src"))
+	}
 	if _, err := ResolveProjectPath(root, outside); err == nil {
-		t.Fatal("expected absolute project path to be rejected")
+		t.Fatal("expected outside absolute project path to be rejected")
 	}
 	if _, err := ResolveProjectPath(root, "../outside"); err == nil {
 		t.Fatal("expected project traversal to be rejected")
@@ -56,6 +70,9 @@ func TestResolveProjectPathRejectsAbsoluteAndSymlinkEscapes(t *testing.T) {
 	}
 	if _, err := ResolveProjectPath(root, "escape"); err == nil {
 		t.Fatal("expected symlink escape to be rejected")
+	}
+	if _, err := ResolveProjectPath(root, filepath.Join(root, "escape")); err == nil {
+		t.Fatal("expected absolute symlink escape to be rejected")
 	}
 }
 
