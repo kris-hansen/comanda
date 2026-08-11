@@ -280,12 +280,12 @@ func resolveProject(envConfig *config.EnvConfig, id string) (ContextProject, err
 }
 
 func isDirectory(path string) bool {
-	info, err := os.Stat(path)
+	info, err := os.Stat(filepath.Clean(path))
 	return err == nil && info.IsDir()
 }
 
 func isRegularFile(path string) bool {
-	info, err := os.Stat(path)
+	info, err := os.Stat(filepath.Clean(path))
 	return err == nil && !info.IsDir()
 }
 

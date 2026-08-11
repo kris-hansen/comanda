@@ -330,7 +330,10 @@ func (p *Processor) processRegularInput(inputPath string) error {
 		// Runtime output from another step still wins so normal file-based flow
 		// (`output: ./a` -> `input: ./a`) remains isolated to this run.
 		if serverMode && p.sourceRoot != "" && !p.isOutputInOtherSteps(inputPath) {
-			projectPath := filepath.Join(p.sourceRoot, inputPath)
+			projectPath, err := resolveProjectInputPath(p.sourceRoot, inputPath)
+			if err != nil {
+				return err
+			}
 			if _, err := os.Stat(projectPath); err == nil {
 				filePath = projectPath
 				pathSource = fmt.Sprintf("project root '%s'", p.sourceRoot)
@@ -462,6 +465,17 @@ func (p *Processor) processRegularInput(inputPath string) error {
 
 	// --- Step 4: Process the validated file path ---
 	return p.processFile(filePath) // Pass the final, validated filePath
+}
+
+// resolveProjectInputPath confines an untrusted workflow input to the source
+// root selected by the server. filepath.IsLocal rejects absolute paths and
+// any traversal that could escape the registered project directory.
+func resolveProjectInputPath(sourceRoot, inputPath string) (string, error) {
+	cleaned := filepath.Clean(inputPath)
+	if !filepath.IsLocal(cleaned) {
+		return "", fmt.Errorf("input path %q escapes the selected project root", inputPath)
+	}
+	return filepath.Join(sourceRoot, cleaned), nil
 }
 
 // processFile handles a single file input or glob pattern

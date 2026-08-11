@@ -21,3 +21,17 @@ func TestCodebaseIndexRelativeRootUsesSelectedProject(t *testing.T) {
 		t.Fatalf("index root = %q, want project-relative %q", result.Root, filepath.Join(projectRoot, "src"))
 	}
 }
+
+func TestProjectInputPathCannotEscapeSelectedRoot(t *testing.T) {
+	root := t.TempDir()
+	if _, err := resolveProjectInputPath(root, "../outside.txt"); err == nil {
+		t.Fatal("expected project traversal to be rejected")
+	}
+	resolved, err := resolveProjectInputPath(root, "src/main.go")
+	if err != nil {
+		t.Fatalf("resolve project input: %v", err)
+	}
+	if want := filepath.Join(root, "src", "main.go"); resolved != want {
+		t.Fatalf("resolved = %q, want %q", resolved, want)
+	}
+}
