@@ -294,6 +294,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/files/upload", s.combinedMiddleware(s.handleFileUpload))
 	s.mux.HandleFunc("/files/download", s.combinedMiddleware(s.handleFileDownload))
 
+	// Project context is the discovery contract used by Canvas before a run.
+	s.mux.HandleFunc("/context", s.combinedMiddleware(s.handleContext))
+	s.mux.HandleFunc("/preflight", s.combinedMiddleware(s.handlePreflight))
+
 	// Provider operations - require auth
 	s.mux.HandleFunc("/providers", s.combinedMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

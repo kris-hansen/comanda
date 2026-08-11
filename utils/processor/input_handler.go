@@ -326,6 +326,26 @@ func (p *Processor) processRegularInput(inputPath string) error {
 	pathSource := "provided" // Track where the path was resolved from for error messages
 
 	if !filepath.IsAbs(inputPath) {
+		// A selected project is the source-of-truth for regular source inputs.
+		// Runtime output from another step still wins so normal file-based flow
+		// (`output: ./a` -> `input: ./a`) remains isolated to this run.
+		if serverMode && p.sourceRoot != "" && !p.isOutputInOtherSteps(inputPath) {
+			projectPath, err := resolveProjectInputPath(p.sourceRoot, inputPath)
+			if err != nil {
+				return err
+			}
+			if _, err := os.Stat(projectPath); err == nil {
+				filePath = projectPath
+				pathSource = fmt.Sprintf("project root '%s'", p.sourceRoot)
+				p.debugf("Resolved input '%s' from project root: %s", inputPath, projectPath)
+			} else if !os.IsNotExist(err) {
+				return fmt.Errorf("error checking path '%s' in project root: %w", projectPath, err)
+			}
+		}
+
+		if filePath != "" {
+			// The selected project supplied the input; skip runtime/data fallbacks.
+		} else
 		// Input is a relative path
 		if p.runtimeDir != "" && serverMode {
 			// In server mode with runtime directory, check relative to DataDir/runtimeDir
@@ -445,6 +465,61 @@ func (p *Processor) processRegularInput(inputPath string) error {
 
 	// --- Step 4: Process the validated file path ---
 	return p.processFile(filePath) // Pass the final, validated filePath
+}
+
+// ResolveProjectPath confines an untrusted workflow path to the source root
+// selected by the server. In addition to rejecting absolute paths and lexical
+// traversal, it resolves symlinks before checking the final boundary. That
+// prevents a project-local symlink from turning a selected project into an
+// alias for another part of the host filesystem.
+//
+// The leaf need not exist: this is useful when callers want an actionable
+// missing-path diagnostic. In that case, the nearest existing ancestor is
+// canonicalized first, so an existing symlink in the path cannot escape.
+func ResolveProjectPath(sourceRoot, inputPath string) (string, error) {
+	cleaned := filepath.Clean(inputPath)
+	if filepath.IsAbs(cleaned) || !filepath.IsLocal(cleaned) {
+		return "", fmt.Errorf("path %q escapes the selected project root", inputPath)
+	}
+
+	canonicalRoot, err := filepath.EvalSymlinks(sourceRoot)
+	if err != nil {
+		return "", fmt.Errorf("resolve selected project root: %w", err)
+	}
+	candidate := filepath.Join(canonicalRoot, cleaned)
+	canonicalCandidate, err := canonicalizeProjectCandidate(candidate)
+	if err != nil {
+		return "", err
+	}
+	relative, err := filepath.Rel(canonicalRoot, canonicalCandidate)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
+		return "", fmt.Errorf("path %q escapes the selected project root", inputPath)
+	}
+	return canonicalCandidate, nil
+}
+
+func canonicalizeProjectCandidate(candidate string) (string, error) {
+	for ancestor := candidate; ; ancestor = filepath.Dir(ancestor) {
+		canonicalAncestor, err := filepath.EvalSymlinks(ancestor)
+		if err == nil {
+			remainder, relErr := filepath.Rel(ancestor, candidate)
+			if relErr != nil {
+				return "", fmt.Errorf("resolve project path: %w", relErr)
+			}
+			return filepath.Join(canonicalAncestor, remainder), nil
+		}
+		if !os.IsNotExist(err) {
+			return "", fmt.Errorf("resolve project path: %w", err)
+		}
+		parent := filepath.Dir(ancestor)
+		if parent == ancestor {
+			return "", fmt.Errorf("resolve project path: %w", err)
+		}
+	}
+}
+
+func resolveProjectInputPath(sourceRoot, inputPath string) (string, error) {
+	return ResolveProjectPath(sourceRoot, inputPath)
 }
 
 // processFile handles a single file input or glob pattern

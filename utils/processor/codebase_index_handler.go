@@ -196,13 +196,21 @@ func (p *Processor) buildCodebaseIndexConfigWithError(stepConfig StepConfig) (*c
 		ci := stepConfig.CodebaseIndex
 
 		if ci.Root != "" {
-			// Expand ~ in root path
-			expandedRoot, err := fileutil.ExpandPath(ci.Root)
-			if err != nil {
-				p.debugf("Warning: failed to expand root path %s: %v", ci.Root, err)
-				config.Root = ci.Root // Fall back to unexpanded path
+			if p.sourceRoot != "" {
+				projectRoot, err := ResolveProjectPath(p.sourceRoot, ci.Root)
+				if err != nil {
+					return nil, err
+				}
+				config.Root = projectRoot
 			} else {
-				config.Root = expandedRoot
+				// Expand ~ in root path
+				expandedRoot, err := fileutil.ExpandPath(ci.Root)
+				if err != nil {
+					p.debugf("Warning: failed to expand root path %s: %v", ci.Root, err)
+					config.Root = ci.Root // Fall back to unexpanded path
+				} else {
+					config.Root = expandedRoot
+				}
 			}
 		}
 
