@@ -91,16 +91,23 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *config.
 	config.VerboseLog("Processing file: %s", filename)
 	config.DebugLog("Starting process request for file: %s", filename)
 
-	// Clean the path to remove any . or .. components
+	// A bare filename belongs to the requested runtime directory when one is
+	// supplied. File uploads use the same convention: uploading workflow.yaml
+	// with runtimeDir=run-123 stores it at DataDir/run-123/workflow.yaml.
+	// Previously /process only used runtimeDir after reading the workflow, so
+	// it looked in DataDir/workflow.yaml and failed before processing began.
+	runtimeDir := r.URL.Query().Get("runtimeDir")
 	cleanPath := filepath.Clean(filename)
-
-	// Check if the path contains directory separators
 	if !strings.Contains(cleanPath, string(filepath.Separator)) {
-		// No directory specified, assume it's in the root of DataDir
-		cleanPath = filepath.Join(serverConfig.DataDir, cleanPath)
-		config.DebugLog("Using file in data directory: %s", cleanPath)
+		if runtimeDir != "" {
+			cleanPath = filepath.Join(serverConfig.DataDir, runtimeDir, cleanPath)
+			config.DebugLog("Using file in runtime directory: %s", cleanPath)
+		} else {
+			cleanPath = filepath.Join(serverConfig.DataDir, cleanPath)
+			config.DebugLog("Using file in data directory: %s", cleanPath)
+		}
 	} else {
-		// Path contains separators, prepend DataDir
+		// Paths with their own directory are already relative to DataDir.
 		cleanPath = filepath.Join(serverConfig.DataDir, cleanPath)
 		config.DebugLog("Using path with directories: %s", cleanPath)
 	}
@@ -255,7 +262,6 @@ func handleProcess(w http.ResponseWriter, r *http.Request, serverConfig *config.
 		len(dslConfig.Steps), len(dslConfig.ParallelSteps), len(dslConfig.Loops))
 
 	// Get runtime directory from query parameter or calculate from path
-	runtimeDir := r.URL.Query().Get("runtimeDir")
 	if runtimeDir == "" {
 		// Calculate from path if not provided
 		runtimeDir = filepath.Dir(relPath) // Use relPath which is relative to DataDir
