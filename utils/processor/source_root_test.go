@@ -24,6 +24,70 @@ func TestCodebaseIndexRelativeRootUsesSelectedProject(t *testing.T) {
 	}
 }
 
+func TestEffectiveWorkDirUsesSelectedProjectOverCanvasRuntime(t *testing.T) {
+	projectRoot := t.TempDir()
+	dataDir := t.TempDir()
+	processor := NewProcessor(
+		&DSLConfig{},
+		&config.EnvConfig{},
+		&config.ServerConfig{Enabled: true, DataDir: dataDir},
+		false,
+		"canvas-run",
+	)
+	processor.SetSourceRoot(projectRoot)
+
+	if got := processor.getEffectiveWorkDir(); got != projectRoot {
+		t.Fatalf("effective work dir = %q, want selected project %q", got, projectRoot)
+	}
+}
+
+func TestEffectiveWorkDirUsesDataDirectoryForUnscopedServerRuntime(t *testing.T) {
+	dataDir := t.TempDir()
+	processor := NewProcessor(
+		&DSLConfig{},
+		&config.EnvConfig{},
+		&config.ServerConfig{Enabled: true, DataDir: dataDir},
+		false,
+		"canvas-run",
+	)
+
+	want := filepath.Join(dataDir, "canvas-run")
+	if got := processor.getEffectiveWorkDir(); got != want {
+		t.Fatalf("effective work dir = %q, want runtime directory %q", got, want)
+	}
+}
+
+func TestPreStepQualityGatesUseSelectedProjectRoot(t *testing.T) {
+	projectRoot := t.TempDir()
+	dataDir := t.TempDir()
+	processor := NewProcessor(
+		&DSLConfig{},
+		&config.EnvConfig{},
+		&config.ServerConfig{Enabled: true, DataDir: dataDir},
+		false,
+		"canvas-run",
+	)
+	processor.SetSourceRoot(projectRoot)
+
+	loopConfig := &AgenticLoopConfig{
+		QualityGates: []QualityGateConfig{{
+			Name:    "prepare-project-state",
+			Command: "mkdir -p .comanda/qmd/state && printf ready > .comanda/qmd/state/coverage.txt",
+			OnFail:  "abort",
+		}},
+	}
+	if err := processor.runPreStepQualityGates(&LoopContext{Iteration: 1}, loopConfig, "workflow.yaml"); err != nil {
+		t.Fatalf("runPreStepQualityGates() error = %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(projectRoot, ".comanda/qmd/state/coverage.txt")); err != nil {
+		t.Fatalf("project state was not created: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, "canvas-run/.comanda/qmd/state/coverage.txt")); !os.IsNotExist(err) {
+		t.Fatalf("runtime directory unexpectedly received project state, stat error = %v", err)
+	}
+}
+
 func TestProjectInputPathCannotEscapeSelectedRoot(t *testing.T) {
 	root := t.TempDir()
 	if _, err := resolveProjectInputPath(root, "../outside.txt"); err == nil {
