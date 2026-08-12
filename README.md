@@ -36,6 +36,9 @@ comanda improve feature-loop.yaml \
 
 Long-running work needs an observable exit criterion. Comanda's agentic loops persist state, refine subsequent prompts from prior results, and run automated quality gates after each iteration. Interrupt a run and resume it from its last checkpoint.
 
+When deterministic gates prepare files consumed by a loop's first step, set
+`quality_gates_before_steps: true`; the default remains post-step validation.
+
 ```yaml
 agentic-loop:
   config:

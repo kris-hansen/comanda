@@ -18,6 +18,7 @@ loops:
     codex_timeout_seconds: 1800
     stateful: true
     checkpoint_interval: 3
+    quality_gates_before_steps: true
     exit_condition: llm_decides
     allowed_paths: ["/tmp", "."]
     tools: [Read, Write, Edit]
@@ -80,6 +81,9 @@ execute_loops:
 	}
 	if backend.CheckpointInterval != 3 {
 		t.Errorf("backend.CheckpointInterval = %d, want 3", backend.CheckpointInterval)
+	}
+	if !backend.QualityGatesBeforeSteps {
+		t.Error("backend.QualityGatesBeforeSteps should be true")
 	}
 	if backend.ExitCondition != "llm_decides" {
 		t.Errorf("backend.ExitCondition = %q, want 'llm_decides'", backend.ExitCondition)

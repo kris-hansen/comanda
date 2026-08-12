@@ -46,10 +46,11 @@ type AgenticLoopConfig struct {
 	PromptImprovement   *PromptImprovementConfig `yaml:"prompt_improvement,omitempty"` // Optional prompt refinement between iterations
 
 	// State persistence & quality gates
-	Name               string              `yaml:"name,omitempty"`                // Loop name (required for stateful loops)
-	Stateful           bool                `yaml:"stateful,omitempty"`            // Enable state persistence
-	CheckpointInterval int                 `yaml:"checkpoint_interval,omitempty"` // Save state every N iterations (default: 5)
-	QualityGates       []QualityGateConfig `yaml:"quality_gates,omitempty"`       // Quality gates to run after each iteration
+	Name                    string              `yaml:"name,omitempty"`                       // Loop name (required for stateful loops)
+	Stateful                bool                `yaml:"stateful,omitempty"`                   // Enable state persistence
+	CheckpointInterval      int                 `yaml:"checkpoint_interval,omitempty"`        // Save state every N iterations (default: 5)
+	QualityGates            []QualityGateConfig `yaml:"quality_gates,omitempty"`              // Quality gates to run after each iteration
+	QualityGatesBeforeSteps bool                `yaml:"quality_gates_before_steps,omitempty"` // Run gates before loop steps instead
 
 	// Multi-loop orchestration
 	DependsOn   []string `yaml:"depends_on,omitempty"`   // Wait for these loops to complete
