@@ -362,6 +362,13 @@ step_one:
 	if err := os.WriteFile(fmt.Sprintf("%s/stdin.yaml", tempDir), []byte(stdinYAML), 0644); err != nil {
 		t.Fatal(err)
 	}
+	const canvasRuntimeDir = "canvas_run_20260812_151723"
+	if err := os.MkdirAll(fmt.Sprintf("%s/%s", tempDir, canvasRuntimeDir), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(fmt.Sprintf("%s/%s/canvas-workflow.yaml", tempDir, canvasRuntimeDir), []byte(stdinYAML), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create test environment config with OpenAI provider
 	envConfig := &config.EnvConfig{
@@ -391,6 +398,7 @@ step_one:
 	tests := []struct {
 		name           string
 		filename       string
+		runtimeDir     string
 		input          string
 		streaming      bool
 		method         string
@@ -403,6 +411,18 @@ step_one:
 			input:     "test input",
 			streaming: true,
 			method:    http.MethodPost,
+			expectedEvents: []string{
+				"Starting workflow processing",
+				"Workflow processing completed successfully",
+			},
+		},
+		{
+			name:       "Valid POST request finds bare filename in runtime directory",
+			filename:   "canvas-workflow.yaml",
+			runtimeDir: canvasRuntimeDir,
+			input:      "test input",
+			streaming:  true,
+			method:     http.MethodPost,
 			expectedEvents: []string{
 				"Starting workflow processing",
 				"Workflow processing completed successfully",
@@ -479,6 +499,9 @@ step_one:
 
 			// Create request
 			url := fmt.Sprintf("/process?filename=%s&streaming=true", tt.filename)
+			if tt.runtimeDir != "" {
+				url += fmt.Sprintf("&runtimeDir=%s", tt.runtimeDir)
+			}
 			req := httptest.NewRequest(tt.method, url, bytes.NewBuffer(body))
 			req.Header.Set("Authorization", "Bearer test-token")
 			req.Header.Set("Accept", "text/event-stream")
