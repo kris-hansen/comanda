@@ -203,6 +203,15 @@ func (p *Processor) processAgenticLoopWithFile(loopName string, config *AgenticL
 		// Build iteration input with context
 		iterationInput := p.buildIterationContext(loopCtx, contextWindow)
 
+		// Gates normally validate an iteration after its steps complete. Some
+		// workflows use deterministic gates to prepare facts consumed by those
+		// steps, and opt into the pre-step phase explicitly.
+		if config.QualityGatesBeforeSteps {
+			if err := p.runPreStepQualityGates(loopCtx, config, workflowFile); err != nil {
+				return finalOutput, err
+			}
+		}
+
 		// Execute the loop steps
 		output, err := p.executeLoopSteps(loopCtx, config, config.Steps, iterationInput)
 		if err != nil {
@@ -238,9 +247,9 @@ func (p *Processor) processAgenticLoopWithFile(loopName string, config *AgenticL
 		finalOutput = output
 
 		// Run quality gates
-		if len(config.QualityGates) > 0 {
+		if len(config.QualityGates) > 0 && !config.QualityGatesBeforeSteps {
 			p.debugf("Running %d quality gates for iteration %d", len(config.QualityGates), loopCtx.Iteration)
-			gateResults, err := RunQualityGates(config.QualityGates, p.runtimeDir)
+			gateResults, err := RunQualityGates(config.QualityGates, p.getEffectiveWorkDir())
 
 			if err != nil {
 				p.debugf("Quality gate failure: %v", err)
@@ -318,6 +327,30 @@ func (p *Processor) processAgenticLoopWithFile(loopName string, config *AgenticL
 	}
 
 	return finalOutput, nil
+}
+
+func (p *Processor) runPreStepQualityGates(loopCtx *LoopContext, config *AgenticLoopConfig, workflowFile string) error {
+	if len(config.QualityGates) == 0 {
+		return nil
+	}
+
+	p.debugf("Running %d pre-step quality gates for iteration %d", len(config.QualityGates), loopCtx.Iteration)
+	gateResults, err := RunQualityGates(config.QualityGates, p.getEffectiveWorkDir())
+	if err == nil {
+		return nil
+	}
+
+	p.debugf("Pre-step quality gate failure: %v", err)
+	if config.Stateful {
+		stateManager := NewLoopStateManager(p.getLoopStateDir())
+		state := loopStateFromContext(loopCtx, config.Name, config, workflowFile, p.variables)
+		state.Status = "failed"
+		state.QualityGateResults = gateResults
+		if saveErr := stateManager.SaveState(state); saveErr != nil {
+			p.debugf("Warning: Failed to save failed state: %v", saveErr)
+		}
+	}
+	return fmt.Errorf("pre-step quality gate failed in iteration %d: %w", loopCtx.Iteration, err)
 }
 
 // createNewLoopContext initializes a fresh loop context

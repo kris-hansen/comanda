@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -75,15 +76,22 @@ func (p *Processor) SetSourceRoot(root string) {
 // SourceRoot returns the stable project source tree, when one was selected.
 func (p *Processor) SourceRoot() string { return p.sourceRoot }
 
-// getEffectiveWorkDir returns the working directory for the current step
-// If a worktree is set for the current step, returns that path
-// Otherwise returns the default runtimeDir
+// getEffectiveWorkDir returns the working directory for commands and agentic
+// tools. A selected project is the stable workspace for a Canvas run; the
+// runtime directory is only the server-private location for uploaded workflow
+// files and transient output. Worktrees take precedence over the project.
 func (p *Processor) getEffectiveWorkDir() string {
 	if p.currentStepWorktree != "" && p.worktreeHandler != nil {
 		if path, err := p.worktreeHandler.GetWorktreePath(p.currentStepWorktree); err == nil {
 			p.debugf("Using worktree path for step: %s -> %s", p.currentStepWorktree, path)
 			return path
 		}
+	}
+	if p.sourceRoot != "" {
+		return p.sourceRoot
+	}
+	if p.serverConfig != nil && p.serverConfig.Enabled && p.runtimeDir != "" {
+		return filepath.Join(p.serverConfig.DataDir, p.runtimeDir)
 	}
 	return p.runtimeDir
 }
