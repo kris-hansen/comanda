@@ -398,9 +398,26 @@ func openGraphQuerier() (*knowledgegraph.Querier, func() error, error) {
 		dbPath = semanticmemory.DefaultPath(root, namespace)
 	}
 
+	// Graph reads must not create a memory directory or an empty SQLite file.
+	// An index can be registered before its graph is built, which is a normal
+	// first-use state rather than a database or machine-resource failure.
+	if _, err := os.Stat(dbPath); err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil, graphNotBuiltError(namespace)
+		}
+		return nil, nil, fmt.Errorf("inspect graph database %q: %w", dbPath, err)
+	}
+
 	store, err := semanticmemory.Open(dbPath)
 	if err != nil {
 		return nil, nil, err
 	}
 	return knowledgegraph.NewQuerier(store, namespace), store.Close, nil
+}
+
+func graphNotBuiltError(namespace string) error {
+	if namespace == "" {
+		return fmt.Errorf("no graph exists for the selected database; build one with: comanda graph build <index-name>")
+	}
+	return fmt.Errorf("no graph exists for namespace %q. Build it with: comanda graph build %s", namespace, namespace)
 }

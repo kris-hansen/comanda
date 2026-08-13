@@ -3,6 +3,7 @@ package semanticmemory
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -33,6 +34,20 @@ func TestStoreSearchHonorsNamespaceAndTypes(t *testing.T) {
 	}
 	if results[0].Type != "decision" || results[0].Namespace != "repo" {
 		t.Fatalf("unexpected record: %#v", results[0])
+	}
+}
+
+func TestOpenMissingParentReportsCantOpenRatherThanOutOfMemory(t *testing.T) {
+	_, err := Open(filepath.Join(t.TempDir(), "missing", "memory.db"))
+	if err == nil {
+		t.Fatal("Open() succeeded with a missing database parent directory")
+	}
+	message := strings.ToLower(err.Error())
+	if strings.Contains(message, "out of memory") {
+		t.Fatalf("Open() error = %q, should not mislabel SQLITE_CANTOPEN as out of memory", err)
+	}
+	if !strings.Contains(message, "unable to open database file") {
+		t.Fatalf("Open() error = %q, want an actionable database-path error", err)
 	}
 }
 
