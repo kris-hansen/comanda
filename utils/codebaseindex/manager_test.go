@@ -31,6 +31,35 @@ func TestDefaultConfigMaxFiles(t *testing.T) {
 	}
 }
 
+func TestScanReportsCurrentFileDuringSymbolExtraction(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/test\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nfunc main() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := DefaultConfig()
+	cfg.Root = root
+	var events []ProgressEvent
+	cfg.Progress = func(event ProgressEvent) { events = append(events, event) }
+	manager, err := NewManager(cfg, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := manager.Scan(); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, event := range events {
+		if event.Phase == "Extracting symbols" && event.Current == "main.go" && event.Completed > 0 && event.Total > 0 {
+			return
+		}
+	}
+	t.Fatalf("expected extraction progress for main.go, got %#v", events)
+}
+
 func TestSelectCandidatesHonorsMaxFiles(t *testing.T) {
 	newFiles := func() []*FileEntry {
 		return []*FileEntry{
