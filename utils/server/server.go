@@ -259,11 +259,12 @@ func SetVersion(v string) {
 // progressively enable functionality based on what this server supports
 func (s *Server) capabilities() []string {
 	caps := []string{
-		"full-dsl",          // /process, /yaml/process parse the complete DSL (parallel, loops, defer, workflow)
-		"yaml-validate",     // POST /yaml/validate
-		"log-events",        // SSE "log" events with stream-log lines during streaming execution
-		"progress-metrics",  // SSE "progress" events include per-step performance metrics
-		"stream-no-timeout", // streaming runs are not time-limited unless configured
+		"full-dsl",            // /process, /yaml/process parse the complete DSL (parallel, loops, defer, workflow)
+		"yaml-validate",       // POST /yaml/validate
+		"log-events",          // SSE "log" events with stream-log lines during streaming execution
+		"progress-metrics",    // SSE "progress" events include per-step performance metrics
+		"stream-no-timeout",   // streaming runs are not time-limited unless configured
+		"knowledge-graph-api", // read-only /graph navigation endpoints
 	}
 	if s.config.OpenAICompat.Enabled {
 		caps = append(caps, "openai-compat")
@@ -297,6 +298,11 @@ func (s *Server) routes() {
 	// Project context is the discovery contract used by Canvas before a run.
 	s.mux.HandleFunc("/context", s.combinedMiddleware(s.handleContext))
 	s.mux.HandleFunc("/preflight", s.combinedMiddleware(s.handlePreflight))
+
+	// Knowledge-graph navigation API. Requests require the same authentication
+	// as other server data endpoints and can address registered namespaces only.
+	s.mux.HandleFunc("/graph", s.combinedMiddleware(s.handleGraphAPI))
+	s.mux.HandleFunc("/graph/", s.combinedMiddleware(s.handleGraphAPI))
 
 	// Provider operations - require auth
 	s.mux.HandleFunc("/providers", s.combinedMiddleware(func(w http.ResponseWriter, r *http.Request) {

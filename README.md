@@ -216,7 +216,23 @@ comanda graph path main Store                   # shortest connection between no
 comanda graph query "what uses the store?"      # scoped subgraph for a question
 comanda graph stats                             # counts and hub nodes
 comanda graph export -o graph.json              # graphify-style JSON
+comanda graph visualize                          # interactive local graph navigator
 ```
+
+`comanda graph visualize` opens a localhost-only browser view for navigating
+complex code structures. Search finds symbols, files, packages, and concepts;
+selecting a result focuses its connected neighborhood rather than rendering an
+unusable all-symbol hairball. The same read-only contract is available to
+native clients through the visualizer and the configured Comanda server:
+
+```text
+GET /graph?namespace=myproject
+GET /graph/search?namespace=myproject&q=Store
+GET /graph/subgraph?namespace=myproject&focus=store&depth=2
+```
+
+The browser visualizer serves equivalent endpoints below `/api/v1/` and binds
+only to `127.0.0.1`. Graph reads never modify the database.
 
 Graph nodes are mirrored into the memory FTS index as `graph_node` records, so
 workflow steps recall them with the existing memory mapping

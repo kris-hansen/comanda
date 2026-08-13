@@ -5,11 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
+	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/kris-hansen/comanda/utils/codebaseindex"
+	"github.com/kris-hansen/comanda/utils/graphviewer"
 	"github.com/kris-hansen/comanda/utils/knowledgegraph"
 	"github.com/kris-hansen/comanda/utils/processor"
 	"github.com/kris-hansen/comanda/utils/semanticmemory"
@@ -17,12 +23,14 @@ import (
 )
 
 var (
-	graphNamespace    string
-	graphDBPath       string
-	graphEnhance      bool
-	graphEnhanceModel string
-	graphJSON         bool
-	graphExportOutput string
+	graphNamespace       string
+	graphDBPath          string
+	graphEnhance         bool
+	graphEnhanceModel    string
+	graphJSON            bool
+	graphExportOutput    string
+	graphVisualizePort   int
+	graphVisualizeNoOpen bool
 )
 
 var graphCmd = &cobra.Command{
@@ -47,7 +55,8 @@ Examples:
   comanda graph path main Store              # Shortest connection between nodes
   comanda graph query "what uses the store?" # Scoped subgraph for a question
   comanda graph stats                        # Counts and hub nodes
-  comanda graph export -o graph.json         # graphify-style JSON export`,
+  comanda graph export -o graph.json         # graphify-style JSON export
+  comanda graph visualize                    # Browse the graph in a local browser`,
 }
 
 var graphBuildCmd = &cobra.Command{
@@ -208,9 +217,24 @@ var graphExportCmd = &cobra.Command{
 	},
 }
 
+var graphVisualizeCmd = &cobra.Command{
+	Use:   "visualize",
+	Short: "Open an interactive local graph navigator",
+	Long: `Serve a read-only graph navigation API and browser UI on localhost.
+
+The visualizer supports full-graph exploration, FTS-backed search, filters,
+and focused one-to-three-hop subgraphs. Its API is also available to local
+clients such as Canvas:
+  GET /api/v1/graph
+  GET /api/v1/search?q=<text>
+  GET /api/v1/subgraph?focus=<node-id-or-name>&depth=1..3`,
+	Args: cobra.NoArgs,
+	RunE: runGraphVisualize,
+}
+
 func init() {
 	rootCmd.AddCommand(graphCmd)
-	graphCmd.AddCommand(graphBuildCmd, graphUpdateCmd, graphExplainCmd, graphPathCmd, graphQueryCmd, graphStatsCmd, graphExportCmd)
+	graphCmd.AddCommand(graphBuildCmd, graphUpdateCmd, graphExplainCmd, graphPathCmd, graphQueryCmd, graphStatsCmd, graphExportCmd, graphVisualizeCmd)
 
 	graphCmd.PersistentFlags().StringVarP(&graphNamespace, "namespace", "n", "", "Graph namespace (default: index registered for current directory)")
 	graphCmd.PersistentFlags().StringVar(&graphDBPath, "db", "", "Path to the graph/memory SQLite database (default: project-local)")
@@ -225,6 +249,8 @@ func init() {
 	graphQueryCmd.Flags().BoolVar(&graphJSON, "json", false, "Output JSON subgraph")
 
 	graphExportCmd.Flags().StringVarP(&graphExportOutput, "output", "o", "", "Write export to a file instead of stdout")
+	graphVisualizeCmd.Flags().IntVar(&graphVisualizePort, "port", 0, "Local port to listen on (0 selects a free port)")
+	graphVisualizeCmd.Flags().BoolVar(&graphVisualizeNoOpen, "no-open", false, "Start the API without opening a browser")
 }
 
 // buildKnowledgeGraph scans the repo behind a registered index and rebuilds
@@ -370,8 +396,12 @@ func runGraphBuild(_ *cobra.Command, args []string) error {
 // openGraphQuerier resolves the namespace (flag, or the index registered for
 // the current directory) and opens a querier on the right database.
 func openGraphQuerier() (*knowledgegraph.Querier, func() error, error) {
-	namespace := graphNamespace
-	dbPath := graphDBPath
+	return openGraphQuerierFor(graphNamespace, graphDBPath)
+}
+
+// openGraphQuerierFor resolves and opens a graph without mutating command
+// globals, so the local visualizer and HTTP API can serve requests safely.
+func openGraphQuerierFor(namespace, dbPath string) (*knowledgegraph.Querier, func() error, error) {
 
 	if dbPath == "" {
 		root := ""
@@ -413,6 +443,54 @@ func openGraphQuerier() (*knowledgegraph.Querier, func() error, error) {
 		return nil, nil, err
 	}
 	return knowledgegraph.NewQuerier(store, namespace), store.Close, nil
+}
+
+func runGraphVisualize(_ *cobra.Command, _ []string) error {
+	if graphVisualizePort < 0 || graphVisualizePort > 65535 {
+		return fmt.Errorf("port must be between 0 and 65535")
+	}
+	open := func(_ context.Context, requestedNamespace string) (*knowledgegraph.Querier, func() error, error) {
+		if graphNamespace != "" && requestedNamespace != "" && requestedNamespace != graphNamespace {
+			return nil, nil, fmt.Errorf("this visualizer is bound to namespace %q", graphNamespace)
+		}
+		if requestedNamespace == "" {
+			requestedNamespace = graphNamespace
+		}
+		return openGraphQuerierFor(requestedNamespace, graphDBPath)
+	}
+	handler, err := graphviewer.VisualizationHandler(open)
+	if err != nil {
+		return err
+	}
+	listener, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(graphVisualizePort)))
+	if err != nil {
+		return fmt.Errorf("start graph visualizer: %w", err)
+	}
+	url := "http://" + listener.Addr().String()
+	fmt.Printf("Comanda graph visualizer: %s\nPress Ctrl-C to stop.\n", url)
+	if !graphVisualizeNoOpen {
+		if err := openBrowser(url); err != nil {
+			log.Printf("Could not open browser automatically: %v\n", err)
+		}
+	}
+	server := &http.Server{Handler: handler}
+	if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
+		return fmt.Errorf("serve graph visualizer: %w", err)
+	}
+	return nil
+}
+
+func openBrowser(url string) error {
+	var command *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		command = exec.Command("open", url)
+	case "windows":
+		command = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	default:
+		command = exec.Command("xdg-open", url)
+	}
+	return command.Start()
 }
 
 func graphNotBuiltError(namespace string) error {
