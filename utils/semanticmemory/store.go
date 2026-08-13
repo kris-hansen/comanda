@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	_ "modernc.org/sqlite"
+	"modernc.org/sqlite"
 )
 
 const defaultNamespace = "default"
@@ -64,11 +64,11 @@ func Open(path string) (*Store, error) {
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(`PRAGMA busy_timeout = 5000`); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("configure memory database: %w", err)
+		return nil, configureMemoryDatabaseError(err)
 	}
 	if _, err := db.Exec(`PRAGMA journal_mode = WAL`); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("configure memory database: %w", err)
+		return nil, configureMemoryDatabaseError(err)
 	}
 	store := &Store{db: db}
 	if err := store.migrate(context.Background()); err != nil {
@@ -76,6 +76,17 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	return store, nil
+}
+
+func configureMemoryDatabaseError(err error) error {
+	var sqliteErr *sqlite.Error
+	if errors.As(err, &sqliteErr) && sqliteErr.Code()&0xff == 14 {
+		// SQLite result code 14 is SQLITE_CANTOPEN. Never report it as an
+		// allocation failure: that sends users looking for memory pressure when
+		// the actual issue is a missing or inaccessible database path.
+		return fmt.Errorf("configure memory database: unable to open database file (SQLITE_CANTOPEN, code 14)")
+	}
+	return fmt.Errorf("configure memory database: %w", err)
 }
 
 // Close releases the database connection.
