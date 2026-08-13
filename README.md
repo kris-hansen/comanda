@@ -220,14 +220,18 @@ comanda graph visualize                          # interactive local graph navig
 ```
 
 `comanda graph visualize` opens a localhost-only browser view for navigating
-complex code structures. Search finds symbols, files, packages, and concepts;
-selecting a result focuses its connected neighborhood rather than rendering an
-unusable all-symbol hairball. The same read-only contract is available to
-native clients through the visualizer and the configured Comanda server:
+complex code structures. It begins with a small architecture overview, then
+loads and caches only the selected node's direct neighborhood in 160-edge
+pages. Search finds symbols, files, packages, and concepts; selecting a result
+focuses its connected neighborhood rather than transferring an unusable
+all-symbol hairball. The same read-only contract is available to native clients
+through the visualizer and the configured Comanda server:
 
 ```text
+GET /graph/overview?namespace=myproject
 GET /graph?namespace=myproject
 GET /graph/search?namespace=myproject&q=Store
+GET /graph/neighbors?namespace=myproject&focus=store&limit=160&offset=0
 GET /graph/subgraph?namespace=myproject&focus=store&depth=2
 ```
 

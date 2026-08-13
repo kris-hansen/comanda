@@ -28,13 +28,16 @@ comanda graph export -o graph.json         # graphify-style JSON export
 comanda graph visualize                     # search and browse locally in a browser
 ```
 
-`visualize` serves a localhost-only, read-only navigator. Search for a symbol,
-file, package, or concept and click a result to inspect its focused
-neighborhood. The graph API is reusable by native clients:
+`visualize` serves a localhost-only, read-only navigator. It loads a small
+component overview first, then caches only the neighborhoods you explore.
+Search for a symbol, file, package, or concept and click a result to inspect
+its focused scope. The graph API is reusable by native clients:
 
 ```text
+GET /graph/overview?namespace=myproject
 GET /graph?namespace=myproject
 GET /graph/search?namespace=myproject&q=Store
+GET /graph/neighbors?namespace=myproject&focus=store&limit=160&offset=0
 GET /graph/subgraph?namespace=myproject&focus=store&depth=2
 ```
 
