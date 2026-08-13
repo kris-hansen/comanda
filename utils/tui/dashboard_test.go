@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func TestDashboardActivityDetailsPreserveFullError(t *testing.T) {
@@ -22,6 +23,27 @@ func TestDashboardActivityDetailsPreserveFullError(t *testing.T) {
 	details := strings.Join(activityTexts(lines), "\n")
 	if !strings.Contains(details, "source") || !strings.Contains(details, "retrying") {
 		t.Fatal("detailed activity view did not retain the end of the error message")
+	}
+}
+
+func TestDashboardCompactActivityStaysWithinPreviewHeight(t *testing.T) {
+	model := NewDashboardModel("test", NewProgressReporter())
+	model.width = 80
+	model.addActivity("output", "first line\nsecond line\nthird line\nfourth line")
+
+	view := model.renderActivity()
+	// Rounded borders plus the label and single preview occupy five rows.
+	if got, want := lipgloss.Height(view), 5; got != want {
+		t.Fatalf("compact activity height = %d, want %d", got, want)
+	}
+	if !strings.Contains(view, "first line second line") {
+		t.Fatalf("compact activity did not retain a one-line preview: %q", view)
+	}
+
+	lines := model.activityDetailLines()
+	details := strings.Join(activityTexts(lines), "\n")
+	if !strings.Contains(details, "fourth line") {
+		t.Fatal("detailed activity view did not retain the complete message")
 	}
 }
 
