@@ -73,6 +73,10 @@ type Config struct {
 	Incremental   bool
 	Verbose       bool
 
+	// Progress receives deterministic scan milestones. It is optional so index
+	// generation stays quiet and script-friendly unless a CLI or UI opts in.
+	Progress func(ProgressEvent)
+
 	// MaxFilesPerDir caps how many files are listed per directory in the
 	// Repository Layout tree. 0 or negative means unlimited (list every file).
 	MaxFilesPerDir int
@@ -94,6 +98,15 @@ type Config struct {
 	// Derived values (computed at runtime)
 	RepoFileSlug string // lowercase slug for filenames
 	RepoVarSlug  string // uppercase slug for variables
+}
+
+// ProgressEvent describes the current deterministic indexing operation.
+// Total is zero while a phase has no meaningful bounded total.
+type ProgressEvent struct {
+	Phase     string
+	Current   string
+	Completed int
+	Total     int
 }
 
 // AdapterOverride allows customization of adapter behavior
