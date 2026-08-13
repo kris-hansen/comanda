@@ -12,7 +12,7 @@ import (
 
 // extractSymbols extracts symbols from all candidate files
 func (m *Manager) extractSymbols(candidates []*FileEntry) error {
-	for _, entry := range candidates {
+	for i, entry := range candidates {
 		path := entry.Path
 		if !strings.HasPrefix(path, "/") {
 			path = m.config.Root + "/" + path
@@ -20,6 +20,12 @@ func (m *Manager) extractSymbols(candidates []*FileEntry) error {
 
 		content, err := readFilePartial(path, maxSymbolReadSize)
 		if err != nil {
+			m.reportProgress(ProgressEvent{
+				Phase:     "Extracting symbols",
+				Current:   entry.Path,
+				Completed: i + 1,
+				Total:     len(candidates),
+			})
 			continue // Skip files we can't read
 		}
 
@@ -33,6 +39,12 @@ func (m *Manager) extractSymbols(candidates []*FileEntry) error {
 				break
 			}
 		}
+		m.reportProgress(ProgressEvent{
+			Phase:     "Extracting symbols",
+			Current:   entry.Path,
+			Completed: i + 1,
+			Total:     len(candidates),
+		})
 	}
 
 	return nil

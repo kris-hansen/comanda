@@ -390,27 +390,64 @@ func slug(name string) string {
 	return strings.Trim(b.String(), "-")
 }
 
+// ProgressEvent describes graph persistence work. Total covers nodes and
+// edges, while Current identifies the graph object most recently written.
+type ProgressEvent struct {
+	Phase     string
+	Current   string
+	Completed int
+	Total     int
+}
+
+// ProgressFunc receives optional graph persistence milestones.
+type ProgressFunc func(ProgressEvent)
+
 // Save persists a graph into the semantic memory store, upserting all nodes
 // and edges and refreshing degree counts. It does not delete stale nodes; use
 // Rebuild for a clean slate.
 func Save(ctx context.Context, store *semanticmemory.Store, g *Graph) error {
+	return save(ctx, store, g, nil)
+}
+
+func save(ctx context.Context, store *semanticmemory.Store, g *Graph, progress ProgressFunc) error {
+	total := len(g.Nodes) + len(g.Edges)
+	completed := 0
 	for _, node := range g.Nodes {
 		if _, err := store.UpsertGraphNode(ctx, *node); err != nil {
 			return err
+		}
+		completed++
+		if progress != nil {
+			progress(ProgressEvent{Phase: "Writing graph nodes", Current: node.Name, Completed: completed, Total: total})
 		}
 	}
 	for _, edge := range g.Edges {
 		if _, err := store.UpsertGraphEdge(ctx, *edge); err != nil {
 			return err
 		}
+		completed++
+		if progress != nil {
+			progress(ProgressEvent{Phase: "Writing graph edges", Current: edge.Kind, Completed: completed, Total: total})
+		}
+	}
+	if progress != nil {
+		progress(ProgressEvent{Phase: "Refreshing graph relationships", Completed: completed, Total: total})
 	}
 	return store.RefreshGraphDegrees(ctx, g.Namespace)
 }
 
 // Rebuild replaces the stored graph for a namespace with the given one.
 func Rebuild(ctx context.Context, store *semanticmemory.Store, g *Graph) error {
+	return RebuildWithProgress(ctx, store, g, nil)
+}
+
+// RebuildWithProgress replaces a graph and reports its persistence phases.
+func RebuildWithProgress(ctx context.Context, store *semanticmemory.Store, g *Graph, progress ProgressFunc) error {
+	if progress != nil {
+		progress(ProgressEvent{Phase: "Removing stale graph data"})
+	}
 	if err := store.DeleteGraphNamespace(ctx, g.Namespace); err != nil {
 		return err
 	}
-	return Save(ctx, store, g)
+	return save(ctx, store, g, progress)
 }

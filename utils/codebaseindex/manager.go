@@ -55,6 +55,7 @@ func (m *Manager) Scan() (*ScanResult, []string, error) {
 	}
 
 	// Step 1: Detect or use specified adapters
+	m.reportProgress(ProgressEvent{Phase: "Detecting languages", Current: m.config.Root})
 	m.adapters = m.detectAdapters()
 	if len(m.adapters) == 0 {
 		return nil, nil, fmt.Errorf("no language adapters detected for repository at %s (supported: Go, Python, TypeScript, Flutter, Java)", m.config.Root)
@@ -68,23 +69,38 @@ func (m *Manager) Scan() (*ScanResult, []string, error) {
 
 	// Step 2: Scan repository
 	m.logf("Scanning repository...")
+	m.reportProgress(ProgressEvent{Phase: "Scanning source files", Current: m.config.Root})
 	scanResult, err := m.scanRepository()
 	if err != nil {
 		return nil, nil, fmt.Errorf("scan failed: %w", err)
 	}
 	m.logf("Found %d files, selected %d candidates", scanResult.TotalFiles, len(scanResult.Candidates))
+	m.reportProgress(ProgressEvent{
+		Phase:     "Selecting graph candidates",
+		Current:   fmt.Sprintf("%d source files", scanResult.TotalFiles),
+		Completed: len(scanResult.Candidates),
+		Total:     len(scanResult.Candidates),
+	})
 
 	// Step 3: Extract symbols from candidates
 	m.logf("Extracting symbols...")
+	m.reportProgress(ProgressEvent{Phase: "Extracting symbols", Total: len(scanResult.Candidates)})
 	if err := m.extractSymbols(scanResult.Candidates); err != nil {
 		return nil, nil, fmt.Errorf("symbol extraction failed: %w", err)
 	}
 
 	// Step 3b: Infer macro components after symbol extraction so monorepos retain
 	// frontend/backend/package boundaries in the generated index.
+	m.reportProgress(ProgressEvent{Phase: "Mapping repository components"})
 	m.analyzeComponents(scanResult)
 
 	return scanResult, languages, nil
+}
+
+func (m *Manager) reportProgress(event ProgressEvent) {
+	if m.config.Progress != nil {
+		m.config.Progress(event)
+	}
 }
 
 // Generate creates the codebase index

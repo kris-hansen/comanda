@@ -7,9 +7,11 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/kris-hansen/comanda/utils/codebaseindex"
 	"github.com/kris-hansen/comanda/utils/knowledgegraph"
+	"github.com/kris-hansen/comanda/utils/processor"
 	"github.com/kris-hansen/comanda/utils/semanticmemory"
 	"github.com/spf13/cobra"
 )
@@ -245,18 +247,25 @@ func buildKnowledgeGraph(indexName, repoPath string, enhance bool, enhanceModel 
 	cfg.Verbose = verbose
 	cfg.MaxFiles = indexMaxFiles
 	cfg.MaxFilesPerDir = indexMaxFilesPerDir
+	progress := newGraphBuildProgress(indexName)
+	defer progress.Stop()
+	cfg.Progress = progress.UpdateIndex
 
 	manager, err := codebaseindex.NewManager(cfg, verbose)
 	if err != nil {
 		return fmt.Errorf("failed to create index manager: %w", err)
 	}
 
-	log.Printf("Scanning %s for graph build...\n", repoPath)
+	progress.Update("Preparing graph scan", repoPath, 0, 0)
+	if verbose {
+		log.Printf("Scanning %s for graph build...\n", repoPath)
+	}
 	scan, _, err := manager.Scan()
 	if err != nil {
 		return fmt.Errorf("graph scan failed: %w", err)
 	}
 
+	progress.Update("Building graph relationships", fmt.Sprintf("%d indexed files", len(scan.Candidates)), 0, 0)
 	graph := knowledgegraph.Build(scan, indexName)
 
 	if enhance {
@@ -264,7 +273,10 @@ func buildKnowledgeGraph(indexName, repoPath string, enhance bool, enhanceModel 
 		if err != nil {
 			return err
 		}
-		log.Printf("Enhancing graph with model: %s\n", modelName)
+		progress.Update("Enhancing graph", modelName, 0, 0)
+		if verbose {
+			log.Printf("Enhancing graph with model: %s\n", modelName)
+		}
 		if err := knowledgegraph.Enhance(graph, enhanceFunc); err != nil {
 			log.Printf("Warning: graph enhancement skipped: %v\n", err)
 		}
@@ -283,13 +295,60 @@ func buildKnowledgeGraph(indexName, repoPath string, enhance bool, enhanceModel 
 	}
 	defer store.Close()
 
-	if err := knowledgegraph.Rebuild(context.Background(), store, graph); err != nil {
+	if err := knowledgegraph.RebuildWithProgress(context.Background(), store, graph, progress.UpdateGraph); err != nil {
 		return fmt.Errorf("failed to store graph: %w", err)
 	}
 
+	progress.Stop()
 	log.Printf("Knowledge graph built: %d nodes, %d edges (namespace %s, db %s)\n",
 		len(graph.Nodes), len(graph.Edges), indexName, dbPath)
 	return nil
+}
+
+// graphBuildProgress adapts the shared Comanda spinner to the graph builder's
+// deterministic phases. The main label carries the phase and count; the detail
+// holds the file or graph object currently being processed.
+type graphBuildProgress struct {
+	spinner *processor.Spinner
+}
+
+func newGraphBuildProgress(indexName string) *graphBuildProgress {
+	spinner := processor.NewSpinner()
+	if verbose {
+		// Verbose mode already emits each index phase as durable log lines.
+		spinner.Disable()
+	}
+	spinner.Start(fmt.Sprintf("Building knowledge graph: %s", indexName))
+	return &graphBuildProgress{spinner: spinner}
+}
+
+func (p *graphBuildProgress) Stop() {
+	p.spinner.Stop()
+}
+
+func (p *graphBuildProgress) UpdateIndex(event codebaseindex.ProgressEvent) {
+	p.Update(event.Phase, event.Current, event.Completed, event.Total)
+}
+
+func (p *graphBuildProgress) UpdateGraph(event knowledgegraph.ProgressEvent) {
+	p.Update(event.Phase, event.Current, event.Completed, event.Total)
+}
+
+func (p *graphBuildProgress) Update(phase, current string, completed, total int) {
+	label := phase
+	if total > 0 {
+		label = fmt.Sprintf("%s %d/%d", phase, completed, total)
+	}
+	p.spinner.SetProgress(label, compactProgressDetail(current))
+}
+
+func compactProgressDetail(detail string) string {
+	const maxRunes = 72
+	detail = strings.TrimSpace(detail)
+	if len([]rune(detail)) <= maxRunes {
+		return detail
+	}
+	return string([]rune(detail)[:maxRunes-1]) + "…"
 }
 
 func runGraphBuild(_ *cobra.Command, args []string) error {

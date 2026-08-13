@@ -207,6 +207,30 @@ func TestSaveRebuildAndQuery(t *testing.T) {
 	}
 }
 
+func TestRebuildWithProgressReportsStoragePhases(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t)
+	graph := Build(fixtureScan(), "proj")
+	var events []ProgressEvent
+
+	if err := RebuildWithProgress(ctx, store, graph, func(event ProgressEvent) {
+		events = append(events, event)
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(events) == 0 || events[0].Phase != "Removing stale graph data" {
+		t.Fatalf("first progress event = %#v, want stale-data removal", events)
+	}
+	last := events[len(events)-1]
+	if last.Phase != "Refreshing graph relationships" {
+		t.Fatalf("last progress phase = %q", last.Phase)
+	}
+	if last.Completed != len(graph.Nodes)+len(graph.Edges) || last.Total != last.Completed {
+		t.Fatalf("final progress = %d/%d, want %d/%d", last.Completed, last.Total, len(graph.Nodes)+len(graph.Edges), len(graph.Nodes)+len(graph.Edges))
+	}
+}
+
 func TestWordMatch(t *testing.T) {
 	cases := []struct {
 		text, name string
