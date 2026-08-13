@@ -25,6 +25,17 @@ comanda graph path main Store              # shortest connection between nodes
 comanda graph query "what uses the store?" # scoped subgraph for a question
 comanda graph stats                        # counts and hub nodes
 comanda graph export -o graph.json         # graphify-style JSON export
+comanda graph visualize                     # search and browse locally in a browser
+```
+
+`visualize` serves a localhost-only, read-only navigator. Search for a symbol,
+file, package, or concept and click a result to inspect its focused
+neighborhood. The graph API is reusable by native clients:
+
+```text
+GET /graph?namespace=myproject
+GET /graph/search?namespace=myproject&q=Store
+GET /graph/subgraph?namespace=myproject&focus=store&depth=2
 ```
 
 Edges are confidence-tagged: `EXTRACTED` (explicit in the source) vs.
