@@ -545,17 +545,29 @@ func (m *DashboardModel) renderActivity() string {
 				style = lipgloss.NewStyle().Foreground(m.theme.Muted)
 			}
 
-			msg := activity.Message
-			maxLen := m.width - 10
-			if len(msg) > maxLen {
-				msg = msg[:maxLen-3] + "..."
-			}
+			// The compact dashboard is an event preview, not a transcript. Agent
+			// output often contains newlines; rendering it verbatim makes the
+			// activity box grow past its intended boundary. The detailed Ctrl-R
+			// view retains and scrolls the complete, wrapped message.
+			msg := compactActivityMessage(activity.Message, max(1, m.width-10))
 
 			content.WriteString(fmt.Sprintf("  %s %s\n", icon, style.Render(msg)))
 		}
 	}
 
 	return boxStyle.Render(content.String())
+}
+
+func compactActivityMessage(message string, maxWidth int) string {
+	message = strings.Join(strings.Fields(message), " ")
+	runes := []rune(message)
+	if len(runes) <= maxWidth {
+		return message
+	}
+	if maxWidth <= 3 {
+		return string(runes[:maxWidth])
+	}
+	return string(runes[:maxWidth-3]) + "..."
 }
 
 func (m *DashboardModel) renderExpandedActivity() string {
