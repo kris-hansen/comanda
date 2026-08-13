@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/kris-hansen/comanda/utils/codebaseindex"
 	"github.com/kris-hansen/comanda/utils/semanticmemory"
@@ -142,18 +143,21 @@ func inferUses(g *Graph, scan *codebaseindex.ScanResult, namespace string) {
 		if f.Symbols == nil {
 			continue
 		}
-		haystack := referenceText(f.Symbols)
-		if haystack == "" {
+		// Normalize the signature text into exact identifier tokens once. The
+		// previous approach searched every unique type name through every file's
+		// text, which is quadratic for large repositories. A token set gives the
+		// same whole-identifier semantics without lossy graph compression.
+		tokens := identifierTokens(referenceText(f.Symbols))
+		if len(tokens) == 0 {
 			continue
 		}
 		fileID := NodeID(namespace, "file:"+f.Path)
-		for name, d := range defs {
-			if counts[name] != 1 || d.defFile == f.Path {
+		for name := range tokens {
+			d, ok := defs[name]
+			if !ok || counts[name] != 1 || d.defFile == f.Path {
 				continue
 			}
-			if wordMatch(haystack, name) {
-				g.AddEdge(fileID, d.nodeID, EdgeUses, ConfidenceInferred, "references "+name)
-			}
+			g.AddEdge(fileID, d.nodeID, EdgeUses, ConfidenceInferred, "references "+name)
 		}
 	}
 }
@@ -179,6 +183,30 @@ func referenceText(s *codebaseindex.SymbolInfo) string {
 		}
 	}
 	return b.String()
+}
+
+// identifierTokens splits language signatures and member lists into exact
+// identifier-like tokens. It mirrors wordMatch's definition of a word
+// character and therefore preserves inferred-edge behavior while avoiding a
+// repeated full-text scan for each known type.
+func identifierTokens(text string) map[string]struct{} {
+	tokens := make(map[string]struct{})
+	var token strings.Builder
+	flush := func() {
+		if token.Len() > 0 {
+			tokens[token.String()] = struct{}{}
+			token.Reset()
+		}
+	}
+	for _, r := range text {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' {
+			token.WriteRune(r)
+			continue
+		}
+		flush()
+	}
+	flush()
+	return tokens
 }
 
 var wordBoundary = regexp.MustCompile(`[\p{L}\p{N}_]`)
@@ -443,11 +471,25 @@ func Rebuild(ctx context.Context, store *semanticmemory.Store, g *Graph) error {
 
 // RebuildWithProgress replaces a graph and reports its persistence phases.
 func RebuildWithProgress(ctx context.Context, store *semanticmemory.Store, g *Graph, progress ProgressFunc) error {
-	if progress != nil {
-		progress(ProgressEvent{Phase: "Removing stale graph data"})
+	nodes := make([]semanticmemory.GraphNode, 0, len(g.Nodes))
+	for _, node := range g.Nodes {
+		nodes = append(nodes, *node)
 	}
-	if err := store.DeleteGraphNamespace(ctx, g.Namespace); err != nil {
-		return err
+	sort.Slice(nodes, func(i, j int) bool { return nodes[i].ID < nodes[j].ID })
+	edges := make([]semanticmemory.GraphEdge, 0, len(g.Edges))
+	for _, edge := range g.Edges {
+		edges = append(edges, *edge)
 	}
-	return save(ctx, store, g, progress)
+	sort.Slice(edges, func(i, j int) bool { return edges[i].ID < edges[j].ID })
+
+	return store.ReplaceGraph(ctx, g.Namespace, nodes, edges, func(event semanticmemory.GraphWriteProgress) {
+		if progress != nil {
+			progress(ProgressEvent{
+				Phase:     event.Phase,
+				Current:   event.Current,
+				Completed: event.Completed,
+				Total:     event.Total,
+			})
+		}
+	})
 }

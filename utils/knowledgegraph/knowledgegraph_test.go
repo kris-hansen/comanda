@@ -247,3 +247,23 @@ func TestWordMatch(t *testing.T) {
 		}
 	}
 }
+
+func TestIdentifierTokensPreserveWholeIdentifierMatching(t *testing.T) {
+	tokens := identifierTokens("func Run(s *store.Store) error; Storage StoreManager")
+	if _, ok := tokens["Store"]; !ok {
+		t.Fatalf("tokens = %#v, want Store", tokens)
+	}
+	if _, ok := tokens["Storage"]; !ok {
+		t.Fatalf("tokens = %#v, want Storage", tokens)
+	}
+
+	scan := fixtureScan()
+	scan.Candidates[0].Symbols.Functions = []codebaseindex.FunctionInfo{{
+		Name: "Run", Signature: "func Run(Storage StoreManager) error",
+	}}
+	graph := Build(scan, "proj")
+	usesID := EdgeID("proj", NodeID("proj", "file:cmd/server.go"), NodeID("proj", "type:Store@utils/store/store.go"), EdgeUses)
+	if graph.Edges[usesID] != nil {
+		t.Fatal("inferred uses edge matched Store inside a longer identifier")
+	}
+}

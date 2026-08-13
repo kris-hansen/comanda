@@ -247,6 +247,11 @@ func buildKnowledgeGraph(indexName, repoPath string, enhance bool, enhanceModel 
 	cfg.Verbose = verbose
 	cfg.MaxFiles = indexMaxFiles
 	cfg.MaxFilesPerDir = indexMaxFilesPerDir
+	// A graph needs file metadata and extracted symbols, but never the file
+	// hashes used by markdown index diffs. Reuse the previous graph scan's
+	// symbols when size and mtime prove a candidate has not changed.
+	cfg.SkipFileHash = true
+	cfg.SymbolCache = codebaseindex.LoadSymbolCache(repoPath, indexName)
 	progress := newGraphBuildProgress(indexName)
 	defer progress.Stop()
 	cfg.Progress = progress.UpdateIndex
@@ -263,6 +268,9 @@ func buildKnowledgeGraph(indexName, repoPath string, enhance bool, enhanceModel 
 	scan, _, err := manager.Scan()
 	if err != nil {
 		return fmt.Errorf("graph scan failed: %w", err)
+	}
+	if err := codebaseindex.SaveSymbolCache(repoPath, indexName, scan.Candidates); err != nil && verbose {
+		log.Printf("Warning: could not save graph symbol cache: %v\n", err)
 	}
 
 	progress.Update("Building graph relationships", fmt.Sprintf("%d indexed files", len(scan.Candidates)), 0, 0)

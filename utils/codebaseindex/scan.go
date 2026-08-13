@@ -221,8 +221,11 @@ func (m *Manager) processFile(path string) *FileEntry {
 	entry.IsEntrypoint = m.isEntrypoint(name, relPath)
 	entry.IsConfig = m.isConfigFile(name)
 
-	// Compute hash (use xxhash by default for speed)
-	entry.Hash = m.computeFileHash(path)
+	// Graph-only scans do not consume file hashes. Avoid a second source read
+	// when callers have explicitly opted into size/mtime-backed symbol caching.
+	if !m.config.SkipFileHash {
+		entry.Hash = m.computeFileHash(path)
+	}
 
 	// Score the file
 	entry.Score = m.scoreFile(entry)

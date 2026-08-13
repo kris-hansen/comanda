@@ -72,6 +72,15 @@ type Config struct {
 	HashAlgorithm HashAlgorithm
 	Incremental   bool
 	Verbose       bool
+	// SkipFileHash avoids reading source contents only to compute metadata that
+	// a caller does not consume. Graph scans use file size and modification time
+	// to validate their symbol cache, so hashing every source file is redundant.
+	SkipFileHash bool
+
+	// SymbolCache lets repeat consumers reuse symbols for unchanged files. The
+	// cache is validated against path, language, size, and modification time;
+	// missing or stale entries are extracted normally.
+	SymbolCache map[string]SymbolCacheEntry
 
 	// Progress receives deterministic scan milestones. It is optional so index
 	// generation stays quiet and script-friendly unless a CLI or UI opts in.
@@ -98,6 +107,17 @@ type Config struct {
 	// Derived values (computed at runtime)
 	RepoFileSlug string // lowercase slug for filenames
 	RepoVarSlug  string // uppercase slug for variables
+}
+
+// SymbolCacheEntry is the durable, content-derived portion of a file scan.
+// It intentionally excludes hashes: callers that use the cache already have a
+// cheaper freshness key (size + modification time) and do not need to reread
+// each file just to compute one.
+type SymbolCacheEntry struct {
+	Language string      `json:"language"`
+	Size     int64       `json:"size"`
+	ModTime  int64       `json:"mod_time"`
+	Symbols  *SymbolInfo `json:"symbols"`
 }
 
 // ProgressEvent describes the current deterministic indexing operation.
