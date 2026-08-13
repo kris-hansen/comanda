@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/kris-hansen/comanda/utils/codebaseindex"
 	"github.com/kris-hansen/comanda/utils/graphviewer"
@@ -473,7 +474,10 @@ func runGraphVisualize(_ *cobra.Command, _ []string) error {
 			log.Printf("Could not open browser automatically: %v\n", err)
 		}
 	}
-	server := &http.Server{Handler: handler}
+	server := &http.Server{
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 	if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("serve graph visualizer: %w", err)
 	}
