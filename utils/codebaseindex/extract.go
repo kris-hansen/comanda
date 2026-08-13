@@ -7,47 +7,115 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"runtime"
 	"strings"
+	"sync"
 )
 
 // extractSymbols extracts symbols from all candidate files
 func (m *Manager) extractSymbols(candidates []*FileEntry) error {
-	for i, entry := range candidates {
-		path := entry.Path
-		if !strings.HasPrefix(path, "/") {
-			path = m.config.Root + "/" + path
-		}
-
-		content, err := readFilePartial(path, maxSymbolReadSize)
-		if err != nil {
-			m.reportProgress(ProgressEvent{
-				Phase:     "Extracting symbols",
-				Current:   entry.Path,
-				Completed: i + 1,
-				Total:     len(candidates),
-			})
-			continue // Skip files we can't read
-		}
-
-		// Find the appropriate adapter
-		for _, adapter := range m.adapters {
-			if adapter.Name() == entry.Language {
-				symbols, err := adapter.ExtractSymbols(entry.Path, content)
-				if err == nil {
-					entry.Symbols = symbols
-				}
-				break
-			}
-		}
-		m.reportProgress(ProgressEvent{
-			Phase:     "Extracting symbols",
-			Current:   entry.Path,
-			Completed: i + 1,
-			Total:     len(candidates),
-		})
+	if len(candidates) == 0 {
+		return nil
 	}
 
+	adapterByLanguage := make(map[string]Adapter, len(m.adapters))
+	for _, adapter := range m.adapters {
+		adapterByLanguage[adapter.Name()] = adapter
+	}
+
+	type workItem struct {
+		entry *FileEntry
+	}
+	work := make(chan workItem)
+	completed := 0
+	results := make(chan string, len(candidates))
+	workers := minInt(runtime.GOMAXPROCS(0), len(candidates))
+	if workers < 1 {
+		workers = 1
+	}
+	var wg sync.WaitGroup
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for item := range work {
+				entry := item.entry
+				path := entry.Path
+				if !strings.HasPrefix(path, "/") {
+					path = m.config.Root + "/" + path
+				}
+				if content, err := readFilePartial(path, maxSymbolReadSize); err == nil {
+					if adapter := adapterByLanguage[entry.Language]; adapter != nil {
+						if symbols, err := adapter.ExtractSymbols(entry.Path, content); err == nil {
+							entry.Symbols = symbols
+						}
+					}
+				}
+				results <- entry.Path
+			}
+		}()
+	}
+
+	uncached := make([]*FileEntry, 0, len(candidates))
+	for _, entry := range candidates {
+		if cached, ok := m.config.SymbolCache[entry.Path]; ok &&
+			cached.Language == entry.Language && cached.Size == entry.Size &&
+			cached.ModTime == entry.ModTime.UnixNano() {
+			entry.Symbols = cached.Symbols
+			completed++
+			m.reportExtractionProgress(entry.Path, completed, len(candidates))
+			continue
+		}
+		uncached = append(uncached, entry)
+	}
+	go func() {
+		for _, entry := range uncached {
+			work <- workItem{entry: entry}
+		}
+		close(work)
+		wg.Wait()
+		close(results)
+	}()
+	for path := range results {
+		completed++
+		m.reportExtractionProgress(path, completed, len(candidates))
+	}
 	return nil
+}
+
+func (m *Manager) reportExtractionProgress(path string, completed, total int) {
+	m.reportProgress(ProgressEvent{
+		Phase:     "Extracting symbols",
+		Current:   path,
+		Completed: completed,
+		Total:     total,
+	})
+}
+
+// BuildSymbolCache turns an extracted candidate list into a cache that can be
+// serialized alongside a graph. Callers should only reuse it with the same
+// repository root.
+func BuildSymbolCache(candidates []*FileEntry) map[string]SymbolCacheEntry {
+	cache := make(map[string]SymbolCacheEntry, len(candidates))
+	for _, entry := range candidates {
+		if entry == nil || entry.Symbols == nil {
+			continue
+		}
+		cache[entry.Path] = SymbolCacheEntry{
+			Language: entry.Language,
+			Size:     entry.Size,
+			ModTime:  entry.ModTime.UnixNano(),
+			Symbols:  entry.Symbols,
+		}
+	}
+	return cache
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // readFilePartial reads up to maxBytes from a file

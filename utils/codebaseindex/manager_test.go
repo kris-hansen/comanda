@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestNewManager(t *testing.T) {
@@ -58,6 +59,56 @@ func TestScanReportsCurrentFileDuringSymbolExtraction(t *testing.T) {
 		}
 	}
 	t.Fatalf("expected extraction progress for main.go, got %#v", events)
+}
+
+func TestExtractSymbolsReusesFreshSymbolCacheWithoutReadingFile(t *testing.T) {
+	modified := time.Unix(1_700_000_000, 0)
+	entry := &FileEntry{
+		Path:     "missing.go",
+		Language: "go",
+		Size:     123,
+		ModTime:  modified,
+	}
+	cached := &SymbolInfo{Package: "cached", Types: []TypeInfo{{Name: "Cached", Kind: "struct"}}}
+	manager := &Manager{
+		config: &Config{
+			Root: "/does-not-exist",
+			SymbolCache: map[string]SymbolCacheEntry{
+				"missing.go": {Language: "go", Size: 123, ModTime: modified.UnixNano(), Symbols: cached},
+			},
+		},
+		adapters: []Adapter{&GoAdapter{}},
+	}
+
+	if err := manager.extractSymbols([]*FileEntry{entry}); err != nil {
+		t.Fatal(err)
+	}
+	if entry.Symbols != cached {
+		t.Fatalf("symbols = %#v, want cached symbol pointer", entry.Symbols)
+	}
+}
+
+func TestSymbolCacheRoundTrip(t *testing.T) {
+	root := t.TempDir()
+	modified := time.Unix(1_700_000_000, 0)
+	candidates := []*FileEntry{{
+		Path:     "main.go",
+		Language: "go",
+		Size:     42,
+		ModTime:  modified,
+		Symbols:  &SymbolInfo{Package: "main", Functions: []FunctionInfo{{Name: "main"}}},
+	}}
+	if err := SaveSymbolCache(root, "example", candidates); err != nil {
+		t.Fatal(err)
+	}
+	cache := LoadSymbolCache(root, "example")
+	entry, ok := cache["main.go"]
+	if !ok || entry.Symbols == nil || entry.Symbols.Package != "main" {
+		t.Fatalf("loaded cache = %#v, want main.go symbols", cache)
+	}
+	if got, want := entry.ModTime, modified.UnixNano(); got != want {
+		t.Fatalf("cached mtime = %d, want %d", got, want)
+	}
 }
 
 func TestSelectCandidatesHonorsMaxFiles(t *testing.T) {

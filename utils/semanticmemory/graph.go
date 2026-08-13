@@ -213,11 +213,16 @@ func (s *Store) UpsertGraphEdge(ctx context.Context, edge GraphEdge) (GraphEdge,
 // namespace from the current edge set. Call once after a batch of edge writes.
 func (s *Store) RefreshGraphDegrees(ctx context.Context, namespace string) error {
 	namespace = normalizeNamespace(namespace)
-	_, err := s.db.ExecContext(ctx, `UPDATE graph_nodes SET degree = (
-        SELECT COUNT(*) FROM graph_edges
-        WHERE graph_edges.namespace = graph_nodes.namespace
-          AND (graph_edges.source_id = graph_nodes.id OR graph_edges.target_id = graph_nodes.id)
-    ) WHERE namespace = ?`, namespace)
+	_, err := s.db.ExecContext(ctx, `WITH endpoint_counts AS (
+        SELECT source_id AS id, COUNT(*) AS degree FROM graph_edges WHERE namespace = ? GROUP BY source_id
+        UNION ALL
+        SELECT target_id AS id, COUNT(*) AS degree FROM graph_edges WHERE namespace = ? GROUP BY target_id
+    ), degrees AS (
+        SELECT id, SUM(degree) AS degree FROM endpoint_counts GROUP BY id
+    )
+    UPDATE graph_nodes
+    SET degree = COALESCE((SELECT degree FROM degrees WHERE degrees.id = graph_nodes.id), 0)
+    WHERE namespace = ?`, namespace, namespace, namespace)
 	if err != nil {
 		return fmt.Errorf("refresh graph degrees: %w", err)
 	}
