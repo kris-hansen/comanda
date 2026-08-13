@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Comanda Graph</title>
+  <style>
+    :root { color-scheme: dark; font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:#0d1017; color:#e9edf5; }
+    * { box-sizing:border-box } body { margin:0; height:100vh; display:grid; grid-template-columns:300px 1fr 310px; overflow:hidden }
+    aside { background:#131824; border-right:1px solid #293143; padding:18px; overflow:auto } aside:last-child { border-left:1px solid #293143; border-right:0 }
+    h1 { font-size:18px; margin:0 0 6px } h2 { font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:#91a0bd; margin:22px 0 10px }
+    p,small { color:#aab5ca; line-height:1.45 } input { width:100%; padding:10px; border:1px solid #38435b; background:#0d1017; color:white; border-radius:7px }
+    button,.result { width:100%; text-align:left; padding:9px; margin-top:6px; color:#dce4f5; border:1px solid transparent; background:#1b2231; border-radius:6px; cursor:pointer }
+    button:hover,.result:hover { background:#28334a; border-color:#4c5f81 } label { display:block; margin:8px 0; font-size:13px; color:#c1cbe0 }
+    main { position:relative; overflow:hidden; background:radial-gradient(circle at 50% 40%,#1b263b 0,#0d1017 55%) }
+    #canvas { width:100%; height:100%; cursor:grab } .edge { stroke:#596883; stroke-opacity:.38 } .edge.inferred { stroke-dasharray:4 5; stroke:#e1a553 } .node { cursor:pointer; stroke:#e9edf5; stroke-width:1.2 } .node.selected { stroke:#fff; stroke-width:3 }
+    .label { fill:#cdd7ea; font-size:11px; pointer-events:none } #status { position:absolute; top:14px; left:16px; padding:7px 10px; background:#111827cc; border:1px solid #31405a; border-radius:6px; color:#b7c4dc; font-size:12px }
+    .muted { opacity:.7 } .tag { display:inline-block; padding:3px 6px; background:#25314a; border-radius:4px; margin:2px; font-size:11px } #details { white-space:pre-wrap; font-size:13px; line-height:1.5 } .path { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; word-break:break-all }
+  </style>
+</head>
+<body>
+  <aside>
+    <h1>Comanda Graph</h1><small id="namespace">Loading graph…</small>
+    <h2>Search</h2><input id="search" placeholder="Symbol, file, package, concept"><div id="results"></div>
+    <h2>Display</h2><label><input type="checkbox" id="inferred" checked> inferred relationships</label><label><input type="checkbox" id="labels" checked> node labels</label>
+    <h2>Node kinds</h2><div id="kinds"></div>
+    <p class="muted">Click a node or a search result to focus its connected neighborhood. Scroll to zoom; drag empty space to pan.</p>
+  </aside>
+  <main><div id="status">Loading…</div><svg id="canvas" aria-label="Knowledge graph"></svg></main>
+  <aside><h2>Inspector</h2><div id="details"><p>Select a node to see why it is connected, its source path, and its relationships.</p></div></aside>
+  <script>
+  const svg=document.querySelector('#canvas'), status=document.querySelector('#status'), details=document.querySelector('#details');
+  const palette={component:'#8d72e8',package:'#45b6e8',file:'#46c794',type:'#ff9a58',function:'#f0ce54',concept:'#e177c3'};
+  let full, shown, transform={x:0,y:0,scale:1}, drag, kinds=new Set(), includeInferred=true, showLabels=true;
+  const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  async function json(url){const r=await fetch(url);const v=await r.json();if(!r.ok)throw new Error(v.error||r.statusText);return v}
+  async function load(){try{full=await json('/api/v1/graph');shown=full;document.querySelector('#namespace').textContent=full.namespace+' · '+full.nodes.length+' nodes · '+full.edges.length+' edges';full.nodes.forEach(n=>kinds.add(n.kind)); filters();render()}catch(e){status.textContent='Unable to load graph: '+e.message}}
+  function filters(){const holder=document.querySelector('#kinds');holder.innerHTML='';[...kinds].sort().forEach(kind=>{const id='kind-'+kind;holder.insertAdjacentHTML('beforeend',`<label><input id="${id}" type="checkbox" checked> <span style="color:${palette[kind]||'#ccd'}">●</span> ${esc(kind)}</label>`);document.querySelector('#'+id).onchange=()=>render()})}
+  function activeKinds(){return new Set([...kinds].filter(k=>document.querySelector('#kind-'+k)?.checked))}
+  function render(){if(!shown)return;const allowed=activeKinds();const nodes=shown.nodes.filter(n=>allowed.has(n.kind));const ids=new Set(nodes.map(n=>n.id));const edges=shown.edges.filter(e=>ids.has(e.source)&&ids.has(e.target)&&(includeInferred||e.confidence!=='inferred'));
+    const w=svg.clientWidth||900,h=svg.clientHeight||700,cx=w/2,cy=h/2,r=Math.min(w,h)*.37;const degree=new Map(nodes.map(n=>[n.id,n.degree||0]));const ordered=[...nodes].sort((a,b)=>(degree.get(b.id)-degree.get(a.id))||a.name.localeCompare(b.name));
+    const pos=new Map(ordered.map((n,i)=>{const a=(Math.PI*2*i)/Math.max(ordered.length,1)-Math.PI/2;const rr=r*(.35+.65*((i%11)/10));return[n.id,{x:cx+Math.cos(a)*rr,y:cy+Math.sin(a)*rr}]}));
+    svg.innerHTML=`<g transform="translate(${transform.x} ${transform.y}) scale(${transform.scale})">${edges.map(e=>{const a=pos.get(e.source),b=pos.get(e.target);return a&&b?`<line class="edge ${e.confidence}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"><title>${esc(e.kind)} · ${esc(e.confidence)}</title></line>`:''}).join('')}${nodes.map(n=>{const p=pos.get(n.id),size=Math.max(5,Math.min(17,5+Math.sqrt(n.degree||0)*2));return `<g data-id="${esc(n.id)}"><circle class="node" fill="${palette[n.kind]||'#9ba8c5'}" cx="${p.x}" cy="${p.y}" r="${size}"><title>${esc(n.name)} (${esc(n.kind)})</title></circle>${showLabels?`<text class="label" x="${p.x+size+3}" y="${p.y+4}">${esc(n.name)}</text>`:''}</g>`}).join('')}</g>`;
+    svg.querySelectorAll('[data-id]').forEach(el=>el.onclick=e=>{e.stopPropagation();focus(el.dataset.id)});status.textContent=`${nodes.length} nodes · ${edges.length} relationships${shown!==full?' · focused view':''}`;
+  }
+  async function focus(id){try{const data=await json('/api/v1/subgraph?focus='+encodeURIComponent(id)+'&depth=2');shown=data.graph;render();const n=data.focus;details.innerHTML=`<h1>${esc(n.name)}</h1><span class="tag">${esc(n.kind)}</span><span class="tag">degree ${n.degree}</span>${n.package?`<p><b>Package</b><br>${esc(n.package)}</p>`:''}${n.path?`<p><b>Source</b><br><span class="path">${esc(n.path)}</span></p>`:''}${n.summary?`<p><b>Summary</b><br>${esc(n.summary)}</p>`:''}<button id="showall">Show full graph</button>`;document.querySelector('#showall').onclick=()=>{shown=full;render()}}catch(e){status.textContent=e.message}}
+  let timer;document.querySelector('#search').oninput=e=>{clearTimeout(timer);const q=e.target.value.trim();if(!q){document.querySelector('#results').innerHTML='';return}timer=setTimeout(async()=>{try{const data=await json('/api/v1/search?q='+encodeURIComponent(q));document.querySelector('#results').innerHTML=data.nodes.map(n=>`<button class="result" data-id="${esc(n.id)}"><b>${esc(n.name)}</b><br><small>${esc(n.kind)}${n.path?' · '+esc(n.path):''}</small></button>`).join('')||'<p>No graph nodes found.</p>';document.querySelectorAll('.result').forEach(b=>b.onclick=()=>focus(b.dataset.id))}catch(e){status.textContent=e.message}},180)};
+  document.querySelector('#inferred').onchange=e=>{includeInferred=e.target.checked;render()};document.querySelector('#labels').onchange=e=>{showLabels=e.target.checked;render()};
+  svg.addEventListener('wheel',e=>{e.preventDefault();const factor=e.deltaY<0?1.12:.89;transform.scale=Math.max(.25,Math.min(4,transform.scale*factor));render()},{passive:false});svg.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY,tx:transform.x,ty:transform.y};svg.setPointerCapture(e.pointerId)});svg.addEventListener('pointermove',e=>{if(drag){transform.x=drag.tx+e.clientX-drag.x;transform.y=drag.ty+e.clientY-drag.y;render()}});svg.addEventListener('pointerup',()=>drag=null);window.onresize=render;load();
+  </script>
+</body></html>

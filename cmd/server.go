@@ -25,6 +25,9 @@ configured port (default: 8080).
 Endpoints:
   POST /process                Execute a workflow (multipart form or JSON)
   GET  /health                 Health check endpoint
+  GET  /graph                  Read a knowledge graph (namespace query parameter)
+  GET  /graph/search           Search graph nodes
+  GET  /graph/subgraph         Fetch a focused graph neighborhood
 
 OpenAI-Compatible Endpoints (when enabled):
   GET  /v1/models              List available workflows as models

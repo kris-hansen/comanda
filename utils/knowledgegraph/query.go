@@ -20,6 +20,9 @@ func NewQuerier(store *semanticmemory.Store, namespace string) *Querier {
 	return &Querier{store: store, namespace: namespace}
 }
 
+// Namespace returns the graph namespace this querier is bound to.
+func (q *Querier) Namespace() string { return q.namespace }
+
 // resolve finds the single best node for a user-supplied name. Exact
 // case-sensitive matches win, then case-insensitive, then more specific kinds
 // (a type named "Store" beats a package named "store"), then FTS ranking.
@@ -320,6 +323,26 @@ func (q *Querier) Resolve(ctx context.Context, name string) (*semanticmemory.Gra
 // FindNodes returns the best matching nodes for a plain-text query.
 func (q *Querier) FindNodes(ctx context.Context, query string, limit int) ([]semanticmemory.GraphNode, error) {
 	return q.store.GraphFindNodes(ctx, q.namespace, query, limit)
+}
+
+// NodeByID returns a graph node by either its stable stored ID or its local
+// export ID. It rejects nodes from another namespace.
+func (q *Querier) NodeByID(ctx context.Context, id string) (*semanticmemory.GraphNode, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, fmt.Errorf("empty node ID")
+	}
+	if !strings.Contains(id, "|") {
+		id = NodeID(q.namespace, id)
+	}
+	node, err := q.store.GetGraphNode(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if node.Namespace != q.namespace {
+		return nil, fmt.Errorf("graph node not found")
+	}
+	return &node, nil
 }
 
 // PathHops returns the hop chain between two nodes for structured output.
