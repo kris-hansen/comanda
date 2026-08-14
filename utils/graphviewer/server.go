@@ -21,8 +21,8 @@ import (
 // namespace asks the caller to select its default graph.
 type OpenQuerier func(context.Context, string) (*knowledgegraph.Querier, func() error, error)
 
-// API provides the graph navigation contract. It does not write the graph or
-// expose arbitrary files.
+// API provides the graph navigation contract. Annotation writes are limited to
+// durable human guidance on existing graph nodes; it never exposes files.
 type API struct {
 	open OpenQuerier
 }
@@ -41,13 +41,17 @@ func NewAPI(open OpenQuerier) *API {
 
 func (a *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	if r.Method != http.MethodGet {
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if r.Method == http.MethodPost && r.URL.Path != "/api/v1/annotations" {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
@@ -61,6 +65,8 @@ func (a *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		a.handleSearch(w, r)
 	case "/api/v1/query":
 		a.handleQuery(w, r)
+	case "/api/v1/annotations":
+		a.handleAnnotations(w, r)
 	case "/api/v1/neighbors":
 		a.handleNeighbors(w, r)
 	case "/api/v1/subgraph":
@@ -68,6 +74,59 @@ func (a *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeError(w, http.StatusNotFound, "graph API endpoint not found")
 	}
+}
+
+func (a *API) handleAnnotations(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		nodeID := strings.TrimSpace(r.URL.Query().Get("node_id"))
+		if nodeID == "" {
+			writeError(w, http.StatusBadRequest, "node_id is required")
+			return
+		}
+		a.withQuerier(w, r, func(q *knowledgegraph.Querier) {
+			node, err := q.NodeByID(r.Context(), nodeID)
+			if err != nil {
+				writeError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			annotations, err := q.Annotations(r.Context(), *node)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"node_id": knowledgegraph.LocalID(node.ID), "annotations": annotations})
+		})
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var input struct {
+		NodeID  string `json:"node_id"`
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&input); err != nil {
+		writeError(w, http.StatusBadRequest, "annotation JSON must contain node_id and content")
+		return
+	}
+	if strings.TrimSpace(input.NodeID) == "" || strings.TrimSpace(input.Content) == "" {
+		writeError(w, http.StatusBadRequest, "node_id and content are required")
+		return
+	}
+	a.withQuerier(w, r, func(q *knowledgegraph.Querier) {
+		node, err := q.NodeByID(r.Context(), input.NodeID)
+		if err != nil {
+			writeError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		annotation, err := q.Annotate(r.Context(), *node, input.Content)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusCreated, annotation)
+	})
 }
 
 func (a *API) handleOverview(w http.ResponseWriter, r *http.Request) {

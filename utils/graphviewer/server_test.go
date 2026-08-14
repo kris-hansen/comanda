@@ -77,6 +77,22 @@ func TestAPIExportsSearchesAndFocusesGraph(t *testing.T) {
 	if got := len(neighborGraph["nodes"].([]any)); got != 2 {
 		t.Fatalf("neighbor page nodes = %d, want 2", got)
 	}
+
+	annotationRequest := httptest.NewRequest(http.MethodPost, "/api/v1/annotations", strings.NewReader(`{"node_id":"alpha","content":"Do not change this boundary without a migration."}`))
+	annotationRequest.Header.Set("Content-Type", "application/json")
+	annotationResponse := httptest.NewRecorder()
+	api.ServeHTTP(annotationResponse, annotationRequest)
+	if annotationResponse.Code != http.StatusCreated {
+		t.Fatalf("POST annotation status = %d, body = %s", annotationResponse.Code, annotationResponse.Body.String())
+	}
+	annotations := requestJSON(t, api, "/api/v1/annotations?node_id=alpha")
+	items := annotations["annotations"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("annotation count = %d, want 1", len(items))
+	}
+	if got := items[0].(map[string]any)["content"]; got != "Do not change this boundary without a migration." {
+		t.Fatalf("annotation content = %q", got)
+	}
 }
 
 func TestAPIValidatesSearchAndFocus(t *testing.T) {
@@ -90,6 +106,21 @@ func TestAPIValidatesSearchAndFocus(t *testing.T) {
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("%s status = %d, want %d", path, w.Code, http.StatusBadRequest)
 		}
+	}
+}
+
+func TestAPIOnlyAllowsAnnotationWrites(t *testing.T) {
+	api := NewAPI(func(context.Context, string) (*knowledgegraph.Querier, func() error, error) {
+		return nil, func() error { return nil }, nil
+	})
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/graph", nil)
+	w := httptest.NewRecorder()
+	api.ServeHTTP(w, r)
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST graph status = %d, want %d", w.Code, http.StatusMethodNotAllowed)
+	}
+	if got := w.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(got, http.MethodPost) {
+		t.Fatalf("CORS methods = %q, want POST", got)
 	}
 }
 
@@ -153,6 +184,9 @@ func TestViewerUIKeepsNodeClicksSeparateFromCanvasPanning(t *testing.T) {
 		`marker-end="url(#arrow)"`,
 		`rowGap=Math.max(170`,
 		`layerGap=Math.max(132`,
+		`Human guidance`,
+		`id="save-annotation"`,
+		`/api/v1/annotations`,
 	} {
 		if !strings.Contains(string(page), want) {
 			t.Errorf("visualizer UI is missing %q", want)

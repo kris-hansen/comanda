@@ -2,6 +2,7 @@ package knowledgegraph
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"sort"
 	"strings"
@@ -22,6 +23,16 @@ func NewQuerier(store *semanticmemory.Store, namespace string) *Querier {
 
 // Namespace returns the graph namespace this querier is bound to.
 func (q *Querier) Namespace() string { return q.namespace }
+
+// Annotations returns durable human guidance for a node.
+func (q *Querier) Annotations(ctx context.Context, node semanticmemory.GraphNode) ([]semanticmemory.GraphAnnotation, error) {
+	return q.store.GraphAnnotations(ctx, q.namespace, node.ID)
+}
+
+// Annotate adds durable human guidance to an existing node.
+func (q *Querier) Annotate(ctx context.Context, node semanticmemory.GraphNode, content string) (semanticmemory.GraphAnnotation, error) {
+	return q.store.UpsertGraphAnnotation(ctx, semanticmemory.GraphAnnotation{ID: annotationID(node.ID, content), Namespace: q.namespace, NodeID: node.ID, Content: content})
+}
 
 // resolve finds the single best node for a user-supplied name. Exact
 // case-sensitive matches win, then case-insensitive, then more specific kinds
@@ -78,6 +89,13 @@ func (q *Querier) Explain(ctx context.Context, name string) (string, error) {
 	if node.Summary != "" {
 		fmt.Fprintf(&b, "  Summary: %s\n", node.Summary)
 	}
+	annotations, err := q.Annotations(ctx, *node)
+	if err != nil {
+		return "", err
+	}
+	for _, annotation := range annotations {
+		fmt.Fprintf(&b, "  Human guidance: %s\n", annotation.Content)
+	}
 	fmt.Fprintf(&b, "  Degree:  %d\n", node.Degree)
 	if len(edges) == 0 {
 		b.WriteString("\nNo connections.\n")
@@ -100,6 +118,10 @@ func (q *Querier) Explain(ctx context.Context, name string) (string, error) {
 		fmt.Fprintf(&b, "  %s %s [%s] [%s]\n", arrow, NodeLabel(&other), edge.Kind, strings.ToUpper(edge.Confidence))
 	}
 	return b.String(), nil
+}
+
+func annotationID(nodeID, content string) string {
+	return "annotation:" + nodeID + ":" + fmt.Sprintf("%x", sha256.Sum256([]byte(strings.TrimSpace(content))))[:16]
 }
 
 // Path finds the shortest connection between two nodes (edges traversed in
