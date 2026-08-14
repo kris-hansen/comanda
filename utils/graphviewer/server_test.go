@@ -192,6 +192,9 @@ func TestViewerUIKeepsNodeClicksSeparateFromCanvasPanning(t *testing.T) {
 		`id="save-annotation"`,
 		`/api/v1/annotations`,
 		`Array.isArray(data.annotations)`,
+		`Terminal ${esc(node.kind)}`,
+		`function goBack()`,
+		`history.push({shown,mode,selected,transform`,
 	} {
 		if !strings.Contains(string(page), want) {
 			t.Errorf("visualizer UI is missing %q", want)
