@@ -279,7 +279,9 @@ func (s *Store) GraphAnnotations(ctx context.Context, namespace, nodeID string) 
 		return nil, fmt.Errorf("list graph annotations: %w", err)
 	}
 	defer rows.Close()
-	var annotations []GraphAnnotation
+	// An empty slice is intentional: API clients should receive [] rather than
+	// null so an unannotated node has a stable collection shape.
+	annotations := make([]GraphAnnotation, 0)
 	for rows.Next() {
 		var annotation GraphAnnotation
 		var createdAt, updatedAt string
