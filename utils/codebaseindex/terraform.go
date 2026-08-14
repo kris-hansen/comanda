@@ -35,7 +35,7 @@ func extractTerraformSymbols(path string, content []byte) (*SymbolInfo, error) {
 		}
 		collectTerraformReferences(references, block.Body.Attributes)
 	}
-	// locals are attributes in one or more locals blocks, not labelled blocks.
+	// locals are attributes in one or more locals blocks, not labeled blocks.
 	for _, block := range body.Blocks {
 		if block.Type != "locals" {
 			continue
