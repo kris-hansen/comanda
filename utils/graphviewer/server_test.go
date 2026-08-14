@@ -104,6 +104,11 @@ func TestViewerUIKeepsNodeClicksSeparateFromCanvasPanning(t *testing.T) {
 		`if(nodeID(e))return`,
 		`status.classList.add('loading')`,
 		`Opening ${node?.name||'node'}…`,
+		`prefers-color-scheme:dark`,
+		`id="back"`,
+		`Node label density`,
+		`factor=e.deltaY<0?1.04:.96`,
+		`padTop=140`,
 	} {
 		if !strings.Contains(string(page), want) {
 			t.Errorf("visualizer UI is missing %q", want)
