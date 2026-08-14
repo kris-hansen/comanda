@@ -108,7 +108,10 @@ func TestViewerUIKeepsNodeClicksSeparateFromCanvasPanning(t *testing.T) {
 		`id="back"`,
 		`Node label density`,
 		`factor=e.deltaY<0?1.04:.96`,
-		`padTop=140`,
+		`padTop=155`,
+		`Map — stable code topology`,
+		`input → selected system → output flow`,
+		`marker-end="url(#arrow)"`,
 	} {
 		if !strings.Contains(string(page), want) {
 			t.Errorf("visualizer UI is missing %q", want)
