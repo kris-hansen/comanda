@@ -227,6 +227,42 @@ focuses its connected neighborhood rather than transferring an unusable
 all-symbol hairball. The same read-only contract is available to native clients
 through the visualizer and the configured Comanda server:
 
+### Explore a codebase as a map
+
+The default **Map** layout makes architecture and dependency direction stable:
+components appear as districts, and drilling into a file or symbol presents its
+dependencies as a layered flow. Use the optional **Focus** layout when a radial
+one-to-three-hop neighborhood is the better question. Labels automatically
+appear when the current scope is readable, with `Always` and `Selected only`
+controls available for dense graphs. The visualizer follows the system light or
+dark mode and never sends code or graph data off the machine.
+
+<p align="center">
+  <img src="docs/images/graph-visualizer-architecture.png" alt="Comanda graph visualizer showing the architecture map for the Comanda repository" width="900">
+</p>
+
+<p align="center"><em>Architecture overview of Comanda's own codebase.</em></p>
+
+Search and open a result to bring only its useful local structure into view.
+The relationship pages are cached in the browser, so moving through a large
+repository stays responsive rather than reloading the entire graph.
+
+<p align="center">
+  <img src="docs/images/graph-visualizer-file-flow.png" alt="Comanda graph visualizer showing a dependency flow for a Comanda source file" width="900">
+</p>
+
+<p align="center"><em>A file-level dependency flow from the same Comanda graph.</em></p>
+
+```bash
+# Build once, then open a local interactive map for the current project
+comanda index capture ./my-project -n myproject --graph
+cd ./my-project
+comanda graph visualize
+
+# Headless/local-client mode prints the localhost URL instead of opening it
+comanda graph visualize --no-open --port 8088
+```
+
 ```text
 GET /graph/overview?namespace=myproject
 GET /graph?namespace=myproject
