@@ -77,6 +77,10 @@ func TestAPIExportsSearchesAndFocusesGraph(t *testing.T) {
 	if got := len(neighborGraph["nodes"].([]any)); got != 2 {
 		t.Fatalf("neighbor page nodes = %d, want 2", got)
 	}
+	emptyAnnotations := requestJSON(t, api, "/api/v1/annotations?node_id=alpha")
+	if items, ok := emptyAnnotations["annotations"].([]any); !ok || len(items) != 0 {
+		t.Fatalf("empty annotations = %#v, want an empty array", emptyAnnotations["annotations"])
+	}
 
 	annotationRequest := httptest.NewRequest(http.MethodPost, "/api/v1/annotations", strings.NewReader(`{"node_id":"alpha","content":"Do not change this boundary without a migration."}`))
 	annotationRequest.Header.Set("Content-Type", "application/json")
@@ -187,6 +191,10 @@ func TestViewerUIKeepsNodeClicksSeparateFromCanvasPanning(t *testing.T) {
 		`Human guidance`,
 		`id="save-annotation"`,
 		`/api/v1/annotations`,
+		`Array.isArray(data.annotations)`,
+		`Terminal ${esc(node.kind)}`,
+		`function goBack()`,
+		`history.push({shown,mode,selected,transform`,
 	} {
 		if !strings.Contains(string(page), want) {
 			t.Errorf("visualizer UI is missing %q", want)
