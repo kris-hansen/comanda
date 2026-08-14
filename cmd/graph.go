@@ -221,7 +221,7 @@ var graphExportCmd = &cobra.Command{
 var graphVisualizeCmd = &cobra.Command{
 	Use:   "visualize",
 	Short: "Open an interactive local graph navigator",
-	Long: `Serve a read-only graph navigation API and browser UI on localhost.
+	Long: `Serve a local graph navigation API and browser UI on localhost.
 
 The visualizer supports full-graph exploration, FTS-backed search, filters,
 and focused one-to-three-hop subgraphs. Its API is also available to local
@@ -229,7 +229,9 @@ clients such as Canvas:
   GET /api/v1/graph
   GET /api/v1/search?q=<text>
   GET /api/v1/query?question=<text>
-  GET /api/v1/subgraph?focus=<node-id-or-name>&depth=1..3`,
+  GET /api/v1/subgraph?focus=<node-id-or-name>&depth=1..3
+  GET /api/v1/annotations?node_id=<node-id>
+  POST /api/v1/annotations  # durable human guidance for an existing node`,
 	Args: cobra.NoArgs,
 	RunE: runGraphVisualize,
 }

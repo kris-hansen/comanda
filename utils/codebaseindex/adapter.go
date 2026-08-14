@@ -62,6 +62,7 @@ func NewRegistry() *Registry {
 	r.Register(&TypeScriptAdapter{})
 	r.Register(&FlutterAdapter{})
 	r.Register(&JavaAdapter{})
+	r.Register(&TerraformAdapter{})
 	return r
 }
 
@@ -431,4 +432,39 @@ func (a *JavaAdapter) ScoreFile(path string, depth int, isEntrypoint, isConfig b
 }
 func (a *JavaAdapter) ExtractSymbols(path string, content []byte) (*SymbolInfo, error) {
 	return extractJavaSymbols(path, content)
+}
+
+// TerraformAdapter handles native HCL Terraform configurations. State and
+// variable-value files are deliberately excluded: they are generated or can
+// contain secrets, while .tf files describe the deployable topology.
+type TerraformAdapter struct{}
+
+func (a *TerraformAdapter) Name() string { return "terraform" }
+func (a *TerraformAdapter) DetectionFiles() []string {
+	return []string{"main.tf", "terraform.tf", ".terraform.lock.hcl"}
+}
+func (a *TerraformAdapter) FileExtensions() []string { return []string{".tf"} }
+func (a *TerraformAdapter) IgnoreDirs() []string     { return []string{".terraform"} }
+func (a *TerraformAdapter) IgnoreGlobs() []string {
+	return []string{"*.tfstate", "*.tfstate.*", "*.tfvars", "*.tfvars.json", "crash.log"}
+}
+func (a *TerraformAdapter) EntrypointPatterns() []string { return []string{"main.tf"} }
+func (a *TerraformAdapter) ConfigPatterns() []string {
+	return []string{"*.tf", ".terraform.lock.hcl"}
+}
+func (a *TerraformAdapter) ScoreFile(path string, depth int, isEntrypoint, isConfig bool) int {
+	score := 0
+	if isEntrypoint {
+		score += 40
+	}
+	if isConfig {
+		score += 30
+	}
+	if depth <= 2 {
+		score += 60
+	}
+	return score
+}
+func (a *TerraformAdapter) ExtractSymbols(path string, content []byte) (*SymbolInfo, error) {
+	return extractTerraformSymbols(path, content)
 }

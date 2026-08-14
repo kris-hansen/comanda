@@ -44,7 +44,7 @@ func Build(scan *codebaseindex.ScanResult, namespace string) *Graph {
 		fileID := NodeID(namespace, "file:"+f.Path)
 		for _, t := range f.Symbols.Types {
 			local := fmt.Sprintf("type:%s@%s", t.Name, f.Path)
-			summary := strings.TrimSpace(t.Kind + " " + t.Comments)
+			summary := typeSummary(t)
 			g.AddNode(local, NodeType, t.Name, f.Path, f.Symbols.Package, summary)
 			g.AddEdge(fileID, NodeID(namespace, local), EdgeDefines, ConfidenceExtracted, "type declaration")
 		}
@@ -54,7 +54,7 @@ func Build(scan *codebaseindex.ScanResult, namespace string) *Graph {
 				name = fn.Receiver + "." + fn.Name
 			}
 			local := fmt.Sprintf("func:%s@%s", name, f.Path)
-			g.AddNode(local, NodeFunction, name, f.Path, f.Symbols.Package, strings.TrimSpace(fn.Comments))
+			g.AddNode(local, NodeFunction, name, f.Path, f.Symbols.Package, functionSummary(fn))
 			g.AddEdge(fileID, NodeID(namespace, local), EdgeDefines, ConfidenceExtracted, "function declaration")
 		}
 	}
@@ -115,9 +115,10 @@ func resolveImport(g *Graph, namespace, imp string) string {
 	return NodeID(namespace, "pkg:"+imp)
 }
 
-// inferUses links files to uniquely-named types they reference in function
-// signatures, receivers, and struct fields. These edges are tagged inferred:
-// the reference is a name match, not a resolved symbol.
+// inferUses links files to uniquely-named types they reference. Parser supplied
+// qualified references are preferred; signature and field text remains a useful
+// fallback for languages that do not expose resolved references. These edges are
+// tagged inferred because they are not a full type-checker resolution.
 func inferUses(g *Graph, scan *codebaseindex.ScanResult, namespace string) {
 	// Registry of type names defined exactly once (ambiguous names are skipped).
 	type def struct {
@@ -148,10 +149,17 @@ func inferUses(g *Graph, scan *codebaseindex.ScanResult, namespace string) {
 		// text, which is quadratic for large repositories. A token set gives the
 		// same whole-identifier semantics without lossy graph compression.
 		tokens := identifierTokens(referenceText(f.Symbols))
-		if len(tokens) == 0 {
+		if len(tokens) == 0 && len(f.Symbols.References) == 0 {
 			continue
 		}
 		fileID := NodeID(namespace, "file:"+f.Path)
+		for _, name := range f.Symbols.References {
+			d, ok := defs[name]
+			if !ok || counts[name] != 1 || d.defFile == f.Path {
+				continue
+			}
+			g.AddEdge(fileID, d.nodeID, EdgeUses, ConfidenceInferred, "references "+name)
+		}
 		for name := range tokens {
 			d, ok := defs[name]
 			if !ok || counts[name] != 1 || d.defFile == f.Path {
@@ -181,6 +189,22 @@ func referenceText(s *codebaseindex.SymbolInfo) string {
 			b.WriteString(method)
 			b.WriteString(" ")
 		}
+	}
+	for _, name := range s.Constants {
+		b.WriteString(name)
+		b.WriteString(" ")
+	}
+	for _, name := range s.Variables {
+		b.WriteString(name)
+		b.WriteString(" ")
+	}
+	for _, framework := range s.Frameworks {
+		b.WriteString(framework)
+		b.WriteString(" ")
+	}
+	for _, risk := range s.RiskTags {
+		b.WriteString(risk)
+		b.WriteString(" ")
 	}
 	return b.String()
 }
@@ -251,10 +275,51 @@ func fileSummary(f *codebaseindex.FileEntry) string {
 	if n := len(f.Symbols.Functions); n > 0 {
 		parts = append(parts, fmt.Sprintf("%d functions", n))
 	}
+	if n := len(f.Symbols.References); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d resolved references", n))
+	}
+	if len(f.Symbols.Frameworks) > 0 {
+		parts = append(parts, "frameworks "+summaryList(f.Symbols.Frameworks, 4))
+	}
+	if len(f.Symbols.RiskTags) > 0 {
+		parts = append(parts, "risk "+summaryList(f.Symbols.RiskTags, 4))
+	}
 	if len(parts) == 0 {
 		return f.Language + " file"
 	}
 	return strings.Join(parts, ", ")
+}
+
+func typeSummary(t codebaseindex.TypeInfo) string {
+	parts := []string{strings.TrimSpace(t.Kind), strings.TrimSpace(t.Comments)}
+	if len(t.Fields) > 0 {
+		parts = append(parts, "fields: "+summaryList(t.Fields, 8))
+	}
+	if len(t.Methods) > 0 {
+		parts = append(parts, "methods: "+summaryList(t.Methods, 8))
+	}
+	return strings.TrimSpace(strings.Join(nonEmpty(parts), " "))
+}
+
+func functionSummary(fn codebaseindex.FunctionInfo) string {
+	return strings.TrimSpace(strings.Join(nonEmpty([]string{fn.Signature, fn.Comments}), " "))
+}
+
+func summaryList(values []string, limit int) string {
+	if len(values) <= limit {
+		return strings.Join(values, ", ")
+	}
+	return strings.Join(values[:limit], ", ") + fmt.Sprintf(" (+%d more)", len(values)-limit)
+}
+
+func nonEmpty(values []string) []string {
+	result := values[:0]
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			result = append(result, value)
+		}
+	}
+	return result
 }
 
 // EnhanceFunc matches the index enhancement hook signature: it takes a prompt
