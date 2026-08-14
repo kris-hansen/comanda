@@ -30,6 +30,16 @@ func TestAPIExportsSearchesAndFocusesGraph(t *testing.T) {
 	if _, err := store.UpsertGraphEdge(ctx, semanticmemory.GraphEdge{ID: "demo|edge", Namespace: "demo", SourceID: alpha.ID, TargetID: beta.ID, Kind: semanticmemory.GraphEdgeUses, Confidence: semanticmemory.GraphConfidenceExtracted}); err != nil {
 		t.Fatal(err)
 	}
+	gamma, err := store.UpsertGraphNode(ctx, semanticmemory.GraphNode{ID: "demo|gamma", Namespace: "demo", Kind: semanticmemory.GraphNodeFunction, Name: "Gamma", Path: "gamma.go", Summary: "secondary entry point"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.UpsertGraphEdge(ctx, semanticmemory.GraphEdge{ID: "demo|edge-two", Namespace: "demo", SourceID: alpha.ID, TargetID: gamma.ID, Kind: semanticmemory.GraphEdgeUses, Confidence: semanticmemory.GraphConfidenceExtracted}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.UpsertGraphNode(ctx, semanticmemory.GraphNode{ID: "demo|component", Namespace: "demo", Kind: semanticmemory.GraphNodeComponent, Name: "app", Path: ".", Summary: "application component"}); err != nil {
+		t.Fatal(err)
+	}
 	if err := store.RefreshGraphDegrees(ctx, "demo"); err != nil {
 		t.Fatal(err)
 	}
@@ -42,8 +52,12 @@ func TestAPIExportsSearchesAndFocusesGraph(t *testing.T) {
 	})
 
 	graph := requestJSON(t, api, "/api/v1/graph")
-	if got := len(graph["nodes"].([]any)); got != 2 {
-		t.Fatalf("graph nodes = %d, want 2", got)
+	if got := len(graph["nodes"].([]any)); got != 4 {
+		t.Fatalf("graph nodes = %d, want 4", got)
+	}
+	overview := requestJSON(t, api, "/api/v1/overview")
+	if got := len(overview["nodes"].([]any)); got != 1 {
+		t.Fatalf("overview node count = %d, want 1", got)
 	}
 	search := requestJSON(t, api, "/api/v1/search?q=Alpha")
 	if got := len(search["nodes"].([]any)); got != 1 {
@@ -51,8 +65,16 @@ func TestAPIExportsSearchesAndFocusesGraph(t *testing.T) {
 	}
 	focused := requestJSON(t, api, "/api/v1/subgraph?focus=alpha&depth=2")
 	subgraph := focused["graph"].(map[string]any)
-	if got := len(subgraph["nodes"].([]any)); got != 2 {
-		t.Fatalf("focused graph nodes = %d, want 2", got)
+	if got := len(subgraph["nodes"].([]any)); got != 3 {
+		t.Fatalf("focused graph nodes = %d, want 3", got)
+	}
+	neighbors := requestJSON(t, api, "/api/v1/neighbors?focus=alpha&limit=1")
+	if hasMore, ok := neighbors["has_more"].(bool); !ok || !hasMore {
+		t.Fatalf("neighbors has_more = %#v, want true", neighbors["has_more"])
+	}
+	neighborGraph := neighbors["graph"].(map[string]any)
+	if got := len(neighborGraph["nodes"].([]any)); got != 2 {
+		t.Fatalf("neighbor page nodes = %d, want 2", got)
 	}
 }
 
@@ -60,7 +82,7 @@ func TestAPIValidatesSearchAndFocus(t *testing.T) {
 	api := NewAPI(func(context.Context, string) (*knowledgegraph.Querier, func() error, error) {
 		return nil, func() error { return nil }, nil
 	})
-	for _, path := range []string{"/api/v1/search", "/api/v1/subgraph"} {
+	for _, path := range []string{"/api/v1/search", "/api/v1/subgraph", "/api/v1/neighbors"} {
 		r := httptest.NewRequest(http.MethodGet, path, nil)
 		w := httptest.NewRecorder()
 		api.ServeHTTP(w, r)

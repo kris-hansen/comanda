@@ -29,8 +29,10 @@ type API struct {
 
 // NewAPI creates a graph navigation API with these endpoints:
 //
+//	GET /api/v1/overview?namespace=<name>
 //	GET /api/v1/graph?namespace=<name>
 //	GET /api/v1/search?q=<text>&limit=<n>&namespace=<name>
+//	GET /api/v1/neighbors?focus=<node-id-or-name>&limit=<n>&offset=<n>&namespace=<name>
 //	GET /api/v1/subgraph?focus=<node-id-or-name>&depth=1..3&namespace=<name>
 func NewAPI(open OpenQuerier) *API {
 	return &API{open: open}
@@ -50,15 +52,30 @@ func (a *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch r.URL.Path {
+	case "/api/v1/overview":
+		a.handleOverview(w, r)
 	case "/api/v1/graph":
 		a.handleGraph(w, r)
 	case "/api/v1/search":
 		a.handleSearch(w, r)
+	case "/api/v1/neighbors":
+		a.handleNeighbors(w, r)
 	case "/api/v1/subgraph":
 		a.handleSubgraph(w, r)
 	default:
 		writeError(w, http.StatusNotFound, "graph API endpoint not found")
 	}
+}
+
+func (a *API) handleOverview(w http.ResponseWriter, r *http.Request) {
+	a.withQuerier(w, r, func(q *knowledgegraph.Querier) {
+		overview, err := q.Overview(r.Context())
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, overview)
+	})
 }
 
 func (a *API) withQuerier(w http.ResponseWriter, r *http.Request, run func(*knowledgegraph.Querier)) {
@@ -103,6 +120,29 @@ func (a *API) handleSearch(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (a *API) handleNeighbors(w http.ResponseWriter, r *http.Request) {
+	focus := strings.TrimSpace(r.URL.Query().Get("focus"))
+	if focus == "" {
+		writeError(w, http.StatusBadRequest, "focus is required")
+		return
+	}
+	limit := parseBoundedInt(r.URL.Query().Get("limit"), 160, 1, 500)
+	offset := parseBoundedInt(r.URL.Query().Get("offset"), 0, 0, 1_000_000)
+	a.withQuerier(w, r, func(q *knowledgegraph.Querier) {
+		node, err := resolveFocus(r.Context(), q, focus)
+		if err != nil {
+			writeError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		page, err := q.NeighborPage(r.Context(), *node, limit, offset)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, page)
+	})
+}
+
 func (a *API) handleSubgraph(w http.ResponseWriter, r *http.Request) {
 	focus := strings.TrimSpace(r.URL.Query().Get("focus"))
 	if focus == "" {
@@ -111,10 +151,7 @@ func (a *API) handleSubgraph(w http.ResponseWriter, r *http.Request) {
 	}
 	depth := parseBoundedInt(r.URL.Query().Get("depth"), 1, 1, 3)
 	a.withQuerier(w, r, func(q *knowledgegraph.Querier) {
-		node, err := q.NodeByID(r.Context(), focus)
-		if err != nil {
-			node, err = q.Resolve(r.Context(), focus)
-		}
+		node, err := resolveFocus(r.Context(), q, focus)
 		if err != nil {
 			writeError(w, http.StatusNotFound, err.Error())
 			return
@@ -126,6 +163,14 @@ func (a *API) handleSubgraph(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"focus": exportNode(*node), "depth": depth, "graph": graph})
 	})
+}
+
+func resolveFocus(ctx context.Context, q *knowledgegraph.Querier, focus string) (*semanticmemory.GraphNode, error) {
+	node, err := q.NodeByID(ctx, focus)
+	if err != nil {
+		node, err = q.Resolve(ctx, focus)
+	}
+	return node, err
 }
 
 func exportNode(node semanticmemory.GraphNode) knowledgegraph.ExportNode {

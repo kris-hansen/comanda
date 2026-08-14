@@ -145,6 +145,25 @@ type ExportGraph struct {
 	Edges     []ExportEdge `json:"edges"`
 }
 
+// Overview is the small architectural map shown before a visualizer loads any
+// symbol-level detail. NodeKindCounts describes the complete graph without
+// transferring every node.
+type Overview struct {
+	Namespace      string         `json:"namespace"`
+	Nodes          []ExportNode   `json:"nodes"`
+	NodeKindCounts map[string]int `json:"node_kind_counts"`
+}
+
+// NeighborPage is a bounded direct-neighborhood view. Clients cache returned
+// pages and fetch the next offset only when the user asks to explore further.
+type NeighborPage struct {
+	Focus      ExportNode  `json:"focus"`
+	Offset     int         `json:"offset"`
+	NextOffset int         `json:"next_offset,omitempty"`
+	HasMore    bool        `json:"has_more"`
+	Graph      ExportGraph `json:"graph"`
+}
+
 // String renders a node for display.
 func NodeLabel(n *semanticmemory.GraphNode) string {
 	if n.Path != "" {

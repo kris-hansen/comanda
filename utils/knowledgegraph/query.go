@@ -325,6 +325,64 @@ func (q *Querier) FindNodes(ctx context.Context, query string, limit int) ([]sem
 	return q.store.GraphFindNodes(ctx, q.namespace, query, limit)
 }
 
+// Overview returns component nodes (or packages for an index without component
+// classification), plus complete kind counts. It is the cheap first request
+// for visualizing a large graph.
+func (q *Querier) Overview(ctx context.Context) (*Overview, error) {
+	counts, err := q.store.GraphNodeKindCounts(ctx, q.namespace)
+	if err != nil {
+		return nil, err
+	}
+	nodes, err := q.store.GraphNodesByKind(ctx, q.namespace, NodeComponent, 100)
+	if err != nil {
+		return nil, err
+	}
+	if len(nodes) == 0 {
+		nodes, err = q.store.GraphNodesByKind(ctx, q.namespace, NodePackage, 100)
+		if err != nil {
+			return nil, err
+		}
+	}
+	out := &Overview{Namespace: q.namespace, Nodes: make([]ExportNode, 0, len(nodes)), NodeKindCounts: counts}
+	for _, node := range nodes {
+		out.Nodes = append(out.Nodes, exportGraphNode(node))
+	}
+	return out, nil
+}
+
+// NeighborPage returns one bounded page of direct neighbors without scanning
+// or serializing the complete graph.
+func (q *Querier) NeighborPage(ctx context.Context, focus semanticmemory.GraphNode, limit, offset int) (*NeighborPage, error) {
+	edges, nodes, hasMore, err := q.store.GraphNeighborPage(ctx, q.namespace, focus.ID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 {
+		limit = 160
+	}
+	out := &NeighborPage{
+		Focus:   exportGraphNode(focus),
+		Offset:  offset,
+		HasMore: hasMore,
+		Graph: ExportGraph{
+			Namespace: q.namespace,
+			Nodes:     make([]ExportNode, 0, len(nodes)+1),
+			Edges:     make([]ExportEdge, 0, len(edges)),
+		},
+	}
+	out.Graph.Nodes = append(out.Graph.Nodes, out.Focus)
+	for _, node := range nodes {
+		out.Graph.Nodes = append(out.Graph.Nodes, exportGraphNode(node))
+	}
+	for _, edge := range edges {
+		out.Graph.Edges = append(out.Graph.Edges, ExportEdge{Source: LocalID(edge.SourceID), Target: LocalID(edge.TargetID), Kind: edge.Kind, Confidence: edge.Confidence, Evidence: edge.Evidence})
+	}
+	if hasMore {
+		out.NextOffset = offset + len(edges)
+	}
+	return out, nil
+}
+
 // NodeByID returns a graph node by either its stable stored ID or its local
 // export ID. It rejects nodes from another namespace.
 func (q *Querier) NodeByID(ctx context.Context, id string) (*semanticmemory.GraphNode, error) {
@@ -427,4 +485,11 @@ func nodeShortName(n semanticmemory.GraphNode) string {
 		return n.Name
 	}
 	return LocalID(n.ID)
+}
+
+func exportGraphNode(node semanticmemory.GraphNode) ExportNode {
+	return ExportNode{
+		ID: LocalID(node.ID), Kind: node.Kind, Name: node.Name, Path: node.Path,
+		Package: node.Package, Summary: node.Summary, Degree: node.Degree,
+	}
 }
