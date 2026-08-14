@@ -248,6 +248,46 @@ func (s *Store) GraphNodes(ctx context.Context, namespace string) ([]GraphNode, 
 	return collectGraphNodes(rows)
 }
 
+// GraphNodesByKind returns a bounded, highest-degree-first architectural slice
+// of a graph. It deliberately avoids loading every symbol for browser views.
+func (s *Store) GraphNodesByKind(ctx context.Context, namespace, kind string, limit int) ([]GraphNode, error) {
+	namespace = normalizeNamespace(namespace)
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id, namespace, kind, name, path, package, summary, degree, created_at, updated_at
+        FROM graph_nodes WHERE namespace = ? AND kind = ? ORDER BY degree DESC, name LIMIT ?`, namespace, kind, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list graph nodes by kind: %w", err)
+	}
+	defer rows.Close()
+	return collectGraphNodes(rows)
+}
+
+// GraphNodeKindCounts returns the number of nodes in each kind without
+// materializing the graph.
+func (s *Store) GraphNodeKindCounts(ctx context.Context, namespace string) (map[string]int, error) {
+	namespace = normalizeNamespace(namespace)
+	rows, err := s.db.QueryContext(ctx, `SELECT kind, COUNT(*) FROM graph_nodes WHERE namespace = ? GROUP BY kind`, namespace)
+	if err != nil {
+		return nil, fmt.Errorf("count graph node kinds: %w", err)
+	}
+	defer rows.Close()
+	counts := make(map[string]int)
+	for rows.Next() {
+		var kind string
+		var count int
+		if err := rows.Scan(&kind, &count); err != nil {
+			return nil, fmt.Errorf("scan graph node kind count: %w", err)
+		}
+		counts[kind] = count
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate graph node kind counts: %w", err)
+	}
+	return counts, nil
+}
+
 // GraphEdges returns all edges in a namespace.
 func (s *Store) GraphEdges(ctx context.Context, namespace string) ([]GraphEdge, error) {
 	namespace = normalizeNamespace(namespace)
@@ -305,6 +345,68 @@ func (s *Store) GraphNeighbors(ctx context.Context, namespace, nodeID string) ([
 		return nil, nil, err
 	}
 	return edges, nodes, nil
+}
+
+// GraphNeighborPage returns one stable, bounded page of a node's direct
+// relationships. Browsers use it for progressive exploration of large graphs.
+// Offset pagination keeps the API simple while the client caches loaded pages.
+func (s *Store) GraphNeighborPage(ctx context.Context, namespace, nodeID string, limit, offset int) ([]GraphEdge, []GraphNode, bool, error) {
+	namespace = normalizeNamespace(namespace)
+	if limit <= 0 {
+		limit = 160
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id, namespace, source_id, target_id, kind, confidence, evidence, created_at, updated_at
+        FROM graph_edges WHERE namespace = ? AND (source_id = ? OR target_id = ?)
+        ORDER BY id LIMIT ? OFFSET ?`, namespace, nodeID, nodeID, limit+1, offset)
+	if err != nil {
+		return nil, nil, false, fmt.Errorf("list graph neighbor page: %w", err)
+	}
+	edges, err := collectGraphEdges(rows)
+	rows.Close()
+	if err != nil {
+		return nil, nil, false, err
+	}
+	hasMore := len(edges) > limit
+	if hasMore {
+		edges = edges[:limit]
+	}
+	if len(edges) == 0 {
+		return edges, nil, hasMore, nil
+	}
+
+	seen := make(map[string]bool, len(edges))
+	ids := make([]string, 0, len(edges))
+	for _, edge := range edges {
+		other := edge.TargetID
+		if other == nodeID {
+			other = edge.SourceID
+		}
+		if !seen[other] {
+			seen[other] = true
+			ids = append(ids, other)
+		}
+	}
+	idsJSON, err := json.Marshal(ids)
+	if err != nil {
+		return nil, nil, false, fmt.Errorf("encode paged graph neighbor IDs: %w", err)
+	}
+	nodeRows, err := s.db.QueryContext(ctx, `SELECT id, namespace, kind, name, path, package, summary, degree, created_at, updated_at
+        FROM graph_nodes WHERE id IN (SELECT value FROM json_each(?))`, string(idsJSON))
+	if err != nil {
+		return nil, nil, false, fmt.Errorf("load paged graph neighbor nodes: %w", err)
+	}
+	defer nodeRows.Close()
+	nodes, err := collectGraphNodes(nodeRows)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	return edges, nodes, hasMore, nil
 }
 
 // GraphFindNodes looks nodes up by name/summary with FTS5, degrading to a
