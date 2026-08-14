@@ -83,13 +83,48 @@ func TestAPIValidatesSearchAndFocus(t *testing.T) {
 	api := NewAPI(func(context.Context, string) (*knowledgegraph.Querier, func() error, error) {
 		return nil, func() error { return nil }, nil
 	})
-	for _, path := range []string{"/api/v1/search", "/api/v1/subgraph", "/api/v1/neighbors"} {
+	for _, path := range []string{"/api/v1/search", "/api/v1/query", "/api/v1/subgraph", "/api/v1/neighbors"} {
 		r := httptest.NewRequest(http.MethodGet, path, nil)
 		w := httptest.NewRecorder()
 		api.ServeHTTP(w, r)
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("%s status = %d, want %d", path, w.Code, http.StatusBadRequest)
 		}
+	}
+}
+
+func TestAPIQueriesGraphWithSupportingSubgraph(t *testing.T) {
+	store, err := semanticmemory.Open(filepath.Join(t.TempDir(), "graph.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	ctx := context.Background()
+	alpha, err := store.UpsertGraphNode(ctx, semanticmemory.GraphNode{ID: "demo|alpha", Namespace: "demo", Kind: semanticmemory.GraphNodeFunction, Name: "Alpha", Summary: "entry point"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	beta, err := store.UpsertGraphNode(ctx, semanticmemory.GraphNode{ID: "demo|beta", Namespace: "demo", Kind: semanticmemory.GraphNodeType, Name: "Beta", Summary: "shared type"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.UpsertGraphEdge(ctx, semanticmemory.GraphEdge{ID: "demo|edge", Namespace: "demo", SourceID: alpha.ID, TargetID: beta.ID, Kind: semanticmemory.GraphEdgeUses, Confidence: semanticmemory.GraphConfidenceExtracted}); err != nil {
+		t.Fatal(err)
+	}
+
+	api := NewAPI(func(_ context.Context, namespace string) (*knowledgegraph.Querier, func() error, error) {
+		if namespace != "" && namespace != "demo" {
+			return nil, nil, &notFoundError{namespace}
+		}
+		return knowledgegraph.NewQuerier(store, "demo"), func() error { return nil }, nil
+	})
+	response := requestJSON(t, api, "/api/v1/query?question=Alpha")
+	if !strings.Contains(response["answer"].(string), `Subgraph for "Alpha"`) {
+		t.Fatalf("query answer = %q", response["answer"])
+	}
+	graph := response["graph"].(map[string]any)
+	if got := len(graph["nodes"].([]any)); got != 2 {
+		t.Fatalf("query graph nodes = %d, want 2", got)
 	}
 }
 
@@ -106,14 +141,18 @@ func TestViewerUIKeepsNodeClicksSeparateFromCanvasPanning(t *testing.T) {
 		`Opening ${node?.name||'node'}…`,
 		`prefers-color-scheme:dark`,
 		`id="back"`,
-		`Node label density`,
+		`Labels stay visible`,
+		`Search or query`,
+		`id="ask"`,
+		`/api/v1/query?question=`,
+		`labelPitch`,
 		`factor=e.deltaY<0?1.04:.96`,
 		`padTop=155`,
 		`Map — stable code topology`,
 		`input → selected system → output flow`,
 		`marker-end="url(#arrow)"`,
-		`rowGap=170`,
-		`layerGap=132`,
+		`rowGap=Math.max(170`,
+		`layerGap=Math.max(132`,
 	} {
 		if !strings.Contains(string(page), want) {
 			t.Errorf("visualizer UI is missing %q", want)

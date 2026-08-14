@@ -228,6 +228,7 @@ and focused one-to-three-hop subgraphs. Its API is also available to local
 clients such as Canvas:
   GET /api/v1/graph
   GET /api/v1/search?q=<text>
+  GET /api/v1/query?question=<text>
   GET /api/v1/subgraph?focus=<node-id-or-name>&depth=1..3`,
 	Args: cobra.NoArgs,
 	RunE: runGraphVisualize,
