@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/kris-hansen/comanda/utils/knowledgegraph"
@@ -88,6 +89,24 @@ func TestAPIValidatesSearchAndFocus(t *testing.T) {
 		api.ServeHTTP(w, r)
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("%s status = %d, want %d", path, w.Code, http.StatusBadRequest)
+		}
+	}
+}
+
+func TestViewerUIKeepsNodeClicksSeparateFromCanvasPanning(t *testing.T) {
+	page, err := webFiles.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`data-node-id=`,
+		`role="button"`,
+		`if(nodeID(e))return`,
+		`status.classList.add('loading')`,
+		`Opening ${node?.name||'node'}…`,
+	} {
+		if !strings.Contains(string(page), want) {
+			t.Errorf("visualizer UI is missing %q", want)
 		}
 	}
 }
