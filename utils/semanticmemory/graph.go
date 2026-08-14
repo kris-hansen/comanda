@@ -41,9 +41,14 @@ const (
 // graph nodes into the FTS search path.
 const graphMirrorRecordPrefix = "gnode_"
 
+const graphAnnotationRecordPrefix = "gannotation_"
+
 // graphMirrorSourceRef marks mirrored records so they can be cleaned up with
 // the graph namespace that produced them.
 func graphMirrorSourceRef(namespace string) string { return "graph/" + namespace }
+func graphAnnotationSourceRef(namespace, nodeID string) string {
+	return "graph-annotation/" + namespace + "/" + nodeID
+}
 
 // GraphNode is one vertex in a knowledge graph stored alongside durable memory.
 type GraphNode struct {
@@ -70,6 +75,18 @@ type GraphEdge struct {
 	Evidence   string
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+}
+
+// GraphAnnotation is durable, human-authored guidance attached to a graph
+// node. It intentionally survives graph rebuilds so a fresh scan never
+// discards a maintainer's direction to agents.
+type GraphAnnotation struct {
+	ID        string    `json:"id"`
+	Namespace string    `json:"namespace"`
+	NodeID    string    `json:"node_id"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 var graphMigrateStatements = []string{
@@ -106,6 +123,15 @@ var graphMigrateStatements = []string{
     )`,
 	`CREATE INDEX IF NOT EXISTS idx_graph_edges_namespace_source ON graph_edges(namespace, source_id)`,
 	`CREATE INDEX IF NOT EXISTS idx_graph_edges_namespace_target ON graph_edges(namespace, target_id)`,
+	`CREATE TABLE IF NOT EXISTS graph_annotations (
+        id TEXT PRIMARY KEY,
+        namespace TEXT NOT NULL,
+        node_id TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )`,
+	`CREATE INDEX IF NOT EXISTS idx_graph_annotations_namespace_node ON graph_annotations(namespace, node_id, updated_at DESC)`,
 }
 
 // UpsertGraphNode writes a graph node, refreshes its FTS entry, and mirrors it
@@ -207,6 +233,64 @@ func (s *Store) UpsertGraphEdge(ctx context.Context, edge GraphEdge) (GraphEdge,
 		return GraphEdge{}, fmt.Errorf("write graph edge: %w", err)
 	}
 	return edge, nil
+}
+
+// UpsertGraphAnnotation stores a human note and mirrors it as a graph_node
+// memory record. Existing graph-aware semantic recall therefore includes the
+// guidance without requiring each workflow to learn a separate annotation type.
+func (s *Store) UpsertGraphAnnotation(ctx context.Context, annotation GraphAnnotation) (GraphAnnotation, error) {
+	annotation.Namespace = normalizeNamespace(annotation.Namespace)
+	annotation.NodeID = strings.TrimSpace(annotation.NodeID)
+	annotation.Content = strings.TrimSpace(annotation.Content)
+	if annotation.ID == "" || annotation.NodeID == "" || annotation.Content == "" {
+		return GraphAnnotation{}, fmt.Errorf("graph annotation ID, node ID, and content are required")
+	}
+	now := time.Now().UTC()
+	if annotation.CreatedAt.IsZero() {
+		annotation.CreatedAt = now
+	}
+	annotation.UpdatedAt = now
+	_, err := s.db.ExecContext(ctx, `INSERT INTO graph_annotations (id, namespace, node_id, content, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET content=excluded.content, updated_at=excluded.updated_at`,
+		annotation.ID, annotation.Namespace, annotation.NodeID, annotation.Content,
+		annotation.CreatedAt.Format(time.RFC3339Nano), annotation.UpdatedAt.Format(time.RFC3339Nano))
+	if err != nil {
+		return GraphAnnotation{}, fmt.Errorf("write graph annotation: %w", err)
+	}
+	if _, err := s.Upsert(ctx, Record{
+		ID:        graphAnnotationRecordPrefix + annotation.ID,
+		Namespace: annotation.Namespace,
+		Type:      "graph_node",
+		Priority:  90,
+		Content:   "Human guidance for " + annotation.NodeID + ": " + annotation.Content,
+		SourceRef: graphAnnotationSourceRef(annotation.Namespace, annotation.NodeID),
+	}); err != nil {
+		return GraphAnnotation{}, fmt.Errorf("mirror graph annotation into memory: %w", err)
+	}
+	return annotation, nil
+}
+
+// GraphAnnotations lists durable human guidance for one graph node.
+func (s *Store) GraphAnnotations(ctx context.Context, namespace, nodeID string) ([]GraphAnnotation, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, namespace, node_id, content, created_at, updated_at
+        FROM graph_annotations WHERE namespace = ? AND node_id = ? ORDER BY updated_at DESC`, normalizeNamespace(namespace), nodeID)
+	if err != nil {
+		return nil, fmt.Errorf("list graph annotations: %w", err)
+	}
+	defer rows.Close()
+	var annotations []GraphAnnotation
+	for rows.Next() {
+		var annotation GraphAnnotation
+		var createdAt, updatedAt string
+		if err := rows.Scan(&annotation.ID, &annotation.Namespace, &annotation.NodeID, &annotation.Content, &createdAt, &updatedAt); err != nil {
+			return nil, err
+		}
+		annotation.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAt)
+		annotation.UpdatedAt, _ = time.Parse(time.RFC3339Nano, updatedAt)
+		annotations = append(annotations, annotation)
+	}
+	return annotations, rows.Err()
 }
 
 // RefreshGraphDegrees recomputes the degree column for every node in a
@@ -456,11 +540,14 @@ func (s *Store) DeleteGraphNamespace(ctx context.Context, namespace string) erro
 		args  []any
 	}{
 		{`DELETE FROM graph_edges WHERE namespace = ?`, []any{namespace}},
+		{`DELETE FROM graph_annotations WHERE namespace = ?`, []any{namespace}},
 		{`DELETE FROM graph_nodes_fts WHERE namespace = ?`, []any{namespace}},
 		{`DELETE FROM graph_nodes WHERE namespace = ?`, []any{namespace}},
 		{`DELETE FROM memory_fts WHERE id IN (SELECT id FROM memories WHERE namespace = ? AND source_ref = ?)`,
 			[]any{namespace, graphMirrorSourceRef(namespace)}},
 		{`DELETE FROM memories WHERE namespace = ? AND source_ref = ?`, []any{namespace, graphMirrorSourceRef(namespace)}},
+		{`DELETE FROM memory_fts WHERE id IN (SELECT id FROM memories WHERE namespace = ? AND source_ref LIKE ?)`, []any{namespace, "graph-annotation/" + namespace + "/%"}},
+		{`DELETE FROM memories WHERE namespace = ? AND source_ref LIKE ?`, []any{namespace, "graph-annotation/" + namespace + "/%"}},
 	}
 	for _, stmt := range statements {
 		if _, err := tx.ExecContext(ctx, stmt.query, stmt.args...); err != nil {

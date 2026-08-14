@@ -277,6 +277,11 @@ type SymbolInfo struct {
 	Constants []string
 	Variables []string
 
+	// References are resolved, language-level references to other symbols.
+	// Unlike text in a signature, these preserve qualified names such as
+	// aws_s3_bucket.logs and can therefore form precise graph edges.
+	References []string
+
 	// Framework/library indicators
 	Frameworks []string
 

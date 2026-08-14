@@ -224,8 +224,10 @@ complex code structures. It begins with a small architecture overview, then
 loads and caches only the selected node's direct neighborhood in 160-edge
 pages. Search finds symbols, files, packages, and concepts; selecting a result
 focuses its connected neighborhood rather than transferring an unusable
-all-symbol hairball. The same read-only contract is available to native clients
-through the visualizer and the configured Comanda server:
+all-symbol hairball. Inspector mode also accepts durable human guidance for a
+selected file, component, or symbol; it survives graph rebuilds and is included
+in graph-aware agent recall. The navigation contract is available to native
+clients through the visualizer and the configured Comanda server:
 
 ```text
 GET /graph/overview?namespace=myproject
@@ -233,6 +235,14 @@ GET /graph?namespace=myproject
 GET /graph/search?namespace=myproject&q=Store
 GET /graph/neighbors?namespace=myproject&focus=store&limit=160&offset=0
 GET /graph/subgraph?namespace=myproject&focus=store&depth=2
+```
+
+The localhost visualizer additionally exposes its annotation endpoint for
+Canvas-style clients:
+
+```text
+GET /api/v1/annotations?node_id=<node-id>
+POST /api/v1/annotations  {"node_id":"<node-id>","content":"human guidance"}
 ```
 
 The browser visualizer serves equivalent endpoints below `/api/v1/` and binds

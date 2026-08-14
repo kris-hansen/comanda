@@ -579,6 +579,88 @@ enum Status { OK, ERROR }
 	}
 }
 
+func TestTerraformAdapterDetection(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte(`terraform { required_version = ">= 1.5" }`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	registry := NewRegistry()
+	for _, adapter := range registry.Detect(tmpDir) {
+		if adapter.Name() == "terraform" {
+			return
+		}
+	}
+	t.Fatal("Terraform adapter was not detected")
+}
+
+func TestExtractTerraformSymbols(t *testing.T) {
+	content := []byte(`
+variable "region" { type = string }
+
+locals { bucket_name = "logs-${var.region}" }
+
+resource "aws_s3_bucket" "logs" {
+  bucket = local.bucket_name
+}
+
+data "aws_iam_policy_document" "logs" {
+  statement {}
+}
+
+resource "aws_s3_bucket_policy" "logs" {
+  bucket = aws_s3_bucket.logs.id
+  policy = data.aws_iam_policy_document.logs.json
+}
+
+module "network" {
+  source = "./network"
+  region = var.region
+}
+
+output "bucket" { value = aws_s3_bucket.logs.id }
+`)
+	info, err := extractTerraformSymbols("main.tf", content)
+	if err != nil {
+		t.Fatalf("extractTerraformSymbols failed: %v", err)
+	}
+	if info.Package != "terraform" {
+		t.Fatalf("package = %q, want terraform", info.Package)
+	}
+	wantTypes := map[string]string{
+		"aws_s3_bucket.logs":                "resource",
+		"data.aws_iam_policy_document.logs": "data source",
+		"module.network":                    "module",
+		"var.region":                        "variable",
+		"local.bucket_name":                 "local",
+		"output.bucket":                     "output",
+	}
+	gotTypes := make(map[string]string)
+	for _, symbol := range info.Types {
+		gotTypes[symbol.Name] = symbol.Kind
+	}
+	for name, kind := range wantTypes {
+		if gotTypes[name] != kind {
+			t.Errorf("Terraform symbol %q = %q, want %q (all: %#v)", name, gotTypes[name], kind, gotTypes)
+		}
+	}
+	wantRefs := map[string]bool{
+		"var.region":                        false,
+		"local.bucket_name":                 false,
+		"aws_s3_bucket.logs":                false,
+		"data.aws_iam_policy_document.logs": false,
+	}
+	for _, reference := range info.References {
+		if _, ok := wantRefs[reference]; ok {
+			wantRefs[reference] = true
+		}
+	}
+	for reference, found := range wantRefs {
+		if !found {
+			t.Errorf("missing Terraform reference %q from %#v", reference, info.References)
+		}
+	}
+}
+
 func TestEncryptDecrypt(t *testing.T) {
 	content := []byte("Hello, World!")
 	password := "testpassword123"

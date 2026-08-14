@@ -135,3 +135,50 @@ func TestGraphEdgesNeighborsDegreesAndDelete(t *testing.T) {
 		t.Fatalf("got %d mirrored records after delete, want 0", len(mirrored))
 	}
 }
+
+func TestGraphAnnotationPersistsAndMirrorsIntoGraphRecall(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "memory.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+	annotation, err := store.UpsertGraphAnnotation(ctx, GraphAnnotation{
+		ID: "note-1", Namespace: "repo", NodeID: "repo|worker",
+		Content: "Keep this worker idempotent when changing retries.",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if annotation.UpdatedAt.IsZero() {
+		t.Fatal("annotation update time was not set")
+	}
+
+	annotations, err := store.GraphAnnotations(ctx, "repo", "repo|worker")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(annotations) != 1 || annotations[0].Content != annotation.Content {
+		t.Fatalf("annotations = %#v, want saved annotation", annotations)
+	}
+
+	records, err := store.Search(ctx, "idempotent retries", SearchOptions{Namespace: "repo", Types: []string{"graph_node"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 || records[0].ID != graphAnnotationRecordPrefix+"note-1" {
+		t.Fatalf("annotation mirror = %#v, want graph recall record", records)
+	}
+
+	if err := store.DeleteGraphNamespace(ctx, "repo"); err != nil {
+		t.Fatal(err)
+	}
+	annotations, err = store.GraphAnnotations(ctx, "repo", "repo|worker")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(annotations) != 0 {
+		t.Fatalf("annotations after delete = %#v, want none", annotations)
+	}
+}

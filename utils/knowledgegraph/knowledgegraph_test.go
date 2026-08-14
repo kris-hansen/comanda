@@ -93,6 +93,30 @@ func TestBuildDeterministicEdges(t *testing.T) {
 	if uses.Confidence != ConfidenceInferred {
 		t.Fatalf("uses edge confidence = %s, want inferred", uses.Confidence)
 	}
+	if got := g.Nodes[NodeID("proj", "type:Store@utils/store/store.go")].Summary; !strings.Contains(got, "fields: db *sql.DB") {
+		t.Fatalf("type summary = %q, want field-level semantic context", got)
+	}
+}
+
+func TestBuildUsesQualifiedParserReferences(t *testing.T) {
+	scan := &codebaseindex.ScanResult{Candidates: []*codebaseindex.FileEntry{
+		{Path: "network.tf", Language: "terraform", Symbols: &codebaseindex.SymbolInfo{
+			Package: "terraform",
+			Types:   []codebaseindex.TypeInfo{{Name: "aws_vpc.main", Kind: "resource"}},
+		}},
+		{Path: "service.tf", Language: "terraform", Symbols: &codebaseindex.SymbolInfo{
+			Package:    "terraform",
+			Types:      []codebaseindex.TypeInfo{{Name: "aws_instance.web", Kind: "resource"}},
+			References: []string{"aws_vpc.main"},
+		}},
+	}}
+	g := Build(scan, "infra")
+	usesID := EdgeID("infra", NodeID("infra", "file:service.tf"), NodeID("infra", "type:aws_vpc.main@network.tf"), EdgeUses)
+	if edge := g.Edges[usesID]; edge == nil {
+		t.Fatal("qualified parser reference did not produce a uses edge")
+	} else if edge.Confidence != ConfidenceInferred {
+		t.Fatalf("qualified reference confidence = %s, want inferred", edge.Confidence)
+	}
 }
 
 func TestEnhanceAddsConceptNodes(t *testing.T) {
@@ -164,6 +188,20 @@ func TestSaveRebuildAndQuery(t *testing.T) {
 	}
 	if !strings.Contains(explain, "Node: Store") || !strings.Contains(explain, "[EXTRACTED]") {
 		t.Fatalf("unexpected explain output:\n%s", explain)
+	}
+	storeNode, err := q.resolve(ctx, "Store")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := q.Annotate(ctx, *storeNode, "Keep migrations backward-compatible."); err != nil {
+		t.Fatal(err)
+	}
+	explain, err = q.Explain(ctx, "Store")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(explain, "Human guidance: Keep migrations backward-compatible.") {
+		t.Fatalf("annotation missing from explain output:\n%s", explain)
 	}
 
 	pathOut, err := q.Path(ctx, "cli", "Store")
