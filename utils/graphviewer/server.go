@@ -32,6 +32,7 @@ type API struct {
 //	GET /api/v1/overview?namespace=<name>
 //	GET /api/v1/graph?namespace=<name>
 //	GET /api/v1/search?q=<text>&limit=<n>&namespace=<name>
+//	GET /api/v1/query?question=<text>&namespace=<name>
 //	GET /api/v1/neighbors?focus=<node-id-or-name>&limit=<n>&offset=<n>&namespace=<name>
 //	GET /api/v1/subgraph?focus=<node-id-or-name>&depth=1..3&namespace=<name>
 func NewAPI(open OpenQuerier) *API {
@@ -58,6 +59,8 @@ func (a *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		a.handleGraph(w, r)
 	case "/api/v1/search":
 		a.handleSearch(w, r)
+	case "/api/v1/query":
+		a.handleQuery(w, r)
 	case "/api/v1/neighbors":
 		a.handleNeighbors(w, r)
 	case "/api/v1/subgraph":
@@ -117,6 +120,41 @@ func (a *API) handleSearch(w http.ResponseWriter, r *http.Request) {
 			out = append(out, exportNode(node))
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"namespace": q.Namespace(), "query": query, "nodes": out})
+	})
+}
+
+// handleQuery turns a natural-language question into the same compact graph
+// explanation as `comanda graph query`, together with the subgraph that backs
+// it. The browser can therefore keep searching and querying in one field
+// without inventing a second, UI-only query language.
+func (a *API) handleQuery(w http.ResponseWriter, r *http.Request) {
+	question := strings.TrimSpace(r.URL.Query().Get("question"))
+	if question == "" {
+		writeError(w, http.StatusBadRequest, "question is required")
+		return
+	}
+	a.withQuerier(w, r, func(q *knowledgegraph.Querier) {
+		answer, err := q.Query(r.Context(), question)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		seeds, err := q.FindNodes(r.Context(), question, 5)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		graph, err := q.ScopedExport(r.Context(), seeds, 1)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"namespace": q.Namespace(),
+			"question":  question,
+			"answer":    answer,
+			"graph":     graph,
+		})
 	})
 }
 
