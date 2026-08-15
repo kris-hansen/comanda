@@ -353,12 +353,8 @@ func runCapture(cmd *cobra.Command, args []string) error {
 }
 
 func registerIndex(name, repoPath string, result *codebaseindex.Result, cfg *codebaseindex.Config) error {
-	// Load current config
-	comandaDir, err := config.GetComandaDir()
-	if err != nil {
-		return err
-	}
-	configPath := filepath.Join(comandaDir, "config.yaml")
+	// Load current config from the same path the CLI loaded at startup
+	configPath := config.GetEnvPath()
 
 	// Load existing config
 	envCfg, err := config.LoadEnvConfig(configPath)
@@ -752,11 +748,7 @@ func runRemove(cmd *cobra.Command, args []string) error {
 	}
 
 	// Remove from config
-	comandaDir, err := config.GetComandaDir()
-	if err != nil {
-		return err
-	}
-	configPath := filepath.Join(comandaDir, "config.yaml")
+	configPath := config.GetEnvPath()
 
 	// Load config
 	envCfg, err := config.LoadEnvConfig(configPath)
