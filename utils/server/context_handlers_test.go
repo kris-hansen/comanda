@@ -40,6 +40,18 @@ func TestContextInventoryExposesRegisteredIndexAsProject(t *testing.T) {
 	if response.Projects[0].SourceRoot != root || response.Indexes[0].Status != "ready" {
 		t.Fatalf("project/index did not report ready source context: %#v", response)
 	}
+	if !hasCapability(response.Capabilities, "knowledge-graph-api") {
+		t.Fatalf("context capabilities = %v, want knowledge-graph-api", response.Capabilities)
+	}
+}
+
+func hasCapability(capabilities []string, want string) bool {
+	for _, capability := range capabilities {
+		if capability == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestPreflightFindsMissingIndexBeforeRun(t *testing.T) {
