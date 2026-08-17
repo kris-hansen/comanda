@@ -8,38 +8,20 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// GetEmbeddedLLMGuide returns the Comanda YAML DSL Guide for LLM consumption
-// with the current supported models injected from the registry
+// GetEmbeddedLLMGuide returns the compact, always-on generation contract with
+// the current supported models injected from the registry.
 func GetEmbeddedLLMGuide() string {
 	// Get all models from the registry
 	registry := models.GetRegistry()
 	allModels := registry.GetAllModelsList()
 
-	return GetEmbeddedLLMGuideWithModels(allModels)
+	return GetGenerationGuideWithModels(allModels, "")
 }
 
-// GetEmbeddedLLMGuideWithModels returns the Comanda YAML DSL Guide for LLM consumption
-// with a specific list of available models injected. Use this when you have
-// a known list of configured/available models (e.g., from envConfig).
+// GetEmbeddedLLMGuideWithModels is kept for callers that need only the base
+// contract. Request-aware callers should use GetGenerationGuideWithModels.
 func GetEmbeddedLLMGuideWithModels(availableModels []string) string {
-	if len(availableModels) == 0 {
-		// Fall back to registry models if none provided
-		registry := models.GetRegistry()
-		availableModels = registry.GetAllModelsList()
-	}
-
-	// Format the models as a comma-separated list with code formatting
-	modelsList := formatModelsList(availableModels)
-
-	// Replace the models section in the guide
-	guide := strings.Replace(
-		embeddedLLMGuideTemplate,
-		"{{SUPPORTED_MODELS}}",
-		modelsList,
-		1,
-	)
-
-	return guide
+	return GetGenerationGuideWithModels(availableModels, "")
 }
 
 // ValidateWorkflowModels parses a workflow YAML and validates that all model

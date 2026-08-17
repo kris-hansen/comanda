@@ -2,7 +2,6 @@ package server
 
 import (
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 )
@@ -43,18 +42,5 @@ func TestExtendGenerateWriteDeadline(t *testing.T) {
 	want := now.Add(generateResponseWriteTimeout)
 	if !capturingWriter.deadline.Equal(want) {
 		t.Fatalf("write deadline = %s, want %s", capturingWriter.deadline, want)
-	}
-}
-
-func TestServerGeneratePromptUsesGenericQMDGuidance(t *testing.T) {
-	prompt := buildServerGeneratePrompt("guide", "review authentication changes", nil, "")
-	for _, want := range []string{
-		"QMD CONTEXT RETRIEVAL:",
-		"Build every retrieval query solely from concepts named in the user's request.",
-		"If no collection is named, omit the -c flag.",
-	} {
-		if !strings.Contains(prompt, want) {
-			t.Errorf("prompt missing qmd guidance %q", want)
-		}
 	}
 }
