@@ -160,9 +160,9 @@ comanda index list
 **Output:**
 ```
 NAME        PATH                        LAST INDEXED         FORMAT      SIZE
-comanda     ~/clawd/comanda             2024-02-25 14:20     structured  24KB
-clawdbot    ~/clawd/clawdbot            2024-02-24 10:00     structured  18KB
-erebor      ~/work/erebor               2024-02-20 09:15     full        89KB
+service-a   ~/work/service-a            2024-02-25 14:20     structured  24KB
+service-b   ~/work/service-b            2024-02-24 10:00     structured  18KB
+project-c   ~/work/project-c            2024-02-20 09:15     full        89KB
 ```
 
 **Options:**
@@ -267,7 +267,7 @@ For multi-codebase analysis, provide aggregated view:
 steps:
   cross_repo_analysis:
     codebase_index:
-      use: [comanda, clawdbot, erebor]
+      use: [service-a, service-b, project-c]
       aggregate: true                 # Combine into single context
       aggregate_format: summary       # Use summary of each
     model: claude
@@ -280,10 +280,10 @@ ${AGGREGATED_INDEX}:
   # comanda - CLI for AI workflow orchestration
   [summary content]
   
-  # clawdbot - Personal AI assistant framework  
+  # service-b - [description]
   [summary content]
   
-  # erebor - [description]
+  # project-c - [description]
   [summary content]
 ```
 

@@ -19,13 +19,13 @@ func TestExpandPathsInYAML(t *testing.T) {
 	}{
 		{
 			name:     "expands root path",
-			input:    "codebase_index:\n  root: ~/erebor/core",
-			expected: "codebase_index:\n  root: " + homeDir + "/erebor/core",
+			input:    "codebase_index:\n  root: ~/workspace/service",
+			expected: "codebase_index:\n  root: " + homeDir + "/workspace/service",
 		},
 		{
 			name:     "expands allowed_paths list",
-			input:    "allowed_paths:\n  - ~/erebor/core\n  - .",
-			expected: "allowed_paths:\n  - " + homeDir + "/erebor/core\n  - .",
+			input:    "allowed_paths:\n  - ~/workspace/service\n  - .",
+			expected: "allowed_paths:\n  - " + homeDir + "/workspace/service\n  - .",
 		},
 		{
 			name:     "expands output path",
@@ -71,5 +71,18 @@ func TestGenerationPromptsExplainSemanticMemoryPlacement(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestGeneratePromptUsesGenericQMDGuidance(t *testing.T) {
+	prompt := buildGeneratePrompt("guide", "review authentication changes", nil, "", nil)
+	for _, want := range []string{
+		"QMD CONTEXT RETRIEVAL:",
+		"Build every retrieval query solely from concepts named in the user's request.",
+		"If no collection is named, omit the -c flag.",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("prompt missing qmd guidance %q", want)
+		}
 	}
 }

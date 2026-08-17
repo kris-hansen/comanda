@@ -5,11 +5,17 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/kris-hansen/comanda/utils/config"
 	"github.com/kris-hansen/comanda/utils/models"
 	"github.com/kris-hansen/comanda/utils/processor"
 )
+
+// generateResponseWriteTimeout covers the slowest supported provider plus
+// validation retries. It is scoped to /generate so normal API responses retain
+// the server's short write timeout.
+const generateResponseWriteTimeout = 65 * time.Minute
 
 // GenerateRequest represents the request body for the generate endpoint
 type GenerateRequest struct {
@@ -34,6 +40,14 @@ func (s *Server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 			Error:   "Method not allowed. Use POST.",
 		})
 		return
+	}
+
+	// The server's default write timeout protects ordinary API calls, but a
+	// workflow generation request can legitimately wait for a CLI provider and
+	// a validation retry. Without this override the connection closes before a
+	// successful generated workflow can be returned to the client.
+	if err := extendGenerateWriteDeadline(w, time.Now()); err != nil {
+		config.DebugLog("Could not extend /generate write deadline: %v", err)
 	}
 
 	var req GenerateRequest
@@ -206,6 +220,7 @@ LINEAR WORKFLOW is the default. If the request mentions named input files, refer
 
 CRITICAL INSTRUCTION: Your entire response must be valid YAML syntax that can be directly saved to a .yaml file. Do not include ANY text before or after the YAML content. Start your response with the first line of YAML and end with the last line of YAML.`,
 		dslGuide, userPrompt)
+	basePrompt += "\n\n" + processor.QMDGenerationGuidance
 
 	// Add feedback about previous validation errors
 	if len(invalidModels) > 0 || structureErrors != "" {
@@ -231,6 +246,10 @@ Please fix all the above errors and regenerate the workflow.`, structureErrors)
 	}
 
 	return basePrompt
+}
+
+func extendGenerateWriteDeadline(w http.ResponseWriter, now time.Time) error {
+	return http.NewResponseController(w).SetWriteDeadline(now.Add(generateResponseWriteTimeout))
 }
 
 // extractServerYAMLContent extracts YAML from an LLM response, handling code blocks

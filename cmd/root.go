@@ -646,6 +646,7 @@ AGENTIC LOOP PROMPT REQUIREMENTS: When writing the 'action' prompt for agentic l
 4. Never let the agent assume it lacks permission - be explicit that it can and should write immediately`,
 		dslGuide, userPrompt)
 	basePrompt += "\n\n" + semanticMemoryGenerationGuidance
+	basePrompt += "\n\n" + processor.QMDGenerationGuidance
 
 	// Add available codebase indexes if any exist
 	if len(availableIndexes) > 0 {
