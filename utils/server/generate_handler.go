@@ -90,7 +90,7 @@ func (s *Server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 	// Get available models from the environment config plus detected CLI providers
 	availableModels := collectAvailableModels(s.envConfig)
 
-	dslGuide := processor.GetEmbeddedLLMGuideWithModels(availableModels)
+	dslGuide := processor.GetGenerationGuideWithModels(availableModels, req.Prompt)
 
 	resolvedGenerationModel := modelForGeneration
 	if s.envConfig != nil {
@@ -211,17 +211,8 @@ func buildServerGeneratePrompt(dslGuide, userPrompt string, invalidModels []stri
 
 User's request: %s
 
-WORKFLOW TYPE — DECIDE BEFORE GENERATING:
-Classify the request before writing any YAML. Use this decision tree:
-1. Does the task require iterating an unknown number of times until a quality condition is met (e.g., "keep fixing until tests pass")? → Use an AGENTIC LOOP.
-2. Otherwise → Use a LINEAR WORKFLOW (named steps that each run once).
-
-LINEAR WORKFLOW is the default. If the request mentions named input files, reference documents to consult, and/or a defined output format or output file, it is ALWAYS a linear workflow — never an agentic loop.
-
-CRITICAL INSTRUCTION: Your entire response must be valid YAML syntax that can be directly saved to a .yaml file. Do not include ANY text before or after the YAML content. Start your response with the first line of YAML and end with the last line of YAML.`,
+Follow the generation contract above. Output only valid YAML, with no text before or after it.`,
 		dslGuide, userPrompt)
-	basePrompt += "\n\n" + processor.QMDGenerationGuidance
-
 	// Add feedback about previous validation errors
 	if len(invalidModels) > 0 || structureErrors != "" {
 		basePrompt += "\n\n--- VALIDATION ERRORS FROM PREVIOUS ATTEMPT (FIX THESE) ---"
