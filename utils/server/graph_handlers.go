@@ -41,10 +41,7 @@ func (s *Server) graphQuerier(_ context.Context, namespace string) (*knowledgegr
 // read-only navigation contract consumed by `comanda graph visualize`.
 func (s *Server) handleGraphAPI(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/graph")
-	if path == "" || path == "/" {
-		path = "/graph"
-	}
 	clone := r.Clone(r.Context())
-	clone.URL.Path = "/api/v1" + path
+	clone.URL.Path = path
 	graphviewer.NewAPI(s.graphQuerier).ServeHTTP(w, clone)
 }
