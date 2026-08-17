@@ -114,7 +114,7 @@ func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
 func (s *Server) contextInventory() ContextResponse {
 	response := ContextResponse{
 		APIVersion:   contextAPIVersion,
-		Capabilities: []string{"project-context", "codebase-indexes", "knowledge-graphs", "run-preflight"},
+		Capabilities: []string{"project-context", "codebase-indexes", "knowledge-graphs", "knowledge-graph-api", "run-preflight"},
 	}
 	if s.envConfig == nil {
 		return response
