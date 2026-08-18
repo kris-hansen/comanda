@@ -79,7 +79,10 @@ func runValidate(_ *cobra.Command, args []string) error {
 
 func readValidateStdin() (string, error) {
 	stat, err := os.Stdin.Stat()
-	if err != nil || (stat.Mode()&os.ModeCharDevice) != 0 {
+	if err != nil {
+		return "", fmt.Errorf("inspect stdin: %w", err)
+	}
+	if (stat.Mode() & os.ModeCharDevice) != 0 {
 		return "", nil
 	}
 	reader := bufio.NewReader(os.Stdin)
