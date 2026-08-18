@@ -224,11 +224,14 @@ var graphVisualizeCmd = &cobra.Command{
 	Long: `Serve a local graph navigation API and browser UI on localhost.
 
 The visualizer supports full-graph exploration, FTS-backed search, filters,
-and focused one-to-three-hop subgraphs. Its API is also available to local
+focused one-to-three-hop subgraphs, and incremental neighbor expansion. Its
+inspector exposes Focus subgraph (two hops) and Expand neighbors while keeping
+the same scope/query behavior as the server API. Its API is also available to local
 clients such as Canvas:
   GET /api/v1/graph
   GET /api/v1/search?q=<text>
   GET /api/v1/query?question=<text>
+  GET /api/v1/neighbors?focus=<node-id-or-name>&limit=<n>&offset=<n>
   GET /api/v1/subgraph?focus=<node-id-or-name>&depth=1..3
   GET /api/v1/annotations?node_id=<node-id>
   POST /api/v1/annotations  # durable human guidance for an existing node`,

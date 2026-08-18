@@ -195,6 +195,10 @@ func TestViewerUIKeepsNodeClicksSeparateFromCanvasPanning(t *testing.T) {
 		`Terminal ${esc(node.kind)}`,
 		`function goBack()`,
 		`history.push({shown,mode,selected,transform`,
+		`id="focus-subgraph"`,
+		`id="expand-neighbors"`,
+		`/api/v1/subgraph?focus=`,
+		`function expandNeighbors(id)`,
 	} {
 		if !strings.Contains(string(page), want) {
 			t.Errorf("visualizer UI is missing %q", want)
