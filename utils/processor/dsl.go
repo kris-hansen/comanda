@@ -1885,11 +1885,7 @@ func (p *Processor) processGenerateStep(step Step, isParallel bool, parallelID s
 	}
 	p.debugf("Using model '%s' for workflow generation in step '%s'", genModelName, step.Name)
 
-	// 2. Prepare the prompt for the LLM
-	//    This includes the Comanda DSL guide and the user's action.
-	// Use the embedded guide with injected model names instead of reading from file
-	dslGuide := []byte(GetEmbeddedLLMGuide())
-
+	// 2. Prepare the prompt for the LLM.
 	userAction := ""
 	if actions := p.NormalizeStringSlice(step.Config.Generate.Action); len(actions) > 0 {
 		userAction = actions[0] // Assuming single action for generation prompt
@@ -1897,6 +1893,7 @@ func (p *Processor) processGenerateStep(step Step, isParallel bool, parallelID s
 	if userAction == "" {
 		return "", fmt.Errorf("action for generate step '%s' is empty", step.Name)
 	}
+	dslGuide := []byte(GetGenerationGuideWithModels(nil, userAction))
 
 	// Handle input for generate step (e.g., from STDIN or context_files)
 	var contextInput string
