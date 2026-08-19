@@ -125,6 +125,51 @@ func TestPreflightRejectsCodebaseRootOutsideProject(t *testing.T) {
 	}
 }
 
+func TestValidateRejectsMissingWorkflowInputWithoutProcessing(t *testing.T) {
+	root := t.TempDir()
+	indexPath := filepath.Join(root, ".comanda", "index.md")
+	if err := os.MkdirAll(filepath.Dir(indexPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(indexPath, []byte("# Index"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	server := newContextTestServer(t, root, indexPath)
+	workflow := `summarize:
+  input: missing.txt
+  model: NA
+  action: Do not execute this action
+  output: STDOUT
+`
+	body, err := json.Marshal(PreflightRequest{Workflow: workflow, ProjectID: "demo", RuntimeDir: "canvas_validate"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/validate", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer test-token")
+	rec := httptest.NewRecorder()
+	server.mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("validate status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var response PreflightResponse
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Ready || !hasIssue(response.Issues, "workflow_not_runnable") {
+		t.Fatalf("expected missing input to block validation, got %#v", response)
+	}
+}
+
+func hasIssue(issues []PreflightIssue, code string) bool {
+	for _, issue := range issues {
+		if issue.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
 func newContextTestServer(t *testing.T, root, indexPath string) *Server {
 	t.Helper()
 	server := &Server{
