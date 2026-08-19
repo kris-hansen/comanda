@@ -343,11 +343,28 @@ func (p *Processor) preflightTool(value string, toolConfig *ToolListConfig, inpu
 }
 
 func (p *Processor) preflightResolvePath(path string) (string, error) {
-	if p.sourceRoot != "" {
-		return ResolveProjectPath(p.sourceRoot, path)
-	}
 	if filepath.IsAbs(path) {
 		return path, nil
+	}
+	if p.serverConfig != nil && p.serverConfig.Enabled {
+		if p.sourceRoot != "" && !p.isOutputInOtherSteps(path) {
+			projectPath, err := ResolveProjectPath(p.sourceRoot, path)
+			if err != nil {
+				return "", err
+			}
+			if _, err := os.Stat(projectPath); err == nil {
+				return projectPath, nil
+			} else if !os.IsNotExist(err) {
+				return "", err
+			}
+		}
+		if p.runtimeDir != "" {
+			return filepath.Join(p.serverConfig.DataDir, p.runtimeDir, path), nil
+		}
+		return filepath.Join(p.serverConfig.DataDir, path), nil
+	}
+	if p.sourceRoot != "" {
+		return ResolveProjectPath(p.sourceRoot, path)
 	}
 	if p.runtimeDir != "" {
 		return filepath.Join(p.runtimeDir, path), nil

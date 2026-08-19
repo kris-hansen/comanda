@@ -298,6 +298,7 @@ func (s *Server) routes() {
 	// Project context is the discovery contract used by Canvas before a run.
 	s.mux.HandleFunc("/context", s.combinedMiddleware(s.handleContext))
 	s.mux.HandleFunc("/preflight", s.combinedMiddleware(s.handlePreflight))
+	s.mux.HandleFunc("/validate", s.combinedMiddleware(s.handleValidate))
 
 	// Knowledge-graph navigation API. Requests require the same authentication
 	// as other server data endpoints and can address registered namespaces only.

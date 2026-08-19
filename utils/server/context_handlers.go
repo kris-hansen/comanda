@@ -111,10 +111,33 @@ func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(response)
 }
 
+// handleValidate performs the same non-processing preflight as
+// `comanda validate`, scoped to the server's runtime directory and optional
+// registered project. It deliberately does not execute workflow actions.
+func (s *Server) handleValidate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		sendJSONError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+	var request PreflightRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Invalid validate request")
+		return
+	}
+	if strings.TrimSpace(request.Workflow) == "" {
+		sendJSONError(w, http.StatusBadRequest, "workflow is required")
+		return
+	}
+
+	response := s.validate(request)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(response)
+}
+
 func (s *Server) contextInventory() ContextResponse {
 	response := ContextResponse{
 		APIVersion:   contextAPIVersion,
-		Capabilities: []string{"project-context", "codebase-indexes", "knowledge-graphs", "knowledge-graph-api", "run-preflight"},
+		Capabilities: []string{"project-context", "codebase-indexes", "knowledge-graphs", "knowledge-graph-api", "run-preflight", "workflow-validate"},
 	}
 	if s.envConfig == nil {
 		return response
@@ -215,6 +238,41 @@ func (s *Server) preflight(request PreflightRequest) PreflightResponse {
 		if _, err := s.validatePath(filepath.Join(request.RuntimeDir, "workflow.yaml")); err != nil {
 			add("error", "runtime_invalid", "Runtime directory is not safe for this server")
 		}
+	}
+	response.Ready = true
+	for _, issue := range response.Issues {
+		if issue.Severity == "error" {
+			response.Ready = false
+			break
+		}
+	}
+	return response
+}
+
+func (s *Server) validate(request PreflightRequest) PreflightResponse {
+	response := s.preflight(request)
+	add := func(severity, code, message string) {
+		response.Issues = append(response.Issues, PreflightIssue{Severity: severity, Code: code, Message: message})
+	}
+
+	var dsl processor.DSLConfig
+	if err := yaml.Unmarshal([]byte(request.Workflow), &dsl); err != nil {
+		response.Ready = false
+		return response
+	}
+
+	processorInstance := processor.NewProcessor(
+		&dsl,
+		s.envConfig,
+		s.config,
+		false,
+		request.RuntimeDir,
+	)
+	if response.Project != nil {
+		processorInstance.SetSourceRoot(response.Project.SourceRoot)
+	}
+	if err := processorInstance.Preflight(); err != nil {
+		add("error", "workflow_not_runnable", err.Error())
 	}
 	response.Ready = true
 	for _, issue := range response.Issues {
