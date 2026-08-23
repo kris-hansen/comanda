@@ -167,27 +167,27 @@ parallel-process:
     input: STDIN
     model: claude-code
     action: "Your prompt here"
-    output: $AGENT_ONE_RESULT
+    output: .comanda/agent-one-result.md
 
   agent-two:
     input: STDIN
     model: gemini-cli
     action: "Your prompt here"
-    output: $AGENT_TWO_RESULT
+    output: .comanda/agent-two-result.md
 
   agent-three:
     input: STDIN
     model: openai-codex
     action: "Your prompt here"
-    output: $AGENT_THREE_RESULT
+    output: .comanda/agent-three-result.md
 
 combine-results:
-  input: |
-    Agent 1: $AGENT_ONE_RESULT
-    Agent 2: $AGENT_TWO_RESULT
-    Agent 3: $AGENT_THREE_RESULT
+  input:
+    - .comanda/agent-one-result.md
+    - .comanda/agent-two-result.md
+    - .comanda/agent-three-result.md
   model: claude-code
-  action: "Synthesize the above into a final answer"
+  action: "Synthesize the three analyses into a final answer"
   output: STDOUT
 ```
 
