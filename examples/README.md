@@ -55,25 +55,25 @@ parallel-process:
     input: STDIN
     model: claude-code
     action: "Analyze system design aspects"
-    output: $CLAUDE_RESULT
+    output: .comanda/claude-analysis.md
 
   gemini-analysis:
     input: STDIN
     model: gemini-cli
     action: "Analyze patterns and best practices"
-    output: $GEMINI_RESULT
+    output: .comanda/gemini-analysis.md
 
   codex-analysis:
     input: STDIN
     model: openai-codex
     action: "Analyze implementation structure"
-    output: $CODEX_RESULT
+    output: .comanda/codex-analysis.md
 
 synthesize:
-  input: |
-    Claude: $CLAUDE_RESULT
-    Gemini: $GEMINI_RESULT
-    Codex: $CODEX_RESULT
+  input:
+    - .comanda/claude-analysis.md
+    - .comanda/gemini-analysis.md
+    - .comanda/codex-analysis.md
   model: claude-code
   action: "Synthesize into unified recommendation"
   output: STDOUT
