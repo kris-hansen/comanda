@@ -28,6 +28,7 @@ var (
 	indexGraph          bool
 	indexMaxFiles       int
 	indexMaxFilesPerDir int
+	indexParserPlugins  []string
 
 	// Update flags
 	updateFull bool
@@ -180,6 +181,7 @@ func init() {
 	captureCmd.Flags().BoolVar(&indexGraph, "graph", false, "Also build a knowledge graph into semantic memory (namespace = index name)")
 	captureCmd.Flags().IntVar(&indexMaxFiles, "max-files", codebaseindex.DefaultMaxFiles, "Max source files included in the index (0 = unlimited)")
 	captureCmd.Flags().IntVar(&indexMaxFilesPerDir, "max-files-per-dir", codebaseindex.DefaultMaxFilesPerDir, "Max files listed per directory in the layout tree (0 = unlimited)")
+	captureCmd.Flags().StringSliceVar(&indexParserPlugins, "parser-plugin", nil, "Local YAML parser-plugin manifest (repeatable)")
 
 	// Update flags
 	updateCmd.Flags().BoolVar(&updateFull, "full", false, "Force full regeneration")
@@ -188,6 +190,7 @@ func init() {
 	updateCmd.Flags().BoolVar(&indexGraph, "graph", false, "Also rebuild the knowledge graph in semantic memory")
 	updateCmd.Flags().IntVar(&indexMaxFiles, "max-files", codebaseindex.DefaultMaxFiles, "Max source files included in the index (0 = unlimited)")
 	updateCmd.Flags().IntVar(&indexMaxFilesPerDir, "max-files-per-dir", codebaseindex.DefaultMaxFilesPerDir, "Max files listed per directory in the layout tree (0 = unlimited)")
+	updateCmd.Flags().StringSliceVar(&indexParserPlugins, "parser-plugin", nil, "Local YAML parser-plugin manifest (repeatable; replaces saved manifests)")
 
 	// Diff flags
 	diffCmd.Flags().StringVar(&diffSince, "since", "", "Show changes since date (YYYY-MM-DD)")
@@ -235,6 +238,9 @@ func runCapture(cmd *cobra.Command, args []string) error {
 	cfg.Verbose = verbose
 	cfg.MaxFiles = indexMaxFiles
 	cfg.MaxFilesPerDir = indexMaxFilesPerDir
+	if err := configureParserPlugins(cfg, indexParserPlugins); err != nil {
+		return err
+	}
 
 	// Set format
 	switch indexFormat {
@@ -376,20 +382,46 @@ func registerIndex(name, repoPath string, result *codebaseindex.Result, cfg *cod
 
 	// Create/update entry
 	envCfg.Indexes[name] = &config.IndexEntry{
-		Path:        repoPath,
-		IndexPath:   result.OutputPath,
-		LastIndexed: time.Now().Format(time.RFC3339),
-		ContentHash: result.ContentHash,
-		Format:      string(result.Format),
-		FileCount:   result.FileCount,
-		SizeBytes:   sizeBytes,
-		VarPrefix:   cfg.RepoVarSlug,
-		Encrypted:   cfg.Encrypt,
-		Languages:   strings.Join(result.Languages, ", "),
+		Path:                  repoPath,
+		IndexPath:             result.OutputPath,
+		LastIndexed:           time.Now().Format(time.RFC3339),
+		ContentHash:           result.ContentHash,
+		Format:                string(result.Format),
+		FileCount:             result.FileCount,
+		SizeBytes:             sizeBytes,
+		VarPrefix:             cfg.RepoVarSlug,
+		Encrypted:             cfg.Encrypt,
+		Languages:             strings.Join(result.Languages, ", "),
+		ParserPluginManifests: append([]string(nil), cfg.ParserPluginPaths...),
 	}
 
 	// Write config back
 	return config.SaveEnvConfig(configPath, envCfg)
+}
+
+func configureParserPlugins(cfg *codebaseindex.Config, paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	expanded := make([]string, 0, len(paths))
+	for _, path := range paths {
+		value, err := fileutil.ExpandPath(path)
+		if err != nil {
+			return fmt.Errorf("failed to expand parser plugin manifest %q: %w", path, err)
+		}
+		absolute, err := filepath.Abs(value)
+		if err != nil {
+			return fmt.Errorf("failed to resolve parser plugin manifest %q: %w", path, err)
+		}
+		expanded = append(expanded, absolute)
+	}
+	plugins, err := codebaseindex.LoadParserPluginManifests(expanded)
+	if err != nil {
+		return err
+	}
+	cfg.ParserPlugins = plugins
+	cfg.ParserPluginPaths = expanded
+	return nil
 }
 
 func buildIndexEnhancer(requestedModel string) (string, func(string) (string, error), error) {
@@ -454,6 +486,13 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	cfg.Verbose = verbose
 	cfg.MaxFiles = indexMaxFiles
 	cfg.MaxFilesPerDir = indexMaxFilesPerDir
+	pluginPaths := indexParserPlugins
+	if len(pluginPaths) == 0 {
+		pluginPaths = entry.ParserPluginManifests
+	}
+	if err := configureParserPlugins(cfg, pluginPaths); err != nil {
+		return err
+	}
 
 	// Set format from entry
 	switch entry.Format {

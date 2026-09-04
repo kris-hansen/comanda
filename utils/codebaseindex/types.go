@@ -67,6 +67,11 @@ type Config struct {
 	// Adapter overrides per language
 	AdapterOverrides map[string]*AdapterOverride
 
+	// ParserPlugins adds local executable parsers for project-specific source
+	// formats. Plugins are opt-in and run only on the machine indexing the repo.
+	ParserPlugins     []ParserPluginConfig
+	ParserPluginPaths []string
+
 	// Processing options
 	MaxOutputKB   int
 	HashAlgorithm HashAlgorithm
@@ -135,6 +140,24 @@ type AdapterOverride struct {
 	IgnoreGlobs     []string
 	PriorityFiles   []string
 	ReplaceDefaults bool
+}
+
+// ParserPluginConfig declares a locally installed parser plugin. The command is
+// executed directly (never through a shell) once per matching source file.
+// It receives a JSON request on stdin and must write one JSON response on
+// stdout; see docs for the protocol.
+type ParserPluginConfig struct {
+	Name               string   `yaml:"name" json:"name"`
+	Command            string   `yaml:"command" json:"command"`
+	Args               []string `yaml:"args,omitempty" json:"args,omitempty"`
+	Extensions         []string `yaml:"extensions" json:"extensions"`
+	DetectionFiles     []string `yaml:"detection_files,omitempty" json:"detection_files,omitempty"`
+	IgnoreDirs         []string `yaml:"ignore_dirs,omitempty" json:"ignore_dirs,omitempty"`
+	IgnoreGlobs        []string `yaml:"ignore_globs,omitempty" json:"ignore_globs,omitempty"`
+	EntrypointPatterns []string `yaml:"entrypoint_patterns,omitempty" json:"entrypoint_patterns,omitempty"`
+	ConfigPatterns     []string `yaml:"config_patterns,omitempty" json:"config_patterns,omitempty"`
+	Priority           int      `yaml:"priority,omitempty" json:"priority,omitempty"`
+	TimeoutMS          int      `yaml:"timeout_ms,omitempty" json:"timeout_ms,omitempty"`
 }
 
 // Result represents the output of index generation

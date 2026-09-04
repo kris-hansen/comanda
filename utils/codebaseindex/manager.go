@@ -40,6 +40,20 @@ func NewManager(config *Config, verbose bool) (*Manager, error) {
 		verbose:  verbose,
 	}
 
+	for i, plugin := range config.ParserPlugins {
+		adapter, err := NewParserPluginAdapter(plugin, config.Root)
+		if err != nil {
+			return nil, err
+		}
+		if _, exists := m.registry.Get(adapter.Name()); exists {
+			return nil, fmt.Errorf("parser plugin %q conflicts with an existing adapter", adapter.Name())
+		}
+		m.registry.Register(adapter)
+		// Keep later adapter selection consistent with normalized plugin names
+		// and extensions (for example, "templatex" becomes ".templatex").
+		config.ParserPlugins[i] = adapter.config
+	}
+
 	return m, nil
 }
 
@@ -178,9 +192,21 @@ func (m *Manager) Generate() (*Result, error) {
 func (m *Manager) detectAdapters() []Adapter {
 	// If adapters are specified via overrides, use those
 	if len(m.config.AdapterOverrides) > 0 {
+		seen := make(map[string]bool)
 		var names []string
 		for name := range m.config.AdapterOverrides {
-			names = append(names, name)
+			if !seen[name] {
+				names = append(names, name)
+				seen[name] = true
+			}
+		}
+		// Parser plugins are an explicit opt-in. Keep them active even when a
+		// workflow also narrows the built-in adapter set with overrides.
+		for _, plugin := range m.config.ParserPlugins {
+			if !seen[plugin.Name] {
+				names = append(names, plugin.Name)
+				seen[plugin.Name] = true
+			}
 		}
 		adapters := m.registry.GetByNames(names)
 		if len(adapters) > 0 {

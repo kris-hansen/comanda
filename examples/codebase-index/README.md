@@ -92,6 +92,12 @@ index_codebase:
           - testdata
         priority_files:
           - cmd/**/*.go
+    # Optional local parser executables for project-specific formats.
+    # Keep this workflow and parser source in your private project if needed.
+    parser_plugins:
+      - name: private-template
+        command: /absolute/path/to/private-template-parser
+        extensions: [.templatex]
     max_output_kb: 100         # Limit output size
     max_files: 10000            # Source files to index (0 = unlimited)
 ```
@@ -153,6 +159,70 @@ Per-language configuration overrides:
 - `ignore_globs`: File patterns to ignore (e.g., `*.generated.go`)
 - `priority_files`: Files to prioritize in scoring
 - `replace_defaults`: Replace default ignores instead of extending
+
+### `parser_plugins`
+
+`parser_plugins` adds an explicitly configured, locally executed parser for a
+project-specific source format. This is intended for private DSLs, templates,
+or generated-code formats that should never be added to Comanda itself.
+
+Each plugin has:
+
+- `name`: unique adapter name (it cannot replace a built-in adapter)
+- `command`: executable to run directly; no shell is involved
+- `args`: optional command arguments
+- `extensions`: file extensions it owns (for example, `[.templatex]`)
+- `detection_files`, `ignore_dirs`, `ignore_globs`, `entrypoint_patterns`,
+  `config_patterns`: optional scanner behavior
+- `priority`: optional score boost for matching files
+- `timeout_ms`: per-file timeout; defaults to 5000
+
+For CLI captures, keep the declaration in a local YAML file and point to it
+without committing either file:
+
+```bash
+comanda index capture ./my-project \
+  --parser-plugin ~/.config/comanda/private-template-parser.yaml
+```
+
+The manifest is saved with the local index registry so `comanda index update`
+uses it again. Pass `--parser-plugin` to `update` to replace the saved list.
+
+#### Parser protocol
+
+For each matching file, Comanda starts the configured command and writes one
+JSON request to stdin:
+
+```json
+{
+  "version": 1,
+  "root": "/absolute/path/to/project",
+  "path": "templates/page.templatex",
+  "content": "first 32KB of source",
+  "max_bytes": 32768
+}
+```
+
+The parser writes exactly one JSON response to stdout:
+
+```json
+{
+  "symbols": {
+    "package": "templates",
+    "imports": ["shared/layout"],
+    "functions": [{"name": "RenderPage", "signature": "RenderPage()"}],
+    "types": [],
+    "constants": [],
+    "variables": [],
+    "frameworks": [],
+    "risk_tags": []
+  }
+}
+```
+
+Or return `{"error":"explanation"}` for a per-file parser error. Plugin
+commands run only because you explicitly configured them; Comanda does not
+upload their code, source contents, or manifests.
 
 ### `max_output_kb`
 Maximum size of generated index in KB (default: 100).
