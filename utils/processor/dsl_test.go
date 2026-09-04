@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kris-hansen/comanda/utils/codebaseindex"
 	"github.com/kris-hansen/comanda/utils/config"
 	"github.com/kris-hansen/comanda/utils/models"
 	"gopkg.in/yaml.v3"
@@ -467,6 +468,36 @@ index:
 	maxFiles := config.Steps[0].Config.CodebaseIndex.MaxFiles
 	if maxFiles == nil || *maxFiles != 2500 {
 		t.Fatalf("max_files = %v, want 2500", maxFiles)
+	}
+}
+
+func TestCodebaseIndexParserPluginsYAML(t *testing.T) {
+	var config DSLConfig
+	err := yaml.Unmarshal([]byte(`
+index:
+  step_type: codebase-index
+  codebase_index:
+    root: .
+    parser_plugins:
+      - name: private-template
+        command: /opt/private/template-parser
+        extensions: [.templatex]
+        timeout_ms: 1500
+`), &config)
+	if err != nil {
+		t.Fatalf("unmarshal workflow: %v", err)
+	}
+	plugin := config.Steps[0].Config.CodebaseIndex.ParserPlugins[0]
+	if plugin.Name != "private-template" || plugin.Command != "/opt/private/template-parser" || plugin.TimeoutMS != 1500 {
+		t.Fatalf("plugin = %#v", plugin)
+	}
+
+	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), createTestServerConfig(), false, "")
+	indexConfig := processor.buildCodebaseIndexConfig(StepConfig{CodebaseIndex: &CodebaseIndexConfig{
+		ParserPlugins: []codebaseindex.ParserPluginConfig{plugin},
+	}})
+	if len(indexConfig.ParserPlugins) != 1 || indexConfig.ParserPlugins[0].Name != "private-template" {
+		t.Fatalf("index parser plugins = %#v", indexConfig.ParserPlugins)
 	}
 }
 

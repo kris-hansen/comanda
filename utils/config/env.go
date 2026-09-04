@@ -83,6 +83,10 @@ type IndexEntry struct {
 	VarPrefix   string `yaml:"var_prefix"`          // Variable prefix for workflows
 	Encrypted   bool   `yaml:"encrypted,omitempty"` // Whether index is encrypted
 	Languages   string `yaml:"languages,omitempty"` // Detected languages
+	// ParserPluginManifests are local paths used when the index was captured.
+	// They contain launch configuration only; private parser source stays out of
+	// Comanda's registry and repository.
+	ParserPluginManifests []string `yaml:"parser_plugin_manifests,omitempty"`
 }
 
 // EnvConfig represents the complete environment configuration

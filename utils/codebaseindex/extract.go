@@ -1,6 +1,7 @@
 package codebaseindex
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -28,7 +29,11 @@ func (m *Manager) extractSymbols(candidates []*FileEntry) error {
 	}
 	work := make(chan workItem)
 	completed := 0
-	results := make(chan string, len(candidates))
+	type extractionResult struct {
+		path string
+		err  error
+	}
+	results := make(chan extractionResult, len(candidates))
 	workers := minInt(runtime.GOMAXPROCS(0), len(candidates))
 	if workers < 1 {
 		workers = 1
@@ -44,27 +49,37 @@ func (m *Manager) extractSymbols(candidates []*FileEntry) error {
 				if !strings.HasPrefix(path, "/") {
 					path = m.config.Root + "/" + path
 				}
+				result := extractionResult{path: entry.Path}
 				if content, err := readFilePartial(path, maxSymbolReadSize); err == nil {
 					if adapter := adapterByLanguage[entry.Language]; adapter != nil {
 						if symbols, err := adapter.ExtractSymbols(entry.Path, content); err == nil {
 							entry.Symbols = symbols
+						} else if required, ok := adapter.(interface{ FailOnExtractionError() bool }); ok && required.FailOnExtractionError() {
+							result.err = err
 						}
 					}
 				}
-				results <- entry.Path
+				results <- result
 			}
 		}()
 	}
 
 	uncached := make([]*FileEntry, 0, len(candidates))
 	for _, entry := range candidates {
-		if cached, ok := m.config.SymbolCache[entry.Path]; ok &&
-			cached.Language == entry.Language && cached.Size == entry.Size &&
-			cached.ModTime == entry.ModTime.UnixNano() {
-			entry.Symbols = cached.Symbols
-			completed++
-			m.reportExtractionProgress(entry.Path, completed, len(candidates))
-			continue
+		adapter := adapterByLanguage[entry.Language]
+		cacheable := true
+		if sensitive, ok := adapter.(interface{ DisableSymbolCache() bool }); ok {
+			cacheable = !sensitive.DisableSymbolCache()
+		}
+		if cacheable {
+			if cached, ok := m.config.SymbolCache[entry.Path]; ok &&
+				cached.Language == entry.Language && cached.Size == entry.Size &&
+				cached.ModTime == entry.ModTime.UnixNano() {
+				entry.Symbols = cached.Symbols
+				completed++
+				m.reportExtractionProgress(entry.Path, completed, len(candidates))
+				continue
+			}
 		}
 		uncached = append(uncached, entry)
 	}
@@ -76,11 +91,15 @@ func (m *Manager) extractSymbols(candidates []*FileEntry) error {
 		wg.Wait()
 		close(results)
 	}()
-	for path := range results {
+	var firstErr error
+	for result := range results {
 		completed++
-		m.reportExtractionProgress(path, completed, len(candidates))
+		m.reportExtractionProgress(result.path, completed, len(candidates))
+		if firstErr == nil && result.err != nil {
+			firstErr = fmt.Errorf("extract symbols from %s: %w", result.path, result.err)
+		}
 	}
-	return nil
+	return firstErr
 }
 
 func (m *Manager) reportExtractionProgress(path string, completed, total int) {

@@ -296,6 +296,10 @@ func (p *Processor) buildCodebaseIndexConfigWithError(stepConfig StepConfig) (*c
 			}
 		}
 
+		if len(ci.ParserPlugins) > 0 {
+			config.ParserPlugins = append([]codebaseindex.ParserPluginConfig(nil), ci.ParserPlugins...)
+		}
+
 		// Convert qmd integration config
 		if ci.Qmd != nil {
 			config.Qmd = &codebaseindex.QmdConfig{
