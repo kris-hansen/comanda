@@ -798,6 +798,12 @@ func (s *Server) handleYAMLProcess(w http.ResponseWriter, r *http.Request) {
 
 	// Create processor instance with validation enabled and runtime directory
 	proc := processor.NewProcessor(&dslConfig, s.envConfig, s.config, true, runtimeDir)
+	if sourceRoot, err := projectSourceRoot(s.envConfig, r.URL.Query().Get("project")); err != nil {
+		sendJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	} else if sourceRoot != "" {
+		proc.SetSourceRoot(sourceRoot)
+	}
 
 	// Set input if provided
 	if req.Input != "" {

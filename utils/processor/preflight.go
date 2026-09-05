@@ -189,6 +189,7 @@ func (p *Processor) preflightWorkflowFile(stepName, path string) error {
 		return fmt.Errorf("step %q: parse sub-workflow %q: %w", stepName, resolved, err)
 	}
 	childProcessor := NewProcessor(&child, p.envConfig, p.serverConfig, p.verbose, p.runtimeDir, p.cliVariables)
+	childProcessor.SetSourceRoot(p.sourceRoot)
 	childProcessor.SetWorkflowFile(resolved)
 	return childProcessor.Preflight()
 }
@@ -201,11 +202,7 @@ func (p *Processor) preflightCodebaseIndex(step Step) error {
 	if ci.Use != nil {
 		return nil // Registry loading is validated when the index is read during processing.
 	}
-	root := ci.Root
-	if root == "" {
-		root = "."
-	}
-	resolved, err := p.preflightResolvePath(root)
+	resolved, err := p.resolveCodebaseIndexRoot(ci.Root)
 	if err != nil {
 		return fmt.Errorf("step %q: resolve codebase root: %w", step.Name, err)
 	}

@@ -2070,6 +2070,7 @@ func (p *Processor) processProcessStep(step Step, isParallel bool, parallelID st
 	// 2. Create a new Processor for the sub-workflow
 	//    It inherits verbose settings and envConfig, but has its own DSLConfig and variables.
 	subProcessor := NewProcessor(&subDSLConfig, p.envConfig, p.serverConfig, p.verbose, p.runtimeDir)
+	subProcessor.SetSourceRoot(p.sourceRoot)
 	subProcessor.SetWorkflowFile(subWorkflowPath)
 	if p.progress != nil { // Propagate progress writer if available
 		subProcessor.SetProgressWriter(p.progress)

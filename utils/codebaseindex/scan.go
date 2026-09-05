@@ -21,12 +21,6 @@ const (
 	// DefaultMaxFiles is the number of source files included in an index unless
 	// callers override Config.MaxFiles. 0 or a negative value means unlimited.
 	DefaultMaxFiles = 10000
-
-	// maxHashReadSize is the maximum bytes to read for hashing (1MB)
-	maxHashReadSize = 1024 * 1024
-
-	// maxSymbolReadSize is the maximum bytes to read for symbol extraction (32KB)
-	maxSymbolReadSize = 32 * 1024
 )
 
 // scanRepository walks the repository and collects file information
@@ -237,6 +231,9 @@ func (m *Manager) processFile(path string) *FileEntry {
 func (m *Manager) selectCandidates(files []*FileEntry) []*FileEntry {
 	// Sort by score descending
 	sort.Slice(files, func(i, j int) bool {
+		if files[i].Score == files[j].Score {
+			return files[i].Path < files[j].Path
+		}
 		return files[i].Score > files[j].Score
 	})
 
@@ -421,12 +418,9 @@ func (m *Manager) computeFileHash(path string) string {
 	}
 	defer f.Close()
 
-	// Limit read size for performance
-	limitReader := io.LimitReader(f, maxHashReadSize)
-
 	if m.config.HashAlgorithm == HashSHA256 {
 		h := sha256.New()
-		if _, err := io.Copy(h, limitReader); err != nil {
+		if _, err := io.Copy(h, f); err != nil {
 			return ""
 		}
 		return hex.EncodeToString(h.Sum(nil))
@@ -434,7 +428,7 @@ func (m *Manager) computeFileHash(path string) string {
 
 	// Default: xxhash
 	h := xxhash.New()
-	if _, err := io.Copy(h, limitReader); err != nil {
+	if _, err := io.Copy(h, f); err != nil {
 		return ""
 	}
 	return hex.EncodeToString(h.Sum(nil))

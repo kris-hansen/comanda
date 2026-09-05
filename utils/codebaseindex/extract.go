@@ -3,9 +3,9 @@ package codebaseindex
 import (
 	"fmt"
 	"go/ast"
+	"go/format"
 	"go/parser"
 	"go/token"
-	"io"
 	"os"
 	"regexp"
 	"runtime"
@@ -50,7 +50,7 @@ func (m *Manager) extractSymbols(candidates []*FileEntry) error {
 					path = m.config.Root + "/" + path
 				}
 				result := extractionResult{path: entry.Path}
-				if content, err := readFilePartial(path, maxSymbolReadSize); err == nil {
+				if content, err := os.ReadFile(path); err == nil {
 					if adapter := adapterByLanguage[entry.Language]; adapter != nil {
 						if symbols, err := adapter.ExtractSymbols(entry.Path, content); err == nil {
 							entry.Symbols = symbols
@@ -74,7 +74,9 @@ func (m *Manager) extractSymbols(candidates []*FileEntry) error {
 		if cacheable {
 			if cached, ok := m.config.SymbolCache[entry.Path]; ok &&
 				cached.Language == entry.Language && cached.Size == entry.Size &&
-				cached.ModTime == entry.ModTime.UnixNano() {
+				cached.Symbols != nil &&
+				((entry.Hash != "" && cached.Hash == entry.Hash) ||
+					(entry.Hash == "" && cached.ModTime == entry.ModTime.UnixNano())) {
 				entry.Symbols = cached.Symbols
 				completed++
 				m.reportExtractionProgress(entry.Path, completed, len(candidates))
@@ -121,6 +123,7 @@ func BuildSymbolCache(candidates []*FileEntry) map[string]SymbolCacheEntry {
 			continue
 		}
 		cache[entry.Path] = SymbolCacheEntry{
+			Hash:     entry.Hash,
 			Language: entry.Language,
 			Size:     entry.Size,
 			ModTime:  entry.ModTime.UnixNano(),
@@ -135,17 +138,6 @@ func minInt(a, b int) int {
 		return a
 	}
 	return b
-}
-
-// readFilePartial reads up to maxBytes from a file
-func readFilePartial(path string, maxBytes int64) ([]byte, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	return io.ReadAll(io.LimitReader(f, maxBytes))
 }
 
 // extractGoSymbols extracts symbols from Go source code using AST
@@ -175,17 +167,14 @@ func extractGoSymbols(path string, content []byte) (*SymbolInfo, error) {
 				Name:       d.Name.Name,
 				IsExported: ast.IsExported(d.Name.Name),
 			}
+			if d.Doc != nil {
+				fn.Comments = strings.TrimSpace(d.Doc.Text())
+			}
 
 			// Check if it's a method
 			if d.Recv != nil && len(d.Recv.List) > 0 {
 				fn.IsMethod = true
-				if t, ok := d.Recv.List[0].Type.(*ast.StarExpr); ok {
-					if ident, ok := t.X.(*ast.Ident); ok {
-						fn.Receiver = ident.Name
-					}
-				} else if ident, ok := d.Recv.List[0].Type.(*ast.Ident); ok {
-					fn.Receiver = ident.Name
-				}
+				fn.Receiver = goReceiverName(d.Recv.List[0].Type)
 			}
 
 			// Build signature
@@ -201,14 +190,23 @@ func extractGoSymbols(path string, content []byte) (*SymbolInfo, error) {
 						Name:       s.Name.Name,
 						IsExported: ast.IsExported(s.Name.Name),
 					}
+					if s.Doc != nil {
+						ti.Comments = strings.TrimSpace(s.Doc.Text())
+					} else if d.Doc != nil {
+						ti.Comments = strings.TrimSpace(d.Doc.Text())
+					}
 
 					switch t := s.Type.(type) {
 					case *ast.StructType:
 						ti.Kind = "struct"
 						if t.Fields != nil {
 							for _, field := range t.Fields.List {
+								fieldType := goNodeText(field.Type)
+								if len(field.Names) == 0 {
+									ti.Fields = append(ti.Fields, fieldType)
+								}
 								for _, name := range field.Names {
-									ti.Fields = append(ti.Fields, name.Name)
+									ti.Fields = append(ti.Fields, name.Name+" "+fieldType)
 								}
 							}
 						}
@@ -216,8 +214,11 @@ func extractGoSymbols(path string, content []byte) (*SymbolInfo, error) {
 						ti.Kind = "interface"
 						if t.Methods != nil {
 							for _, method := range t.Methods.List {
+								if len(method.Names) == 0 {
+									ti.Methods = append(ti.Methods, goNodeText(method.Type))
+								}
 								for _, name := range method.Names {
-									ti.Methods = append(ti.Methods, name.Name)
+									ti.Methods = append(ti.Methods, name.Name+strings.TrimPrefix(goNodeText(method.Type), "func"))
 								}
 							}
 						}
@@ -249,26 +250,30 @@ func extractGoSymbols(path string, content []byte) (*SymbolInfo, error) {
 
 // buildGoFuncSignature builds a function signature string
 func buildGoFuncSignature(d *ast.FuncDecl) string {
-	var sb strings.Builder
-	sb.WriteString("func ")
+	declaration := *d
+	declaration.Body = nil
+	declaration.Doc = nil
+	return goNodeText(&declaration)
+}
 
-	if d.Recv != nil && len(d.Recv.List) > 0 {
-		sb.WriteString("(")
-		if t, ok := d.Recv.List[0].Type.(*ast.StarExpr); ok {
-			if ident, ok := t.X.(*ast.Ident); ok {
-				sb.WriteString("*")
-				sb.WriteString(ident.Name)
-			}
-		} else if ident, ok := d.Recv.List[0].Type.(*ast.Ident); ok {
-			sb.WriteString(ident.Name)
-		}
-		sb.WriteString(") ")
+func goNodeText(node ast.Node) string {
+	var text strings.Builder
+	_ = format.Node(&text, token.NewFileSet(), node)
+	return text.String()
+}
+
+func goReceiverName(expr ast.Expr) string {
+	switch t := expr.(type) {
+	case *ast.Ident:
+		return t.Name
+	case *ast.StarExpr:
+		return goReceiverName(t.X)
+	case *ast.IndexExpr:
+		return goReceiverName(t.X)
+	case *ast.IndexListExpr:
+		return goReceiverName(t.X)
 	}
-
-	sb.WriteString(d.Name.Name)
-	sb.WriteString("()")
-
-	return sb.String()
+	return ""
 }
 
 // extractGoSymbolsRegex is a fallback when AST parsing fails

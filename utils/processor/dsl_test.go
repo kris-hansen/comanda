@@ -314,7 +314,9 @@ func TestValidateStepConfig(t *testing.T) {
 }
 
 func TestBuildCodebaseIndexConfigEncryptionKey(t *testing.T) {
-	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), createTestServerConfig(), false, "")
+	serverConfig := createTestServerConfig()
+	serverConfig.DataDir = t.TempDir()
+	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), serverConfig, false, "")
 
 	// Test that encryption key is picked up from environment
 	t.Run("encryption key from env var", func(t *testing.T) {
@@ -386,7 +388,7 @@ func TestBuildCodebaseIndexConfigEncryptionKey(t *testing.T) {
 		// Create a processor with config that has IndexEncryptionKey
 		envCfg := createTestEnvConfig()
 		envCfg.IndexEncryptionKey = "config-secret-key"
-		procWithKey := NewProcessor(&DSLConfig{}, envCfg, createTestServerConfig(), false, "")
+		procWithKey := NewProcessor(&DSLConfig{}, envCfg, serverConfig, false, "")
 
 		stepConfig := StepConfig{
 			CodebaseIndex: &CodebaseIndexConfig{
@@ -411,7 +413,7 @@ func TestBuildCodebaseIndexConfigEncryptionKey(t *testing.T) {
 		// Create a processor with config that has IndexEncryptionKey
 		envCfg := createTestEnvConfig()
 		envCfg.IndexEncryptionKey = "config-secret-key"
-		procWithKey := NewProcessor(&DSLConfig{}, envCfg, createTestServerConfig(), false, "")
+		procWithKey := NewProcessor(&DSLConfig{}, envCfg, serverConfig, false, "")
 
 		stepConfig := StepConfig{
 			CodebaseIndex: &CodebaseIndexConfig{
@@ -431,7 +433,9 @@ func TestBuildCodebaseIndexConfigEncryptionKey(t *testing.T) {
 }
 
 func TestBuildCodebaseIndexConfigMaxFiles(t *testing.T) {
-	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), createTestServerConfig(), false, "")
+	serverConfig := createTestServerConfig()
+	serverConfig.DataDir = t.TempDir()
+	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), serverConfig, false, "")
 
 	limit := 500
 	config := processor.buildCodebaseIndexConfig(StepConfig{
@@ -492,7 +496,9 @@ index:
 		t.Fatalf("plugin = %#v", plugin)
 	}
 
-	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), createTestServerConfig(), false, "")
+	serverConfig := createTestServerConfig()
+	serverConfig.DataDir = t.TempDir()
+	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), serverConfig, false, "")
 	indexConfig := processor.buildCodebaseIndexConfig(StepConfig{CodebaseIndex: &CodebaseIndexConfig{
 		ParserPlugins: []codebaseindex.ParserPluginConfig{plugin},
 	}})

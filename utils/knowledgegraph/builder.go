@@ -23,15 +23,22 @@ const minInferredNameLen = 3
 // `uses` edges between files and uniquely-named types are inferred from symbol
 // name references.
 func Build(scan *codebaseindex.ScanResult, namespace string) *Graph {
+	if scan.GraphFiles != nil {
+		copy := *scan
+		copy.Candidates = scan.GraphFiles
+		scan = &copy
+	}
 	g := NewGraph(namespace)
+	packages := packageKeys(scan.Candidates)
 
 	// Pass 1: file and package nodes, belongs_to edges.
 	for _, f := range scan.Candidates {
 		summary := fileSummary(f)
-		g.AddNode("file:"+f.Path, NodeFile, path.Base(f.Path), f.Path, symbolPackage(f), summary)
+		g.AddNode("file:"+f.Path, NodeFile, path.Base(f.Path), f.Path, packages[f.Path], summary)
 		if pkg := symbolPackage(f); pkg != "" {
-			g.AddNode("pkg:"+pkg, NodePackage, pkg, "", pkg, "")
-			g.AddEdge(NodeID(namespace, "file:"+f.Path), NodeID(namespace, "pkg:"+pkg),
+			key := packages[f.Path]
+			g.AddNode("pkg:"+key, NodePackage, pkg, path.Dir(f.Path), key, "")
+			g.AddEdge(NodeID(namespace, "file:"+f.Path), NodeID(namespace, "pkg:"+key),
 				EdgeBelongsTo, ConfidenceExtracted, "package declaration")
 		}
 	}
@@ -45,7 +52,7 @@ func Build(scan *codebaseindex.ScanResult, namespace string) *Graph {
 		for _, t := range f.Symbols.Types {
 			local := fmt.Sprintf("type:%s@%s", t.Name, f.Path)
 			summary := typeSummary(t)
-			g.AddNode(local, NodeType, t.Name, f.Path, f.Symbols.Package, summary)
+			g.AddNode(local, NodeType, t.Name, f.Path, packages[f.Path], summary)
 			g.AddEdge(fileID, NodeID(namespace, local), EdgeDefines, ConfidenceExtracted, "type declaration")
 		}
 		for _, fn := range f.Symbols.Functions {
@@ -54,18 +61,27 @@ func Build(scan *codebaseindex.ScanResult, namespace string) *Graph {
 				name = fn.Receiver + "." + fn.Name
 			}
 			local := fmt.Sprintf("func:%s@%s", name, f.Path)
-			g.AddNode(local, NodeFunction, name, f.Path, f.Symbols.Package, functionSummary(fn))
+			g.AddNode(local, NodeFunction, name, f.Path, packages[f.Path], functionSummary(fn))
 			g.AddEdge(fileID, NodeID(namespace, local), EdgeDefines, ConfidenceExtracted, "function declaration")
 		}
 	}
+	linkMethods(g, scan, namespace, packages)
 
 	// Pass 3: component contains edges.
+	componentNames := make(map[string]int)
 	for _, c := range scan.Components {
-		g.AddNode("component:"+c.Name, NodeComponent, c.Name, c.Root, "",
+		componentNames[c.Name]++
+	}
+	for _, c := range scan.Components {
+		local := "component:" + c.Name
+		if componentNames[c.Name] > 1 {
+			local += "@" + path.Clean(c.Root)
+		}
+		g.AddNode(local, NodeComponent, c.Name, c.Root, "",
 			fmt.Sprintf("%s component (%d files)", c.Kind, c.FileCount))
-		componentID := NodeID(namespace, "component:"+c.Name)
+		componentID := NodeID(namespace, local)
 		for _, f := range scan.Candidates {
-			if f.Path == c.Root || strings.HasPrefix(f.Path, strings.TrimSuffix(c.Root, "/")+"/") {
+			if path.Clean(c.Root) == "." || f.Path == c.Root || strings.HasPrefix(f.Path, strings.TrimSuffix(c.Root, "/")+"/") {
 				g.AddEdge(componentID, NodeID(namespace, "file:"+f.Path), EdgeContains, ConfidenceExtracted, "component root")
 			}
 		}
@@ -74,13 +90,18 @@ func Build(scan *codebaseindex.ScanResult, namespace string) *Graph {
 	// Pass 4: import edges. An import that resolves to a known local package
 	// links to that package node; anything else becomes an external package
 	// node so the graph keeps a record of third-party dependencies.
+	legacyImports := legacyImportPaths(scan, packages, namespace)
 	for _, f := range scan.Candidates {
 		if f.Symbols == nil {
 			continue
 		}
 		fileID := NodeID(namespace, "file:"+f.Path)
 		for _, imp := range f.Symbols.Imports {
-			target := resolveImport(g, namespace, imp)
+			imp = strings.Trim(strings.TrimSpace(imp), "\"`")
+			if imp == "" {
+				continue
+			}
+			target := resolveImport(g, namespace, imp, legacyImports)
 			g.AddEdge(fileID, target, EdgeImports, ConfidenceExtracted, "import "+imp)
 		}
 	}
@@ -93,23 +114,25 @@ func Build(scan *codebaseindex.ScanResult, namespace string) *Graph {
 
 // resolveImport maps an import string to a package node ID, creating the
 // package node when it is not defined locally.
-func resolveImport(g *Graph, namespace, imp string) string {
+func resolveImport(g *Graph, namespace, imp string, legacyImports map[string]string) string {
 	imp = strings.Trim(imp, "\"`")
 	if imp == "" {
 		return NodeID(namespace, "pkg:unknown")
 	}
-	// Local packages are keyed by their package clause name; the last path
-	// segment of an import usually matches it.
-	last := imp
-	if idx := strings.LastIndex(imp, "/"); idx >= 0 {
-		last = imp[idx+1:]
-	}
-	// Strip version suffixes like /v2 and dashed variants are kept as-is.
-	if id := NodeID(namespace, "pkg:"+last); g.Nodes[id] != nil {
-		return id
-	}
 	if id := NodeID(namespace, "pkg:"+imp); g.Nodes[id] != nil {
 		return id
+	}
+	// Legacy scans lack module paths. Resolve only a unique directory suffix,
+	// never a basename that could silently link an external package locally.
+	for suffix := imp; ; {
+		if id := legacyImports[suffix]; id != "" {
+			return id
+		}
+		index := strings.IndexByte(suffix, '/')
+		if index < 0 {
+			break
+		}
+		suffix = suffix[index+1:]
 	}
 	g.AddNode("pkg:"+imp, NodePackage, imp, "", "", "external dependency")
 	return NodeID(namespace, "pkg:"+imp)

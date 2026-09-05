@@ -3,6 +3,7 @@ package processor
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -190,29 +191,19 @@ func (p *Processor) buildCodebaseIndexConfig(stepConfig StepConfig) *codebaseind
 
 func (p *Processor) buildCodebaseIndexConfigWithError(stepConfig StepConfig) (*codebaseindex.Config, error) {
 	config := codebaseindex.DefaultConfig()
+	requestedRoot := ""
+	if stepConfig.CodebaseIndex != nil {
+		requestedRoot = stepConfig.CodebaseIndex.Root
+	}
+	root, err := p.resolveCodebaseIndexRoot(requestedRoot)
+	if err != nil {
+		return nil, err
+	}
+	config.Root = root
 
 	// Use step-level config if available
 	if stepConfig.CodebaseIndex != nil {
 		ci := stepConfig.CodebaseIndex
-
-		if ci.Root != "" {
-			if p.sourceRoot != "" {
-				projectRoot, err := ResolveProjectPath(p.sourceRoot, ci.Root)
-				if err != nil {
-					return nil, err
-				}
-				config.Root = projectRoot
-			} else {
-				// Expand ~ in root path
-				expandedRoot, err := fileutil.ExpandPath(ci.Root)
-				if err != nil {
-					p.debugf("Warning: failed to expand root path %s: %v", ci.Root, err)
-					config.Root = ci.Root // Fall back to unexpanded path
-				} else {
-					config.Root = expandedRoot
-				}
-			}
-		}
 
 		if ci.Output != nil {
 			if ci.Output.Path != "" {
@@ -316,6 +307,30 @@ func (p *Processor) buildCodebaseIndexConfigWithError(stepConfig StepConfig) (*c
 	config.Verbose = p.verbose
 
 	return config, nil
+}
+
+// Index roots are source locations, not runtime output paths. A request's
+// runtimeDir must never expand the set of repositories it may index.
+func (p *Processor) resolveCodebaseIndexRoot(requested string) (string, error) {
+	if requested == "" {
+		requested = "."
+	}
+	if p.sourceRoot != "" {
+		return ResolveProjectPath(p.sourceRoot, requested)
+	}
+	// Enabled controls authentication; a server with authentication disabled
+	// still has a configured data directory and needs the same confinement.
+	if p.serverConfig != nil && (p.serverConfig.Enabled || p.serverConfig.DataDir != "") {
+		if p.serverConfig.DataDir == "" {
+			return "", fmt.Errorf("codebase indexing requires a server data directory or a selected project")
+		}
+		base, err := filepath.Abs(p.serverConfig.DataDir)
+		if err != nil {
+			return "", fmt.Errorf("resolve server data directory: %w", err)
+		}
+		return ResolveProjectPath(base, requested)
+	}
+	return fileutil.ExpandPath(requested)
 }
 
 func (p *Processor) buildCodebaseIndexEnhancer(requestedModel string) (string, func(string) (string, error), error) {

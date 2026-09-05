@@ -154,7 +154,7 @@ func (a *ParserPluginAdapter) ExtractSymbols(path string, content []byte) (*Symb
 		Root:     a.root,
 		Path:     path,
 		Content:  string(content),
-		MaxBytes: maxSymbolReadSize,
+		MaxBytes: int64(len(content)),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("encode request: %w", err)

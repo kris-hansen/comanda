@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -33,7 +34,10 @@ func (m *Manager) writeOutput(content string) (string, error) {
 			return "", fmt.Errorf("encryption enabled but no encryption key provided")
 		}
 
-		encPath := outputPath + ".enc"
+		encPath := outputPath
+		if !strings.HasSuffix(encPath, ".enc") {
+			encPath += ".enc"
+		}
 		if err := encryptToFile([]byte(content), m.config.EncryptionKey, encPath); err != nil {
 			return "", fmt.Errorf("failed to encrypt output: %w", err)
 		}
