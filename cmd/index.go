@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -93,7 +94,8 @@ var updateCmd = &cobra.Command{
 	Short: "Incrementally update an existing index",
 	Long: `Update an existing index by re-indexing only changed files.
 
-If no name is provided, updates the index for the current directory.
+If no name is provided, updates the nearest registered index containing the
+current directory. This also works from project subdirectories such as .comanda.
 
 Examples:
   comanda index update           # Update index for current dir
@@ -839,7 +841,7 @@ func runRemove(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// findIndex finds an index by name, or by current directory if name is empty
+// findIndex finds an index by name, or by the nearest registered ancestor root.
 func findIndex(name string) (*config.IndexEntry, string, error) {
 	if envConfig == nil || envConfig.Indexes == nil || len(envConfig.Indexes) == 0 {
 		return nil, "", fmt.Errorf("no indexes registered (use 'comanda index capture' first)")
@@ -853,19 +855,48 @@ func findIndex(name string) (*config.IndexEntry, string, error) {
 		return entry, name, nil
 	}
 
-	// Find by current directory
+	// Resolve symlinks so registered aliases and the physical working directory
+	// select the same project (including macOS /var and /private/var aliases).
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to get current directory: %w", err)
 	}
-
-	for n, entry := range envConfig.Indexes {
-		if entry.Path == cwd {
-			return entry, n, nil
-		}
+	cwd, err = filepath.EvalSymlinks(cwd)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to resolve current directory: %w", err)
 	}
 
-	return nil, "", fmt.Errorf("no index found for current directory (use 'comanda index capture' or specify name)")
+	var matches []string
+	nearestRootLength := -1
+	for n, entry := range envConfig.Indexes {
+		if entry == nil || entry.Path == "" {
+			continue
+		}
+		root, err := filepath.EvalSymlinks(entry.Path)
+		if err != nil {
+			continue
+		}
+		relative, err := filepath.Rel(root, cwd)
+		if err != nil || !filepath.IsLocal(relative) {
+			continue
+		}
+		if len(root) > nearestRootLength {
+			nearestRootLength = len(root)
+			matches = []string{n}
+		} else if len(root) == nearestRootLength {
+			matches = append(matches, n)
+		}
+	}
+	if len(matches) == 1 {
+		name := matches[0]
+		return envConfig.Indexes[name], name, nil
+	}
+	if len(matches) > 1 {
+		sort.Strings(matches)
+		return nil, "", fmt.Errorf("multiple indexes match the nearest project root: %s (specify an index name)", strings.Join(matches, ", "))
+	}
+
+	return nil, "", fmt.Errorf("no registered index contains current directory %q (use 'comanda index list' to find a name, or 'comanda index capture' to create one)", cwd)
 }
 
 // Config helpers - use config.LoadEnvConfig and config.SaveEnvConfig directly

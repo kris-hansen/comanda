@@ -50,6 +50,34 @@ func graphAnnotationSourceRef(namespace, nodeID string) string {
 	return "graph-annotation/" + namespace + "/" + nodeID
 }
 
+// GraphSummary describes a namespace with stored graph nodes.
+type GraphSummary struct {
+	Namespace string `json:"namespace"`
+	Nodes     int    `json:"nodes"`
+	Edges     int    `json:"edges"`
+}
+
+// GraphSummaries counts available graphs without loading their nodes or edges.
+func (s *Store) GraphSummaries(ctx context.Context) ([]GraphSummary, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT n.namespace, n.nodes, COALESCE(e.edges, 0)
+        FROM (SELECT namespace, COUNT(*) AS nodes FROM graph_nodes GROUP BY namespace) n
+        LEFT JOIN (SELECT namespace, COUNT(*) AS edges FROM graph_edges GROUP BY namespace) e
+        ON e.namespace = n.namespace ORDER BY n.namespace`)
+	if err != nil {
+		return nil, fmt.Errorf("query graph summaries: %w", err)
+	}
+	defer rows.Close()
+	summaries := make([]GraphSummary, 0)
+	for rows.Next() {
+		var summary GraphSummary
+		if err := rows.Scan(&summary.Namespace, &summary.Nodes, &summary.Edges); err != nil {
+			return nil, err
+		}
+		summaries = append(summaries, summary)
+	}
+	return summaries, rows.Err()
+}
+
 // GraphNode is one vertex in a knowledge graph stored alongside durable memory.
 type GraphNode struct {
 	ID        string

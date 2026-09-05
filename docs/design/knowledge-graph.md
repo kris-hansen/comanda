@@ -31,7 +31,23 @@ comanda index capture -n myproject --graph
 comanda graph build myproject
 comanda graph build myproject --enhance          # add AI-inferred concepts/edges
 comanda graph update myproject                   # rebuild from a fresh scan
+
+# From the project root or any subdirectory (including .comanda)
+comanda index update
+comanda graph build
+comanda graph update
 ```
+
+Unnamed index and graph commands select the nearest registered project root.
+Nested registered projects take precedence over their parents. If multiple
+indexes share that nearest root, specify the exact registered name from
+`comanda index list`. Explicit names remain valid from any directory.
+
+`comanda graph list` shows built graphs with node/edge counts and database paths
+across registered indexes; indexes without graphs are omitted. Use `--json` for
+machine-readable output, `-n <namespace>` to filter, or `--db <path>` to list all
+graphs in a custom database. Custom database locations are not registered
+automatically, so they require `--db` when listing or querying.
 
 `--graph` also works on `comanda index update`. Encrypted indexes are skipped
 (graph data is plain SQLite). The graph is rebuilt deterministically on each
@@ -97,7 +113,7 @@ comanda graph export -o graph.json           # graphify-style JSON
 ```
 
 `-n <namespace>` selects a graph (default: the index registered for the
-current directory); `--db <path>` points at a specific database.
+current directory or its nearest registered ancestor); `--db <path>` points at a specific database.
 `explain`, `path`, and `query` accept `--json`.
 
 ## Workflow recall
