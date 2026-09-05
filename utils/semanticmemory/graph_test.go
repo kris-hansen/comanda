@@ -3,8 +3,38 @@ package semanticmemory
 import (
 	"context"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
+
+func TestGraphSummaries(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "memory.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	if summaries, err := store.GraphSummaries(ctx); err != nil || len(summaries) != 0 {
+		t.Fatalf("empty graph summaries = %+v, %v", summaries, err)
+	}
+	for _, node := range []GraphNode{
+		{ID: "z1", Namespace: "zeta", Name: "Z", Kind: "type"},
+		{ID: "a1", Namespace: "alpha", Name: "A", Kind: "type"},
+		{ID: "a2", Namespace: "alpha", Name: "B", Kind: "function"},
+	} {
+		if _, err := store.UpsertGraphNode(ctx, node); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := store.UpsertGraphEdge(ctx, GraphEdge{ID: "e1", Namespace: "alpha", SourceID: "a1", TargetID: "a2", Kind: "uses"}); err != nil {
+		t.Fatal(err)
+	}
+	summaries, err := store.GraphSummaries(ctx)
+	want := []GraphSummary{{Namespace: "alpha", Nodes: 2, Edges: 1}, {Namespace: "zeta", Nodes: 1, Edges: 0}}
+	if err != nil || !reflect.DeepEqual(summaries, want) {
+		t.Fatalf("graph summaries = %+v, %v; want %+v", summaries, err, want)
+	}
+}
 
 func TestGraphNodeUpsertMirrorsIntoMemorySearch(t *testing.T) {
 	store, err := Open(filepath.Join(t.TempDir(), "memory.db"))

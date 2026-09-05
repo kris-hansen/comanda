@@ -62,7 +62,8 @@ func TestIndexUpdateRefreshesExistingGraphWithoutSourceChanges(t *testing.T) {
 	if refresh, err := shouldRefreshIndexGraph("project", root, true); err != nil || refresh {
 		t.Fatal("encrypted index would create a plaintext graph")
 	}
-	if err := runUpdate(updateCmd, []string{"project"}); err != nil {
+	t.Chdir(filepath.Join(root, ".comanda"))
+	if err := runUpdate(updateCmd, nil); err != nil {
 		t.Fatal(err)
 	}
 	querier, closeStore, err := openGraphQuerierFor("project", dbPath)

@@ -50,6 +50,8 @@ Graph data lives in the project's semantic memory database
 memory recall (types: [graph_node]) see graph concepts too.
 
 Examples:
+  comanda graph list                        # List available graphs
+  comanda graph build                       # Build graph for the current project
   comanda graph build myproject              # Build graph from a registered index
   comanda graph build myproject --enhance    # Add AI-inferred concept nodes/edges
   comanda graph explain Store                # Show a node and its connections
@@ -61,20 +63,24 @@ Examples:
 }
 
 var graphBuildCmd = &cobra.Command{
-	Use:   "build <index-name>",
+	Use:   "build [index-name]",
 	Short: "Build (or rebuild) the knowledge graph for a registered index",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runGraphBuild,
+	Long: `Build the knowledge graph for a registered index. With no name, use
+--namespace or the nearest registered project containing the current directory.`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runGraphBuild,
 }
 
 var graphUpdateCmd = &cobra.Command{
-	Use:   "update <index-name>",
+	Use:   "update [index-name]",
 	Short: "Rebuild the knowledge graph from a fresh scan of the index",
 	Long: `Rebuild the knowledge graph for a registered index.
 
 The graph is rebuilt from a fresh deterministic scan and replaces the stored
-graph for the namespace (stale nodes from deleted files are removed).`,
-	Args: cobra.ExactArgs(1),
+graph for the namespace (stale nodes from deleted files are removed).
+With no name, use --namespace or the nearest registered project containing
+the current directory.`,
+	Args: cobra.MaximumNArgs(1),
 	RunE: runGraphBuild,
 }
 
@@ -241,9 +247,9 @@ clients such as Canvas:
 
 func init() {
 	rootCmd.AddCommand(graphCmd)
-	graphCmd.AddCommand(graphBuildCmd, graphUpdateCmd, graphExplainCmd, graphPathCmd, graphQueryCmd, graphStatsCmd, graphExportCmd, graphVisualizeCmd)
+	graphCmd.AddCommand(graphBuildCmd, graphUpdateCmd, graphListCmd, graphExplainCmd, graphPathCmd, graphQueryCmd, graphStatsCmd, graphExportCmd, graphVisualizeCmd)
 
-	graphCmd.PersistentFlags().StringVarP(&graphNamespace, "namespace", "n", "", "Graph namespace (default: index registered for current directory)")
+	graphCmd.PersistentFlags().StringVarP(&graphNamespace, "namespace", "n", "", "Graph namespace (default: nearest registered project; list: all)")
 	graphCmd.PersistentFlags().StringVar(&graphDBPath, "db", "", "Path to the graph/memory SQLite database (default: project-local)")
 
 	graphBuildCmd.Flags().BoolVar(&graphEnhance, "enhance", false, "Add AI-inferred concept nodes and edges using default_generation_model")
@@ -254,6 +260,7 @@ func init() {
 	graphExplainCmd.Flags().BoolVar(&graphJSON, "json", false, "Output JSON subgraph")
 	graphPathCmd.Flags().BoolVar(&graphJSON, "json", false, "Output JSON hop list")
 	graphQueryCmd.Flags().BoolVar(&graphJSON, "json", false, "Output JSON subgraph")
+	graphListCmd.Flags().Bool("json", false, "Output available graphs as JSON")
 
 	graphExportCmd.Flags().StringVarP(&graphExportOutput, "output", "o", "", "Write export to a file instead of stdout")
 	graphVisualizeCmd.Flags().IntVar(&graphVisualizePort, "port", 0, "Local port to listen on (0 selects a free port)")
@@ -412,7 +419,11 @@ func compactProgressDetail(detail string) string {
 }
 
 func runGraphBuild(_ *cobra.Command, args []string) error {
-	entry, name, err := findIndex(args[0])
+	requestedName := graphNamespace
+	if len(args) > 0 {
+		requestedName = args[0]
+	}
+	entry, name, err := findIndex(requestedName)
 	if err != nil {
 		return err
 	}
