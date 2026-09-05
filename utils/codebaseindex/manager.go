@@ -108,7 +108,9 @@ func (m *Manager) Scan() (*ScanResult, []string, error) {
 	// frontend/backend/package boundaries in the generated index.
 	m.reportProgress(ProgressEvent{Phase: "Mapping repository components"})
 	m.analyzeComponents(scanResult)
-	m.resolvePackagePaths(scanResult.GraphFiles)
+	if err := m.resolvePackagePaths(scanResult.GraphFiles); err != nil {
+		return nil, nil, err
+	}
 
 	return scanResult, languages, nil
 }

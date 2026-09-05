@@ -71,6 +71,16 @@ qualified on rebuild. Parser plugins configured for an index also run in graph
 builds. Other languages continue to use their existing adapters, and name-based
 type references remain marked `inferred`.
 
+Workflow indexing on the HTTP server is confined to the selected registered
+project, or to the configured data directory when no project is selected.
+An omitted `codebase_index.root` selects that same approved root. The
+`/yaml/process` endpoint accepts the same `?project=<registered-name>` selection
+as `/process`; `runtimeDir` does not grant access to additional source trees.
+Preflight and nested workflows apply the same rules. CLI indexing continues to
+accept an explicitly chosen repository anywhere the local user can access.
+Go module reads are confined to the index root, including symlink resolution;
+an escaping module symlink fails the scan instead of reading outside the tree.
+
 The graph lives in the project's semantic memory database,
 `.comanda/memory/<index-name>.db`, in `graph_nodes` / `graph_edges` tables.
 Every node is additionally mirrored as a `graph_node` memory record, so
