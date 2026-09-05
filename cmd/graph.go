@@ -285,6 +285,25 @@ func buildKnowledgeGraph(indexName, repoPath string, enhance bool, enhanceModel 
 	// symbols when size and mtime prove a candidate has not changed.
 	cfg.SkipFileHash = true
 	cfg.SymbolCache = codebaseindex.LoadSymbolCache(repoPath, indexName)
+	pluginPaths := indexParserPlugins
+	if envConfig != nil {
+		if entry := envConfig.Indexes[indexName]; entry != nil {
+			if len(pluginPaths) == 0 {
+				pluginPaths = entry.ParserPluginManifests
+			}
+			if cfg.SymbolCache == nil {
+				cfg.SymbolCache = make(map[string]codebaseindex.SymbolCacheEntry)
+			}
+			for path, symbols := range codebaseindex.LoadIndexSymbolCache(entry.IndexPath, repoPath) {
+				if cached, exists := cfg.SymbolCache[path]; !exists || symbols.ModTime > cached.ModTime {
+					cfg.SymbolCache[path] = symbols
+				}
+			}
+		}
+	}
+	if err := configureParserPlugins(cfg, pluginPaths); err != nil {
+		return err
+	}
 	progress := newGraphBuildProgress(indexName)
 	defer progress.Stop()
 	cfg.Progress = progress.UpdateIndex
@@ -302,11 +321,11 @@ func buildKnowledgeGraph(indexName, repoPath string, enhance bool, enhanceModel 
 	if err != nil {
 		return fmt.Errorf("graph scan failed: %w", err)
 	}
-	if err := codebaseindex.SaveSymbolCache(repoPath, indexName, scan.Candidates); err != nil && verbose {
+	if err := codebaseindex.SaveSymbolCache(repoPath, indexName, scan.GraphFiles); err != nil && verbose {
 		log.Printf("Warning: could not save graph symbol cache: %v\n", err)
 	}
 
-	progress.Update("Building graph relationships", fmt.Sprintf("%d indexed files", len(scan.Candidates)), 0, 0)
+	progress.Update("Building graph relationships", fmt.Sprintf("%d indexed files", len(scan.GraphFiles)), 0, 0)
 	graph := knowledgegraph.Build(scan, indexName)
 
 	if enhance {

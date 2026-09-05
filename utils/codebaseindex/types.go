@@ -83,7 +83,7 @@ type Config struct {
 	SkipFileHash bool
 
 	// SymbolCache lets repeat consumers reuse symbols for unchanged files. The
-	// cache is validated against path, language, size, and modification time;
+	// cache is validated against path, language, size, and hash or modification time;
 	// missing or stale entries are extracted normally.
 	SymbolCache map[string]SymbolCacheEntry
 
@@ -95,8 +95,8 @@ type Config struct {
 	// Repository Layout tree. 0 or negative means unlimited (list every file).
 	MaxFilesPerDir int
 
-	// MaxFiles caps how many source files are selected for symbol extraction and
-	// inclusion in the index. 0 or negative means unlimited.
+	// MaxFiles caps markdown candidate selection. Structural extraction covers
+	// all scanned files for graph consumers. 0 or negative means unlimited.
 	MaxFiles int
 
 	// Optional second-pass AI enhancement. The normal high-performance scan still
@@ -115,10 +115,10 @@ type Config struct {
 }
 
 // SymbolCacheEntry is the durable, content-derived portion of a file scan.
-// It intentionally excludes hashes: callers that use the cache already have a
-// cheaper freshness key (size + modification time) and do not need to reread
-// each file just to compute one.
+// Index updates validate the content hash; graph-only scans can use size and
+// modification time when no hash is requested.
 type SymbolCacheEntry struct {
+	Hash     string      `json:"hash,omitempty"`
 	Language string      `json:"language"`
 	Size     int64       `json:"size"`
 	ModTime  int64       `json:"mod_time"`
@@ -195,6 +195,8 @@ type Result struct {
 
 // ScanResult holds the results of repository scanning
 type ScanResult struct {
+	// GraphFiles contains all scanned files, independent of markdown limits.
+	GraphFiles []*FileEntry
 	// All files found (before candidate selection)
 	Files []*FileEntry
 
@@ -237,6 +239,8 @@ type CodebaseComponent struct {
 
 // FileEntry represents a single file in the repository
 type FileEntry struct {
+	// PackagePath is a repository-resolved package identity, when available.
+	PackagePath string `json:",omitempty"`
 	// Relative path from repo root
 	Path string
 

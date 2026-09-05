@@ -11,20 +11,29 @@ import (
 
 // IndexMetadata stores metadata about an index for diffing
 type IndexMetadata struct {
-	GeneratedAt time.Time      `json:"generated_at"`
-	RepoName    string         `json:"repo_name"`
-	ContentHash string         `json:"content_hash"`
-	FileCount   int            `json:"file_count"`
-	Files       []FileMetadata `json:"files"`
-	Languages   []string       `json:"languages"`
+	MaxFiles       int            `json:"max_files"`
+	MaxFilesPerDir int            `json:"max_files_per_dir"`
+	Format         OutputFormat   `json:"format,omitempty"`
+	Version        int            `json:"version,omitempty"`
+	Root           string         `json:"root,omitempty"`
+	GeneratedAt    time.Time      `json:"generated_at"`
+	RepoName       string         `json:"repo_name"`
+	ContentHash    string         `json:"content_hash"`
+	FileCount      int            `json:"file_count"`
+	Files          []FileMetadata `json:"files"`
+	Languages      []string       `json:"languages"`
 }
 
 // FileMetadata stores per-file metadata for diffing
 type FileMetadata struct {
-	Path    string `json:"path"`
-	Hash    string `json:"hash"`
-	Size    int64  `json:"size"`
-	ModTime int64  `json:"mod_time"` // Unix timestamp
+	PackagePath string      `json:"package_path,omitempty"`
+	ModTimeNano int64       `json:"mod_time_nano,omitempty"`
+	Language    string      `json:"language,omitempty"`
+	Symbols     *SymbolInfo `json:"symbols,omitempty"`
+	Path        string      `json:"path"`
+	Hash        string      `json:"hash"`
+	Size        int64       `json:"size"`
+	ModTime     int64       `json:"mod_time"` // Unix timestamp
 }
 
 // DiffResult contains the results of comparing current state to stored index
@@ -62,7 +71,7 @@ func (m *Manager) Diff(storedIndexPath string) (*DiffResult, error) {
 
 	// Build map of current files
 	currentFiles := make(map[string]*FileEntry)
-	for _, f := range scanResult.Candidates {
+	for _, f := range scanResult.Files {
 		currentFiles[f.Path] = f
 	}
 
@@ -104,20 +113,32 @@ func (m *Manager) Diff(storedIndexPath string) (*DiffResult, error) {
 // SaveMetadata saves index metadata for future diffing
 func (m *Manager) SaveMetadata(result *Result, candidates []*FileEntry) error {
 	meta := IndexMetadata{
-		GeneratedAt: result.GeneratedAt,
-		RepoName:    result.RepoName,
-		ContentHash: result.ContentHash,
-		FileCount:   result.FileCount,
-		Languages:   result.Languages,
-		Files:       make([]FileMetadata, len(candidates)),
+		MaxFiles:       m.config.MaxFiles,
+		MaxFilesPerDir: m.config.MaxFilesPerDir,
+		Format:         m.config.OutputFormat,
+		Version:        symbolCacheVersion,
+		Root:           m.config.Root,
+		GeneratedAt:    result.GeneratedAt,
+		RepoName:       result.RepoName,
+		ContentHash:    result.ContentHash,
+		FileCount:      result.FileCount,
+		Languages:      result.Languages,
+		Files:          make([]FileMetadata, len(candidates)),
 	}
 
 	for i, f := range candidates {
 		meta.Files[i] = FileMetadata{
-			Path:    f.Path,
-			Hash:    f.Hash,
-			Size:    f.Size,
-			ModTime: f.ModTime.Unix(),
+			ModTimeNano: f.ModTime.UnixNano(),
+			Language:    f.Language,
+			Path:        f.Path,
+			Hash:        f.Hash,
+			Size:        f.Size,
+			ModTime:     f.ModTime.Unix(),
+		}
+		// Encrypted indexes must not expose source-derived symbols in plaintext.
+		if !m.config.Encrypt {
+			meta.Files[i].PackagePath = f.PackagePath
+			meta.Files[i].Symbols = f.Symbols
 		}
 	}
 
@@ -128,6 +149,22 @@ func (m *Manager) SaveMetadata(result *Result, candidates []*FileEntry) error {
 	}
 
 	return os.WriteFile(metaPath, data, 0644)
+}
+
+// LoadIndexSymbolCache reuses the structured part of an index without requiring
+// callers to understand its markdown format. Legacy indexes are cache misses.
+func LoadIndexSymbolCache(indexPath, root string) map[string]SymbolCacheEntry {
+	meta, err := loadMetadata(indexPath + ".meta.json")
+	if err != nil || meta.Version != symbolCacheVersion || meta.Root != root {
+		return nil
+	}
+	cache := make(map[string]SymbolCacheEntry, len(meta.Files))
+	for _, f := range meta.Files {
+		if f.Symbols != nil {
+			cache[f.Path] = SymbolCacheEntry{Language: f.Language, Hash: f.Hash, Size: f.Size, ModTime: f.ModTimeNano, Symbols: f.Symbols}
+		}
+	}
+	return cache
 }
 
 // loadMetadata loads stored metadata from a JSON file

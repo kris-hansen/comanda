@@ -7,7 +7,7 @@ import (
 	"regexp"
 )
 
-const symbolCacheVersion = 1
+const symbolCacheVersion = 2
 
 type symbolCacheFile struct {
 	Version int                         `json:"version"`

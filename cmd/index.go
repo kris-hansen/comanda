@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"github.com/kris-hansen/comanda/utils/config"
 	"github.com/kris-hansen/comanda/utils/fileutil"
 	"github.com/kris-hansen/comanda/utils/models"
+	"github.com/kris-hansen/comanda/utils/semanticmemory"
 	"github.com/spf13/cobra"
 )
 
@@ -340,7 +342,7 @@ func runCapture(cmd *cobra.Command, args []string) error {
 	}
 
 	// Optionally build the knowledge graph into semantic memory
-	if indexGraph {
+	if indexGraph && !cfg.Encrypt {
 		if err := buildKnowledgeGraph(name, absPath, indexEnhance, indexEnhanceModel); err != nil {
 			log.Printf("Warning: knowledge graph build failed: %v\n", err)
 		}
@@ -526,6 +528,10 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	}
 
 	var result *codebaseindex.Result
+	refreshGraph, err := shouldRefreshIndexGraph(name, entry.Path, entry.Encrypted)
+	if err != nil {
+		return err
+	}
 
 	if updateFull {
 		// Force full regeneration
@@ -543,6 +549,9 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		}
 		if !result.Updated {
 			log.Printf("\nIndex is up to date (no changes detected)\n")
+			if refreshGraph {
+				return buildKnowledgeGraph(name, entry.Path, indexEnhance, indexEnhanceModel)
+			}
 			return nil
 		}
 		if wasIncremental {
@@ -557,10 +566,10 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		log.Printf("Warning: failed to update registry: %v\n", err)
 	}
 
-	// Optionally rebuild the knowledge graph
-	if indexGraph {
+	// Keep an existing graph synchronized, including during schema upgrades.
+	if refreshGraph {
 		if err := buildKnowledgeGraph(name, entry.Path, indexEnhance, indexEnhanceModel); err != nil {
-			log.Printf("Warning: knowledge graph rebuild failed: %v\n", err)
+			return fmt.Errorf("index updated but knowledge graph rebuild failed: %w", err)
 		}
 	}
 
@@ -569,6 +578,29 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	log.Printf("  Duration: %v\n", result.Duration)
 
 	return nil
+}
+
+func shouldRefreshIndexGraph(name, root string, encrypted bool) (bool, error) {
+	if encrypted {
+		return false, nil
+	}
+	if indexGraph {
+		return true, nil
+	}
+	dbPath := semanticmemory.DefaultPath(root, name)
+	if _, err := os.Stat(dbPath); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("inspect graph database: %w", err)
+	}
+	store, err := semanticmemory.Open(dbPath)
+	if err != nil {
+		return false, err
+	}
+	defer store.Close()
+	counts, err := store.GraphNodeKindCounts(context.Background(), name)
+	return len(counts) > 0, err
 }
 
 func runDiff(cmd *cobra.Command, args []string) error {

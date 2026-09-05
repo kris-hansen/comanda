@@ -38,6 +38,39 @@ comanda graph update myproject                   # rebuild from a fresh scan
 run — nodes and edges have stable IDs, so rebuilds upsert in place and stale
 nodes from deleted files are removed.
 
+Index updates automatically refresh an existing graph in the project's memory database,
+including updates with no source changes. Use `--graph` to create a graph when
+one does not exist. Graphs built with a custom `graph --db` path still require an
+explicit `graph update --db <path>`.
+
+## Shared Index Structure
+
+The indexer produces two views from one scan: bounded markdown for LLM context
+and complete structural metadata for graph construction. `--max-files` limits
+the markdown file selection; graph extraction covers every source/config file
+included by the adapters and ignore rules. Source extraction and update hashes
+read complete files, so declarations after 32 KB and changes after 1 MB are no
+longer silently missed.
+
+The existing `.meta.json` sidecar retains its original fields and adds a schema
+version, repository root, per-file language, package identity, and extracted
+symbols. Old markdown indexes remain readable. The next `index update`
+automatically regenerates legacy metadata, even with no source changes; no
+recapture or `--full` is required. Subsequent updates reuse content-validated
+symbols for unchanged files and rebuild component information. Encrypted indexes
+omit source-derived symbols from the plaintext sidecar.
+
+Go package identities use the nearest `go.mod`, including nested modules, so
+same-named packages stay distinct and external imports are not linked to a local
+package merely because their last path segment matches. Go declarations retain
+complete signatures, field types, interface methods, and documentation. Receiver
+types link to their methods across files. Root components contain their files,
+and duplicate component names are distinguished by root. Existing file, type,
+and function IDs are preserved; package IDs with resolved module paths become
+qualified on rebuild. Parser plugins configured for an index also run in graph
+builds. Other languages continue to use their existing adapters, and name-based
+type references remain marked `inferred`.
+
 The graph lives in the project's semantic memory database,
 `.comanda/memory/<index-name>.db`, in `graph_nodes` / `graph_edges` tables.
 Every node is additionally mirrored as a `graph_node` memory record, so
