@@ -19,11 +19,12 @@ const defaultParserPluginTimeout = 5 * time.Second
 // ParserPluginRequest is sent to a parser plugin on standard input. Content is
 // intentionally capped by the indexer's normal symbol-read limit.
 type ParserPluginRequest struct {
-	Version  int    `json:"version"`
-	Root     string `json:"root"`
-	Path     string `json:"path"`
-	Content  string `json:"content"`
-	MaxBytes int64  `json:"max_bytes"`
+	Version      int      `json:"version"`
+	Root         string   `json:"root"`
+	Path         string   `json:"path"`
+	Content      string   `json:"content"`
+	MaxBytes     int64    `json:"max_bytes"`
+	Capabilities []string `json:"capabilities,omitempty"`
 }
 
 // ParserPluginResponse is the single JSON object a parser plugin must write to
@@ -150,11 +151,12 @@ func (a *ParserPluginAdapter) ScoreFile(_ string, _ int, isEntrypoint, isConfig 
 // ExtractSymbols asks the plugin to extract a SymbolInfo value for one file.
 func (a *ParserPluginAdapter) ExtractSymbols(path string, content []byte) (*SymbolInfo, error) {
 	request, err := json.Marshal(ParserPluginRequest{
-		Version:  1,
-		Root:     a.root,
-		Path:     path,
-		Content:  string(content),
-		MaxBytes: int64(len(content)),
+		Version:      1,
+		Root:         a.root,
+		Path:         path,
+		Content:      string(content),
+		MaxBytes:     int64(len(content)),
+		Capabilities: []string{"semantic_graph_v1"},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("encode request: %w", err)
@@ -192,6 +194,9 @@ func (a *ParserPluginAdapter) ExtractSymbols(path string, content []byte) (*Symb
 	}
 	if response.Symbols == nil {
 		return nil, fmt.Errorf("parser plugin %q response is missing symbols", a.Name())
+	}
+	if err := ValidateSemanticGraph(response.Symbols); err != nil {
+		return nil, fmt.Errorf("parser plugin %q semantic graph: %w", a.Name(), err)
 	}
 	return response.Symbols, nil
 }

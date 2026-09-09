@@ -161,6 +161,7 @@ func (m *Manager) synthesizeStructured(scan *ScanResult) (string, error) {
 
 	// Component boundaries before flat file categories so large monorepos do not
 	// collapse frontend/backend/packages into a single generic index.
+	m.writeSemanticOverview(&sb, scan)
 	m.writeComponentMap(&sb, scan)
 
 	// Categorize files by domain/purpose
@@ -234,6 +235,7 @@ func (m *Manager) synthesizeFull(scan *ScanResult) (string, error) {
 	m.writePurpose(&sb, scan)
 
 	// 1.5. Component/monorepo map (if inferred)
+	m.writeSemanticOverview(&sb, scan)
 	m.writeComponentMap(&sb, scan)
 
 	// 2. Repo layout (always include)

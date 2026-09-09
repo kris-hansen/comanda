@@ -21,12 +21,19 @@ func TestParserPluginHelper(t *testing.T) {
 	if request.Version != 1 || request.Path == "" {
 		os.Exit(3)
 	}
+	if len(request.Capabilities) != 1 || request.Capabilities[0] != "semantic_graph_v1" {
+		os.Exit(4)
+	}
 	_ = json.NewEncoder(os.Stdout).Encode(ParserPluginResponse{Symbols: &SymbolInfo{
 		Package: "private-context",
 		Functions: []FunctionInfo{{
 			Name:      "CustomDirective",
 			Signature: "directive CustomDirective()",
 		}},
+		SemanticGraph: &SemanticGraph{
+			Entities:  []SemanticEntity{{ID: "resource", Kind: "resource", Name: "Resource"}},
+			Relations: []SemanticRelation{{Source: "$function:CustomDirective", Target: "resource", Kind: "reads", Confidence: "extracted", Evidence: "sample:1: directive reads resource"}},
+		},
 	}})
 	os.Exit(0)
 }
@@ -68,6 +75,9 @@ func TestParserPluginIndexesCustomExtension(t *testing.T) {
 		}
 		if got := candidate.Symbols.Functions[0].Name; got != "CustomDirective" {
 			t.Fatalf("plugin function = %q, want CustomDirective", got)
+		}
+		if candidate.Symbols.SemanticGraph == nil || len(candidate.Symbols.SemanticGraph.Relations) != 1 {
+			t.Fatal("plugin semantic relationships were not decoded")
 		}
 	}
 }

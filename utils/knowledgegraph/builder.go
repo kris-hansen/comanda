@@ -108,6 +108,7 @@ func Build(scan *codebaseindex.ScanResult, namespace string) *Graph {
 
 	// Pass 5: inferred uses edges from symbol name references.
 	inferUses(g, scan, namespace)
+	addParserSemantics(g, scan, packages, legacyImports)
 
 	return g
 }
@@ -164,7 +165,7 @@ func inferUses(g *Graph, scan *codebaseindex.ScanResult, namespace string) {
 	}
 
 	for _, f := range scan.Candidates {
-		if f.Symbols == nil {
+		if f.Symbols == nil || f.Symbols.SemanticGraph != nil {
 			continue
 		}
 		// Normalize the signature text into exact identifier tokens once. The
