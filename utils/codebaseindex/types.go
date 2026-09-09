@@ -314,6 +314,10 @@ type SymbolInfo struct {
 
 	// Risk indicators (auth, crypto, db, concurrency)
 	RiskTags []string
+
+	// SemanticGraph optionally carries parser-defined entities and evidenced
+	// relationships. Existing parsers can omit it without changing behavior.
+	SemanticGraph *SemanticGraph `json:",omitempty"`
 }
 
 // FunctionInfo describes a function or method
