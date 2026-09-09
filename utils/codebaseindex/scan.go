@@ -147,7 +147,7 @@ func (m *Manager) walkDir(
 			}
 		} else {
 			// Check if file should be processed
-			ext := filepath.Ext(name)
+			ext := strings.ToLower(filepath.Ext(name))
 			isValidExt := validExts[ext]
 			isConfig := m.matchesConfigPattern(name, configPatterns)
 
@@ -197,7 +197,7 @@ func (m *Manager) processFile(path string) *FileEntry {
 	}
 
 	// Determine language
-	ext := filepath.Ext(path)
+	ext := strings.ToLower(filepath.Ext(path))
 	for _, adapter := range m.adapters {
 		for _, adapterExt := range adapter.FileExtensions() {
 			if ext == adapterExt {
