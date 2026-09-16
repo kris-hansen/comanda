@@ -278,3 +278,62 @@ sample-project/
 ```
 
 Run the examples against this project to see the index output.
+
+### Optional parser semantic graph
+
+Comanda advertises `"capabilities": ["semantic_graph_v1"]` in parser requests.
+A parser can use this signal to require semantic support instead of silently
+losing its relationships with an older host. Existing v1 parsers can ignore it.
+
+`symbols.SemanticGraph` adds language-specific entities and typed relationships:
+
+```json
+{
+  "symbols": {
+    "Functions": [{"Name": "Calculate"}],
+    "SemanticGraph": {
+      "Entities": [
+        {"ID": "amount", "Kind": "data_item", "Name": "AMOUNT", "Referenceable": true},
+        {"ID": "interest", "Kind": "concept", "Name": "Interest", "Scope": "project"}
+      ],
+      "Relations": [
+        {"Source": "$function:Calculate", "Target": "amount", "Kind": "writes", "Confidence": "extracted", "Evidence": "program:12: COMPUTE AMOUNT = BALANCE * RATE"},
+        {"Source": "$function:Calculate", "Target": "interest", "Kind": "relates_to", "Confidence": "inferred", "Evidence": "program:12: configured domain alias"}
+      ]
+    }
+  }
+}
+```
+
+Entity IDs are local to a source file; `Scope: "project"` shares an entity across
+files of the same parser language. Use identical kind/name/summary for a shared
+ID: the first definition in sorted file order supplies its metadata. Entities
+must have unique nonempty IDs, a name, and a kind matching `[a-z][a-z0-9_]*`.
+IDs cannot start with `$` or contain `|`. A relation must have a valid kind,
+`extracted` or `inferred` confidence, and nonempty source evidence.
+
+Endpoints can be entity IDs or these anchors:
+
+- `$file`: this source file.
+- `$function:Name` / `$type:Name`: an existing symbol in this file.
+- `$import:Name`: a dependency declared in `Imports`.
+- `$name:Name`: a type or `Referenceable` entity, first searched locally and
+  then through transitive imports of the same language.
+- `$callable:Name`: a function resolved through the same local/import scope.
+
+Set `SemanticGraph.ScopeImports` to the subset of declared imports that actually
+contribute names (for example, COPY dependencies rather than called programs).
+Omitted/null inherits `Imports`; an explicit empty list permits only local names.
+This restriction is preserved in index metadata.
+
+Name-bound edges are marked inferred even when the operation itself was
+extracted. Ambiguous or missing names create `unresolved_reference` nodes;
+Comanda never binds them to an unrelated file solely because a name matches.
+A semantic graph replaces legacy signature-based `uses` inference for that
+file. Parsers omitting it keep the existing behavior. Invalid semantic graphs
+fail extraction with a parser diagnostic.
+
+Semantic entities and edges are retained in index metadata, graph SQLite
+storage, JSON export, and visualizer queries. Structured/full indexes include a
+compact semantic overview. This contract carries parser claims and evidence;
+it does not independently prove a business ontology or perform type checking.
