@@ -19,7 +19,11 @@ func (s *Server) graphQuerier(_ context.Context, namespace string) (*knowledgegr
 	if namespace == "" {
 		return nil, nil, fmt.Errorf("namespace is required")
 	}
-	entry, ok := s.envConfig.Indexes[namespace]
+	envConfig := s.currentEnvConfig()
+	if envConfig == nil {
+		return nil, nil, fmt.Errorf("no registered index named %q", namespace)
+	}
+	entry, ok := envConfig.Indexes[namespace]
 	if !ok || entry == nil {
 		return nil, nil, fmt.Errorf("no registered index named %q", namespace)
 	}
