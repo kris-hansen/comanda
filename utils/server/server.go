@@ -15,9 +15,22 @@ import (
 
 // Server represents the HTTP server
 type Server struct {
-	mux       *http.ServeMux
-	config    *config.ServerConfig
-	envConfig *config.EnvConfig
+	mux           *http.ServeMux
+	config        *config.ServerConfig
+	envConfig     *config.EnvConfig
+	envConfigPath string
+}
+
+// currentEnvConfig reloads the on-disk registry when this server was created
+// by New. Comanda commands can add indexes while a long-running server is
+// active, so request handlers must not rely exclusively on the startup copy.
+func (s *Server) currentEnvConfig() *config.EnvConfig {
+	if s.envConfigPath != "" {
+		if envConfig, err := config.LoadEnvConfig(s.envConfigPath); err == nil {
+			return envConfig
+		}
+	}
+	return s.envConfig
 }
 
 // validatePath ensures a path is relative and within the data directory
@@ -224,9 +237,10 @@ func New(envConfig *config.EnvConfig) (*http.Server, error) {
 	}
 
 	s := &Server{
-		mux:       http.NewServeMux(),
-		config:    serverConfig,
-		envConfig: envConfig,
+		mux:           http.NewServeMux(),
+		config:        serverConfig,
+		envConfig:     envConfig,
+		envConfigPath: config.GetEnvPath(),
 	}
 
 	// No default runtime directory is created

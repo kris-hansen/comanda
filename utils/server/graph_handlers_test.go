@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/kris-hansen/comanda/utils/config"
 	"github.com/kris-hansen/comanda/utils/semanticmemory"
 )
 
@@ -37,6 +38,14 @@ func TestGraphAPIProxiesRegisteredGraphForAuthenticatedClients(t *testing.T) {
 	}
 
 	server := newContextTestServer(t, root, indexPath)
+	envPath := filepath.Join(t.TempDir(), "env.yaml")
+	if err := config.SaveEnvConfig(envPath, server.envConfig); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate a graph registered after the server started. Graph requests,
+	// like /context inventory requests, must use the current on-disk registry.
+	server.envConfig = &config.EnvConfig{Indexes: map[string]*config.IndexEntry{}}
+	server.envConfigPath = envPath
 	req := httptest.NewRequest(http.MethodGet, "/graph/api/v1/overview?namespace=demo", nil)
 	req.Header.Set("Authorization", "Bearer test-token")
 	rec := httptest.NewRecorder()

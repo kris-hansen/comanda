@@ -45,6 +45,29 @@ func TestContextInventoryExposesRegisteredIndexAsProject(t *testing.T) {
 	}
 }
 
+func TestContextInventoryReloadsIndexesAddedAfterServerStart(t *testing.T) {
+	root := t.TempDir()
+	envPath := filepath.Join(t.TempDir(), "env.yaml")
+	staleConfig := &config.EnvConfig{Indexes: map[string]*config.IndexEntry{
+		"demo": {Path: root},
+	}}
+	if err := config.SaveEnvConfig(envPath, &config.EnvConfig{Indexes: map[string]*config.IndexEntry{
+		"demo":            {Path: root},
+		"fed_tf_baseline": {Path: root},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+
+	server := &Server{envConfig: staleConfig, envConfigPath: envPath}
+	response := server.contextInventory()
+	if len(response.KnowledgeGraphs) != 2 {
+		t.Fatalf("knowledge graphs = %#v, want demo and fed_tf_baseline", response.KnowledgeGraphs)
+	}
+	if response.KnowledgeGraphs[1].ID != "fed_tf_baseline" {
+		t.Fatalf("second knowledge graph = %#v, want fed_tf_baseline", response.KnowledgeGraphs[1])
+	}
+}
+
 func hasCapability(capabilities []string, want string) bool {
 	for _, capability := range capabilities {
 		if capability == want {

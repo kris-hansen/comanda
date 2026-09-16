@@ -139,17 +139,18 @@ func (s *Server) contextInventory() ContextResponse {
 		APIVersion:   contextAPIVersion,
 		Capabilities: []string{"project-context", "codebase-indexes", "knowledge-graphs", "knowledge-graph-api", "run-preflight", "workflow-validate"},
 	}
-	if s.envConfig == nil {
+	envConfig := s.currentEnvConfig()
+	if envConfig == nil {
 		return response
 	}
 
-	names := make([]string, 0, len(s.envConfig.Indexes))
-	for name := range s.envConfig.Indexes {
+	names := make([]string, 0, len(envConfig.Indexes))
+	for name := range envConfig.Indexes {
 		names = append(names, name)
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		entry := s.envConfig.Indexes[name]
+		entry := envConfig.Indexes[name]
 		if entry == nil {
 			continue
 		}
