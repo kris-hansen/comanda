@@ -14,7 +14,7 @@ comanda run index-and-analyze.yaml
 
 ## How It Works
 
-1. **Language Detection**: Automatically detects Go, Python, TypeScript, Flutter, and Java codebases
+1. **Language Detection**: Automatically detects Go, Python, TypeScript, Flutter, Java, Terraform, and PostgreSQL schema (`.sql`) codebases
 2. **Smart Scanning**: Uses parallel workers with early pruning for performance
 3. **Symbol Extraction**: Extracts functions, types, and imports using AST (Go) or regex
 4. **Markdown Synthesis**: Generates a structured index with key sections
@@ -263,6 +263,8 @@ The generated index includes these sections (when data is available):
 | TypeScript | `tsconfig.json`, `package.json` | Regex |
 | Flutter | `pubspec.yaml` | Regex |
 | Java | `pom.xml`, `build.gradle`, `build.gradle.kts` | Regex |
+| Terraform | `main.tf`, `terraform.tf`, `.terraform.lock.hcl` | HCL |
+| PostgreSQL | `.sql` files containing DDL | DDL statement reader |
 
 ## Sample Project
 
@@ -280,6 +282,12 @@ sample-project/
 Run the examples against this project to see the index output.
 
 ### Optional parser semantic graph
+
+The built-in PostgreSQL adapter is a first-party example of this contract:
+it reads `.sql` DDL and emits schema/table/column entities and
+primary-key/foreign-key relationships without any parser plugin
+configuration. See [PostgreSQL schema support](../../docs/design/knowledge-graph.md#postgresql-schema-support)
+for its entity and edge vocabulary.
 
 Comanda advertises `"capabilities": ["semantic_graph_v1"]` in parser requests.
 A parser can use this signal to require semantic support instead of silently
