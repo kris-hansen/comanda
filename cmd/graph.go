@@ -59,7 +59,8 @@ Examples:
   comanda graph query "what uses the store?" # Scoped subgraph for a question
   comanda graph stats                        # Counts and hub nodes
   comanda graph export -o graph.json         # graphify-style JSON export
-  comanda graph visualize                    # Browse the graph in a local browser`,
+  comanda graph visualize                    # Browse the graph in a local browser
+  comanda graph remove myproject             # Delete a graph namespace (index stays registered)`,
 }
 
 var graphBuildCmd = &cobra.Command{
@@ -82,6 +83,24 @@ With no name, use --namespace or the nearest registered project containing
 the current directory.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runGraphBuild,
+}
+
+var graphRemoveCmd = &cobra.Command{
+	Use:   "remove [index-name]",
+	Short: "Delete a graph namespace from the database",
+	Long: `Delete the knowledge graph for a namespace: nodes, edges, annotations,
+the graph search index, and mirrored memory records. The registered codebase
+index and any other namespaces in the same database are left untouched, so
+the graph can be rebuilt later with 'comanda graph build'.
+
+With no name, use --namespace or the nearest registered project containing
+the current directory.`,
+	Example: `  comanda graph remove                    # Remove the graph for the current project
+  comanda graph remove myproject          # Remove the graph for a registered index
+  comanda graph remove --namespace other  # Remove a graph by namespace flag
+  comanda graph remove myproject --db ./custom.db`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runGraphRemove,
 }
 
 var graphExplainCmd = &cobra.Command{
@@ -247,7 +266,7 @@ clients such as Canvas:
 
 func init() {
 	rootCmd.AddCommand(graphCmd)
-	graphCmd.AddCommand(graphBuildCmd, graphUpdateCmd, graphListCmd, graphExplainCmd, graphPathCmd, graphQueryCmd, graphStatsCmd, graphExportCmd, graphVisualizeCmd)
+	graphCmd.AddCommand(graphBuildCmd, graphUpdateCmd, graphListCmd, graphRemoveCmd, graphExplainCmd, graphPathCmd, graphQueryCmd, graphStatsCmd, graphExportCmd, graphVisualizeCmd)
 
 	graphCmd.PersistentFlags().StringVarP(&graphNamespace, "namespace", "n", "", "Graph namespace (default: nearest registered project; list: all)")
 	graphCmd.PersistentFlags().StringVar(&graphDBPath, "db", "", "Path to the graph/memory SQLite database (default: project-local)")
@@ -428,6 +447,64 @@ func runGraphBuild(_ *cobra.Command, args []string) error {
 		return err
 	}
 	return buildKnowledgeGraph(name, entry.Path, graphEnhance, graphEnhanceModel)
+}
+
+// runGraphRemove deletes the stored graph for a namespace, resolved with the
+// same precedence as build/update: explicit positional name, then
+// --namespace, then the nearest registered project. The registered codebase
+// index itself, and any other namespace sharing the database, are untouched.
+func runGraphRemove(_ *cobra.Command, args []string) error {
+	requestedName := graphNamespace
+	if len(args) > 0 {
+		requestedName = args[0]
+	}
+	entry, name, err := findIndex(requestedName)
+	if err != nil {
+		return err
+	}
+
+	dbPath := graphDBPath
+	if dbPath == "" {
+		dbPath = semanticmemory.DefaultPath(entry.Path, name)
+	}
+
+	// Removal must not create a database or memory directory for a graph
+	// that was never built.
+	if _, err := os.Stat(dbPath); err != nil {
+		if os.IsNotExist(err) {
+			return graphNotBuiltError(name)
+		}
+		return fmt.Errorf("inspect graph database %q: %w", dbPath, err)
+	}
+
+	store, err := semanticmemory.Open(dbPath)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+	summaries, err := store.GraphSummaries(ctx)
+	if err != nil {
+		return fmt.Errorf("inspect graph namespaces in %q: %w", dbPath, err)
+	}
+	built := false
+	for _, summary := range summaries {
+		if summary.Namespace == name {
+			built = true
+			break
+		}
+	}
+	if !built {
+		return graphNotBuiltError(name)
+	}
+
+	if err := store.DeleteGraphNamespace(ctx, name); err != nil {
+		return fmt.Errorf("remove graph namespace %q: %w", name, err)
+	}
+
+	log.Printf("Removed knowledge graph for namespace %q from %s\nRebuild it anytime with: comanda graph build %s\n", name, dbPath, name)
+	return nil
 }
 
 // openGraphQuerier resolves the namespace (flag, or the index registered for
