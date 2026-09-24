@@ -320,6 +320,162 @@ func TestViewerUIStylesDatabaseKindsWithAccessibleControls(t *testing.T) {
 	}
 }
 
+// TestOverviewDatabaseScopeReturnsSchemaTableMapAndRestoresMixed proves the
+// scope-aware API contract the browser relies on for "Database only": the
+// architecture-level overview is non-empty and excludes code nodes when
+// scope=database, and requesting the default (mixed) overview afterwards
+// returns the original code-oriented overview unaffected — i.e. mixed mode
+// can always be restored by simply asking for it again, statelessly.
+func TestOverviewDatabaseScopeReturnsSchemaTableMapAndRestoresMixed(t *testing.T) {
+	store, err := semanticmemory.Open(filepath.Join(t.TempDir(), "graph.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	ctx := context.Background()
+
+	schema, err := store.UpsertGraphNode(ctx, semanticmemory.GraphNode{ID: "demo|schema:public", Namespace: "demo", Kind: "schema", Name: "public"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	table, err := store.UpsertGraphNode(ctx, semanticmemory.GraphNode{ID: "demo|table:public.users", Namespace: "demo", Kind: "table", Name: "public.users"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	column, err := store.UpsertGraphNode(ctx, semanticmemory.GraphNode{ID: "demo|column:public.users.id", Namespace: "demo", Kind: "column", Name: "public.users.id"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.UpsertGraphNode(ctx, semanticmemory.GraphNode{ID: "demo|component", Namespace: "demo", Kind: semanticmemory.GraphNodeComponent, Name: "app"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.UpsertGraphEdge(ctx, semanticmemory.GraphEdge{ID: "demo|e1", Namespace: "demo", SourceID: schema.ID, TargetID: table.ID, Kind: semanticmemory.GraphEdgeContains, Confidence: semanticmemory.GraphConfidenceExtracted}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.UpsertGraphEdge(ctx, semanticmemory.GraphEdge{ID: "demo|e2", Namespace: "demo", SourceID: table.ID, TargetID: column.ID, Kind: semanticmemory.GraphEdgeContains, Confidence: semanticmemory.GraphConfidenceExtracted}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RefreshGraphDegrees(ctx, "demo"); err != nil {
+		t.Fatal(err)
+	}
+
+	api := NewAPI(func(_ context.Context, namespace string) (*knowledgegraph.Querier, func() error, error) {
+		if namespace != "" && namespace != "demo" {
+			return nil, nil, &notFoundError{namespace}
+		}
+		return knowledgegraph.NewQuerier(store, "demo"), func() error { return nil }, nil
+	})
+
+	dbOverview := requestJSON(t, api, "/api/v1/overview?scope=database")
+	dbNodes := dbOverview["nodes"].([]any)
+	if len(dbNodes) == 0 {
+		t.Fatal("scope=database overview returned no nodes for a graph with schema/table/column nodes")
+	}
+	for _, n := range dbNodes {
+		kind := n.(map[string]any)["kind"].(string)
+		if kind == "column" || kind == semanticmemory.GraphNodeComponent {
+			t.Fatalf("scope=database overview leaked a %q node", kind)
+		}
+	}
+	dbEdges := dbOverview["edges"].([]any)
+	if len(dbEdges) == 0 {
+		t.Fatal("scope=database overview returned no edges for a schema containing a table")
+	}
+
+	// Mixed mode, requested again after the database-scoped request, must
+	// come back exactly as it would have without ever requesting the
+	// database scope: one component node, no edges.
+	mixedOverview := requestJSON(t, api, "/api/v1/overview")
+	mixedNodes := mixedOverview["nodes"].([]any)
+	if len(mixedNodes) != 1 {
+		t.Fatalf("mixed overview node count = %d, want 1 (the component node)", len(mixedNodes))
+	}
+	if got := mixedNodes[0].(map[string]any)["kind"]; got != semanticmemory.GraphNodeComponent {
+		t.Fatalf("mixed overview node kind = %v, want %q", got, semanticmemory.GraphNodeComponent)
+	}
+}
+
+// TestSubgraphAndNeighborsDatabaseScopeStayWithinDatabaseKinds proves the
+// drill-down API contract: focusing a table with scope=database returns its
+// columns and database relationships (ScopedExportKinds), and paging its
+// neighbors with scope=database never surfaces the code node planted right
+// next to it.
+func TestSubgraphAndNeighborsDatabaseScopeStayWithinDatabaseKinds(t *testing.T) {
+	store, err := semanticmemory.Open(filepath.Join(t.TempDir(), "graph.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	ctx := context.Background()
+
+	table, err := store.UpsertGraphNode(ctx, semanticmemory.GraphNode{ID: "demo|table:public.users", Namespace: "demo", Kind: "table", Name: "public.users"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	column, err := store.UpsertGraphNode(ctx, semanticmemory.GraphNode{ID: "demo|column:public.users.id", Namespace: "demo", Kind: "column", Name: "public.users.id"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fn, err := store.UpsertGraphNode(ctx, semanticmemory.GraphNode{ID: "demo|func:main", Namespace: "demo", Kind: semanticmemory.GraphNodeFunction, Name: "main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.UpsertGraphEdge(ctx, semanticmemory.GraphEdge{ID: "demo|e1", Namespace: "demo", SourceID: table.ID, TargetID: column.ID, Kind: semanticmemory.GraphEdgeContains, Confidence: semanticmemory.GraphConfidenceExtracted}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.UpsertGraphEdge(ctx, semanticmemory.GraphEdge{ID: "demo|e2", Namespace: "demo", SourceID: table.ID, TargetID: fn.ID, Kind: semanticmemory.GraphEdgeUses, Confidence: semanticmemory.GraphConfidenceExtracted}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RefreshGraphDegrees(ctx, "demo"); err != nil {
+		t.Fatal(err)
+	}
+
+	api := NewAPI(func(_ context.Context, namespace string) (*knowledgegraph.Querier, func() error, error) {
+		if namespace != "" && namespace != "demo" {
+			return nil, nil, &notFoundError{namespace}
+		}
+		return knowledgegraph.NewQuerier(store, "demo"), func() error { return nil }, nil
+	})
+
+	subgraph := requestJSON(t, api, "/api/v1/subgraph?focus="+table.ID+"&depth=1&scope=database")
+	graph := subgraph["graph"].(map[string]any)
+	nodes := graph["nodes"].([]any)
+	sawColumn := false
+	for _, n := range nodes {
+		kind := n.(map[string]any)["kind"].(string)
+		if kind == semanticmemory.GraphNodeFunction {
+			t.Fatalf("scope=database subgraph leaked a function node")
+		}
+		if kind == "column" {
+			sawColumn = true
+		}
+	}
+	if !sawColumn {
+		t.Fatal("scope=database subgraph for a table did not include its column")
+	}
+
+	neighbors := requestJSON(t, api, "/api/v1/neighbors?focus="+table.ID+"&scope=database")
+	neighborGraph := neighbors["graph"].(map[string]any)
+	for _, n := range neighborGraph["nodes"].([]any) {
+		if n.(map[string]any)["kind"].(string) == semanticmemory.GraphNodeFunction {
+			t.Fatal("scope=database neighbors leaked a function node")
+		}
+	}
+
+	// Without scope=database, the same neighbor page includes the function.
+	mixedNeighbors := requestJSON(t, api, "/api/v1/neighbors?focus="+table.ID)
+	mixedGraph := mixedNeighbors["graph"].(map[string]any)
+	sawFunction := false
+	for _, n := range mixedGraph["nodes"].([]any) {
+		if n.(map[string]any)["kind"].(string) == semanticmemory.GraphNodeFunction {
+			sawFunction = true
+		}
+	}
+	if !sawFunction {
+		t.Fatal("mixed-mode neighbors should still include the function node")
+	}
+}
+
 func requestJSON(t *testing.T, api http.Handler, path string) map[string]any {
 	t.Helper()
 	r := httptest.NewRequest(http.MethodGet, path, nil)

@@ -151,11 +151,16 @@ type ExportGraph struct {
 
 // Overview is the small architectural map shown before a visualizer loads any
 // symbol-level detail. NodeKindCounts describes the complete graph without
-// transferring every node.
+// transferring every node. Edges and Truncated are populated by
+// scope-specific overviews (e.g. DatabaseOverview) that have a meaningful
+// hierarchy to show at this level; the default code overview leaves them
+// empty, matching its historical nodes-only shape.
 type Overview struct {
 	Namespace      string         `json:"namespace"`
 	Nodes          []ExportNode   `json:"nodes"`
 	NodeKindCounts map[string]int `json:"node_kind_counts"`
+	Edges          []ExportEdge   `json:"edges,omitempty"`
+	Truncated      bool           `json:"truncated,omitempty"`
 }
 
 // NeighborPage is a bounded direct-neighborhood view. Clients cache returned
