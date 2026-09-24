@@ -199,6 +199,8 @@ func TestViewerUIKeepsNodeClicksSeparateFromCanvasPanning(t *testing.T) {
 		`id="expand-neighbors"`,
 		`/api/v1/subgraph?focus=`,
 		`function expandNeighbors(id)`,
+		`.result b,.result small`,
+		`text-overflow:ellipsis`,
 	} {
 		if !strings.Contains(string(page), want) {
 			t.Errorf("visualizer UI is missing %q", want)
