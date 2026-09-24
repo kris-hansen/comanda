@@ -134,6 +134,52 @@ review:
   output: STDOUT
 ```
 
+## PostgreSQL schema support
+
+`.sql` files containing PostgreSQL DDL are recognized automatically during
+`comanda index capture` — no parser plugin manifest is required. A built-in
+adapter reads `CREATE SCHEMA`, `CREATE TABLE`, and
+`ALTER TABLE ... ADD CONSTRAINT` statements and emits the same
+[parser semantic graph](../../examples/codebase-index/README.md#optional-parser-semantic-graph)
+contract used by external parser plugins, so it flows through the existing
+graph builder, storage, export, and visualizer unchanged.
+
+Extracted for each schema file:
+
+- **Schemas/namespaces** — only when explicitly present, either a
+  `CREATE SCHEMA` statement or a schema-qualified name (`app.orders`).
+  Unqualified tables default internally to `public` for stable IDs, but no
+  `public` schema node is invented.
+- **Tables** — one `table` node per schema-qualified table, deduplicated by
+  qualified name across every scanned file (a table created in one migration
+  and referenced from another resolves to the same node).
+- **Columns** — one `column` node per table column, with normalized SQL type,
+  nullability, and default expression (when present) in its summary.
+- **Primary keys, unique constraints** — inline (`id serial primary key`),
+  table-level (`CONSTRAINT ... PRIMARY KEY (...)`), and `ALTER TABLE ... ADD
+  CONSTRAINT` / `ADD PRIMARY KEY` / `ADD UNIQUE` forms, including composite
+  keys (one edge per column).
+- **Foreign keys** — inline column references, table-level
+  `FOREIGN KEY (...) REFERENCES ...`, and `ALTER TABLE ... ADD CONSTRAINT ...
+  FOREIGN KEY` forms, as both a table-level edge and, when the referenced
+  columns are named explicitly, a column-level edge.
+
+Node kinds: `schema`, `table`, `column` (in addition to the existing
+`component`/`package`/`file`/`type`/`function`/`concept`). Edge kinds:
+`contains` (schema→table, table→column), `primary_key` and `unique`
+(table→column), `foreign_key` (table→table), and `references`
+(column→column). Every edge is tagged `extracted`, since these relationships
+are read directly from the DDL rather than inferred.
+
+A foreign key referencing a table that is not itself defined anywhere in the
+scan (an external or not-yet-indexed table) still resolves safely: a
+lightweight placeholder node is created for it rather than dropping the edge
+or failing the scan. Every entity and edge carries `path:line` evidence back
+to the originating statement. Quoted identifiers (`"MixedCase"`) preserve
+their exact case; unquoted identifiers fold to lowercase, matching Postgres.
+Ordinary DML, views, functions, indexes, and any DDL form the reader does not
+recognize are conservatively skipped — they never fail extraction.
+
 ## Design notes and limits
 
 - Symbol extraction reuses the codebaseindex language adapters (regex-based,

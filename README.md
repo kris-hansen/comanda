@@ -208,6 +208,16 @@ scan contributes components, packages, files, symbols, and imports as typed
 edges tagged `EXTRACTED` (explicit in the source) or `INFERRED` (name
 resolution, or an optional AI pass).
 
+Repositories that contain PostgreSQL DDL (`.sql` files with `CREATE SCHEMA`,
+`CREATE TABLE`, or `ALTER TABLE ... ADD CONSTRAINT` statements) get this
+automatically, with no parser plugin manifest required: schemas, tables,
+columns, primary keys, unique constraints, and foreign keys (inline,
+table-level, and added via `ALTER TABLE`) become `schema`/`table`/`column`
+graph nodes connected by `contains`, `primary_key`, `unique`,
+`foreign_key`, and `references` edges, so `comanda graph visualize` and
+`comanda graph explain <table>` can navigate the database schema alongside
+application code. See [PostgreSQL schema support](docs/design/knowledge-graph.md#postgresql-schema-support).
+
 ```bash
 comanda index capture -n myproject --graph      # index + graph in one run
 comanda graph build myproject                   # or build from a registered index

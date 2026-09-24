@@ -63,6 +63,7 @@ func NewRegistry() *Registry {
 	r.Register(&FlutterAdapter{})
 	r.Register(&JavaAdapter{})
 	r.Register(&TerraformAdapter{})
+	r.Register(&PostgresAdapter{})
 	return r
 }
 
