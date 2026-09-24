@@ -432,53 +432,128 @@ func (q *Querier) PathHops(ctx context.Context, fromName, toName string) ([]stri
 	return hops, err
 }
 
+// Bounds for ScopedExport's per-hop, per-total traversal. A focused subgraph
+// must stay cheap even when a seed sits a few hops from a high-degree hub
+// that touches a large fraction of a namespace's edges: without these caps a
+// single hop can pull in thousands of edges from one hub node, and depth 3
+// can cascade that across several hubs. When a cap is hit the traversal stops
+// growing rather than hanging, and ExportGraph.Truncated reports it so
+// callers can tell the user the view is partial.
+const (
+	maxScopedEdgesPerHop = 2000
+	maxScopedTotalNodes  = 1500
+	maxScopedTotalEdges  = 5000
+)
+
 // ScopedExport dumps the subgraph reachable within `hops` of the given seed
-// nodes, in the same shape as Export. Used for --json query/explain output.
+// nodes, in the same shape as Export. Used for --json query/explain output
+// and the graph visualizer's focused/query subgraph views.
+//
+// Traversal is bounded and index-backed per hop (Store.GraphEdgesForNodes
+// hits idx_graph_edges_namespace_source/target), not a scan of the
+// namespace's full edge set: cost tracks the size of the requested
+// neighborhood, not the graph. See the maxScoped* bounds above for what
+// happens when a neighborhood is unusually large.
 func (q *Querier) ScopedExport(ctx context.Context, seeds []semanticmemory.GraphNode, hops int) (*ExportGraph, error) {
 	if hops < 1 {
 		hops = 1
 	}
-	allEdges, err := q.store.GraphEdges(ctx, q.namespace)
-	if err != nil {
-		return nil, err
-	}
 	inScope := make(map[string]semanticmemory.GraphNode, len(seeds))
-	frontier := make(map[string]bool, len(seeds))
+	frontier := make([]string, 0, len(seeds))
 	for _, n := range seeds {
+		if _, seen := inScope[n.ID]; seen {
+			continue
+		}
 		inScope[n.ID] = n
-		frontier[n.ID] = true
+		frontier = append(frontier, n.ID)
 	}
-	var scopedEdges []semanticmemory.GraphEdge
-	for hop := 0; hop < hops; hop++ {
-		next := make(map[string]bool)
-		for _, e := range allEdges {
-			srcIn, tgtIn := frontier[e.SourceID], frontier[e.TargetID]
-			if !srcIn && !tgtIn {
-				continue
-			}
-			scopedEdges = append(scopedEdges, e)
+
+	scopedEdges := make(map[string]semanticmemory.GraphEdge)
+	truncated := false
+
+	for hop := 0; hop < hops && len(frontier) > 0; hop++ {
+		if len(inScope) >= maxScopedTotalNodes || len(scopedEdges) >= maxScopedTotalEdges {
+			truncated = true
+			break
+		}
+
+		edges, hasMore, err := q.store.GraphEdgesForNodes(ctx, q.namespace, frontier, maxScopedEdgesPerHop)
+		if err != nil {
+			return nil, err
+		}
+		if hasMore {
+			truncated = true
+		}
+
+		// Cap the edges considered this hop to the remaining total-edge
+		// budget before discovering new nodes from them, so a node is never
+		// admitted on the strength of an edge that won't fit in the output.
+		if budget := maxScopedTotalEdges - len(scopedEdges); len(edges) > budget {
+			truncated = true
+			edges = edges[:budget]
+		}
+
+		var newIDs []string
+		seenNew := make(map[string]bool)
+		for _, e := range edges {
 			for _, id := range []string{e.SourceID, e.TargetID} {
-				if _, seen := inScope[id]; !seen {
-					node, err := q.store.GetGraphNode(ctx, id)
-					if err != nil {
-						continue
-					}
-					inScope[id] = node
+				if _, seen := inScope[id]; seen {
+					continue
 				}
-				if !frontier[id] {
-					next[id] = true
+				if !seenNew[id] {
+					seenNew[id] = true
+					newIDs = append(newIDs, id)
 				}
 			}
 		}
-		frontier = next
+
+		if room := maxScopedTotalNodes - len(inScope); len(newIDs) > room {
+			truncated = true
+			if room < 0 {
+				room = 0
+			}
+			newIDs = newIDs[:room]
+		}
+
+		if len(newIDs) > 0 {
+			nodes, err := q.store.GetGraphNodesByIDs(ctx, newIDs)
+			if err != nil {
+				return nil, err
+			}
+			for _, node := range nodes {
+				inScope[node.ID] = node
+			}
+		}
+
+		// Only now that node admission is final, add edges whose endpoints
+		// both survived the caps. An edge whose endpoint was dropped for
+		// exceeding maxScopedTotalNodes must never appear in the output —
+		// it would dangle, pointing at a node the caller was never sent.
+		frontier = frontier[:0]
+		for _, e := range edges {
+			_, srcIn := inScope[e.SourceID]
+			_, tgtIn := inScope[e.TargetID]
+			if !srcIn || !tgtIn {
+				truncated = true
+				continue
+			}
+			scopedEdges[e.ID] = e
+		}
+		for _, id := range newIDs {
+			if _, ok := inScope[id]; ok {
+				frontier = append(frontier, id)
+			}
+		}
 	}
 
-	out := &ExportGraph{Namespace: q.namespace, Nodes: []ExportNode{}, Edges: []ExportEdge{}}
+	out := &ExportGraph{
+		Namespace: q.namespace,
+		Nodes:     make([]ExportNode, 0, len(inScope)),
+		Edges:     make([]ExportEdge, 0, len(scopedEdges)),
+		Truncated: truncated,
+	}
 	for _, n := range inScope {
-		out.Nodes = append(out.Nodes, ExportNode{
-			ID: LocalID(n.ID), Kind: n.Kind, Name: n.Name, Path: n.Path,
-			Package: n.Package, Summary: n.Summary, Degree: n.Degree,
-		})
+		out.Nodes = append(out.Nodes, exportGraphNode(n))
 	}
 	for _, e := range scopedEdges {
 		out.Edges = append(out.Edges, ExportEdge{

@@ -414,6 +414,64 @@ func (s *Store) GraphEdges(ctx context.Context, namespace string) ([]GraphEdge, 
 	return collectGraphEdges(rows)
 }
 
+// GraphEdgesForNodes returns edges touching any of the given node IDs, in
+// either direction, ordered and capped at limit+1 rows so callers can detect
+// truncation without materializing more than they asked for. Unlike
+// GraphEdges, it never touches rows outside the requested node set — bounded
+// multi-hop traversal (ScopedExport) calls it once per hop so a namespace's
+// total edge count never bounds the cost of a small focused subgraph.
+func (s *Store) GraphEdgesForNodes(ctx context.Context, namespace string, nodeIDs []string, limit int) ([]GraphEdge, bool, error) {
+	namespace = normalizeNamespace(namespace)
+	if len(nodeIDs) == 0 {
+		return nil, false, nil
+	}
+	if limit <= 0 {
+		limit = 2000
+	}
+	idsJSON, err := json.Marshal(nodeIDs)
+	if err != nil {
+		return nil, false, fmt.Errorf("encode graph node IDs: %w", err)
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id, namespace, source_id, target_id, kind, confidence, evidence, created_at, updated_at
+        FROM graph_edges WHERE namespace = ? AND (
+            source_id IN (SELECT value FROM json_each(?)) OR
+            target_id IN (SELECT value FROM json_each(?))
+        ) ORDER BY id LIMIT ?`, namespace, string(idsJSON), string(idsJSON), limit+1)
+	if err != nil {
+		return nil, false, fmt.Errorf("list graph edges for nodes: %w", err)
+	}
+	edges, err := collectGraphEdges(rows)
+	rows.Close()
+	if err != nil {
+		return nil, false, err
+	}
+	hasMore := len(edges) > limit
+	if hasMore {
+		edges = edges[:limit]
+	}
+	return edges, hasMore, nil
+}
+
+// GetGraphNodesByIDs batch-loads nodes by their stored IDs. Callers that
+// discover new node IDs incrementally (e.g. bounded BFS traversal) should use
+// this instead of one GetGraphNode call per ID.
+func (s *Store) GetGraphNodesByIDs(ctx context.Context, ids []string) ([]GraphNode, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	idsJSON, err := json.Marshal(ids)
+	if err != nil {
+		return nil, fmt.Errorf("encode graph node IDs: %w", err)
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id, namespace, kind, name, path, package, summary, degree, created_at, updated_at
+        FROM graph_nodes WHERE id IN (SELECT value FROM json_each(?))`, string(idsJSON))
+	if err != nil {
+		return nil, fmt.Errorf("batch load graph nodes: %w", err)
+	}
+	defer rows.Close()
+	return collectGraphNodes(rows)
+}
+
 // GraphNeighbors returns the edges touching a node (in either direction) and
 // the nodes at the other end of those edges.
 func (s *Store) GraphNeighbors(ctx context.Context, namespace, nodeID string) ([]GraphEdge, []GraphNode, error) {
