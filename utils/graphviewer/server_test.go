@@ -199,6 +199,120 @@ func TestViewerUIKeepsNodeClicksSeparateFromCanvasPanning(t *testing.T) {
 		`id="expand-neighbors"`,
 		`/api/v1/subgraph?focus=`,
 		`function expandNeighbors(id)`,
+		`.result b,.result small`,
+		`text-overflow:ellipsis`,
+	} {
+		if !strings.Contains(string(page), want) {
+			t.Errorf("visualizer UI is missing %q", want)
+		}
+	}
+}
+
+func TestOverviewExposesDatabaseKindCountsForFilterSeeding(t *testing.T) {
+	store, err := semanticmemory.Open(filepath.Join(t.TempDir(), "graph.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	ctx := context.Background()
+
+	schema, err := store.UpsertGraphNode(ctx, semanticmemory.GraphNode{ID: "demo|schema:public", Namespace: "demo", Kind: "schema", Name: "public"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	table, err := store.UpsertGraphNode(ctx, semanticmemory.GraphNode{ID: "demo|table:public.users", Namespace: "demo", Kind: "table", Name: "public.users"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	column, err := store.UpsertGraphNode(ctx, semanticmemory.GraphNode{ID: "demo|column:public.users.id", Namespace: "demo", Kind: "column", Name: "public.users.id"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.UpsertGraphNode(ctx, semanticmemory.GraphNode{ID: "demo|fn:main", Namespace: "demo", Kind: semanticmemory.GraphNodeFunction, Name: "main"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.UpsertGraphEdge(ctx, semanticmemory.GraphEdge{ID: "demo|e1", Namespace: "demo", SourceID: schema.ID, TargetID: table.ID, Kind: semanticmemory.GraphEdgeContains, Confidence: semanticmemory.GraphConfidenceExtracted}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.UpsertGraphEdge(ctx, semanticmemory.GraphEdge{ID: "demo|e2", Namespace: "demo", SourceID: table.ID, TargetID: column.ID, Kind: semanticmemory.GraphEdgeContains, Confidence: semanticmemory.GraphConfidenceExtracted}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.UpsertGraphEdge(ctx, semanticmemory.GraphEdge{ID: "demo|e3", Namespace: "demo", SourceID: table.ID, TargetID: column.ID, Kind: "primary_key", Confidence: semanticmemory.GraphConfidenceExtracted}); err != nil {
+		t.Fatal(err)
+	}
+
+	api := NewAPI(func(_ context.Context, namespace string) (*knowledgegraph.Querier, func() error, error) {
+		if namespace != "" && namespace != "demo" {
+			return nil, nil, &notFoundError{namespace}
+		}
+		return knowledgegraph.NewQuerier(store, "demo"), func() error { return nil }, nil
+	})
+
+	overview := requestJSON(t, api, "/api/v1/overview")
+	counts, ok := overview["node_kind_counts"].(map[string]any)
+	if !ok {
+		t.Fatalf("node_kind_counts missing or wrong shape: %#v", overview["node_kind_counts"])
+	}
+	for _, kind := range []string{"schema", "table", "column", semanticmemory.GraphNodeFunction} {
+		if _, present := counts[kind]; !present {
+			t.Errorf("node_kind_counts missing DB kind %q: %#v", kind, counts)
+		}
+	}
+
+	subgraph := requestJSON(t, api, "/api/v1/subgraph?focus="+schema.ID+"&depth=2")
+	graph := subgraph["graph"].(map[string]any)
+	nodes := graph["nodes"].([]any)
+	present := make(map[string]bool, len(nodes))
+	for _, n := range nodes {
+		present[n.(map[string]any)["id"].(string)] = true
+	}
+	for _, e := range graph["edges"].([]any) {
+		edge := e.(map[string]any)
+		if !present[edge["source"].(string)] || !present[edge["target"].(string)] {
+			t.Fatalf("dangling edge in scoped subgraph: %#v", edge)
+		}
+	}
+}
+
+func TestViewerUIStylesDatabaseKindsWithAccessibleControls(t *testing.T) {
+	page, err := webFiles.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		// A database palette distinct from the code palette, with light and
+		// dark variants.
+		`--db-schema:`,
+		`--db-table:`,
+		`--db-column:`,
+		`schema:'var(--db-schema)'`,
+		`table:'var(--db-table)'`,
+		`column:'var(--db-column)'`,
+		`.block.schema .top`,
+		`.block.table .top`,
+		`.block.column .top`,
+		// DB-specific relationships (contains among DB nodes, key
+		// constraints, foreign keys/references) get distinct, non-color-only
+		// styling (dash patterns), not just the generic edge style.
+		`DB_KEY_EDGES=new Set(['primary_key','unique'])`,
+		`DB_FK_EDGES=new Set(['foreign_key','references'])`,
+		`.edge.edge-db {`,
+		`.edge.edge-db-key {`,
+		`stroke-dasharray:1 3`,
+		`.edge.edge-db-fk {`,
+		`stroke-dasharray:7 3`,
+		// Node kinds filters are seeded from the compact overview kind-count
+		// metadata (not a full-graph load) as well as scoped data.
+		`Object.keys(overview.node_kind_counts||{}).forEach(k=>kinds.add(k))`,
+		// One-click Database only / All-mixed controls with accessible
+		// labels, plus per-checkbox toggle labels.
+		`id="kinds-db-only"`,
+		`id="kinds-all"`,
+		`aria-label="Show database nodes only and hide code nodes and relationships"`,
+		`aria-label="Show all node kinds, mixing code and database"`,
+		`setKindsChecked(k=>DB_KINDS.has(k))`,
+		`aria-label="Toggle ${esc(kind)} nodes`,
+		`aria-hidden="true" style="color:`,
 	} {
 		if !strings.Contains(string(page), want) {
 			t.Errorf("visualizer UI is missing %q", want)

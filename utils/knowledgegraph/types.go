@@ -138,11 +138,15 @@ type ExportEdge struct {
 	Evidence   string `json:"evidence,omitempty"`
 }
 
-// ExportGraph is the top-level graph.json shape.
+// ExportGraph is the top-level graph.json shape. Truncated is set when a
+// bounded traversal (ScopedExport) hit a node/edge cap and stopped growing
+// rather than materializing an unbounded neighborhood; Export itself (the
+// full namespace dump) never sets it.
 type ExportGraph struct {
 	Namespace string       `json:"namespace"`
 	Nodes     []ExportNode `json:"nodes"`
 	Edges     []ExportEdge `json:"edges"`
+	Truncated bool         `json:"truncated,omitempty"`
 }
 
 // Overview is the small architectural map shown before a visualizer loads any
