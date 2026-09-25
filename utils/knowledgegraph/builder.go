@@ -69,6 +69,7 @@ func Build(scan *codebaseindex.ScanResult, namespace string) *Graph {
 
 	// Pass 3: component contains edges.
 	componentNames := make(map[string]int)
+	componentIDsByRoot := make(map[string][]string)
 	for _, c := range scan.Components {
 		componentNames[c.Name]++
 	}
@@ -80,6 +81,8 @@ func Build(scan *codebaseindex.ScanResult, namespace string) *Graph {
 		g.AddNode(local, NodeComponent, c.Name, c.Root, "",
 			fmt.Sprintf("%s component (%d files)", c.Kind, c.FileCount))
 		componentID := NodeID(namespace, local)
+		root := path.Clean(c.Root)
+		componentIDsByRoot[root] = append(componentIDsByRoot[root], componentID)
 		for _, f := range scan.Candidates {
 			if path.Clean(c.Root) == "." || f.Path == c.Root || strings.HasPrefix(f.Path, strings.TrimSuffix(c.Root, "/")+"/") {
 				g.AddEdge(componentID, NodeID(namespace, "file:"+f.Path), EdgeContains, ConfidenceExtracted, "component root")
@@ -108,7 +111,7 @@ func Build(scan *codebaseindex.ScanResult, namespace string) *Graph {
 
 	// Pass 5: inferred uses edges from symbol name references.
 	inferUses(g, scan, namespace)
-	addParserSemantics(g, scan, packages, legacyImports)
+	addParserSemantics(g, scan, packages, legacyImports, componentIDsByRoot)
 
 	return g
 }

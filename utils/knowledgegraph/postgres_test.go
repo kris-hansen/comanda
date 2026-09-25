@@ -135,3 +135,80 @@ func TestPostgresGraphIgnoresPlainSQLWithoutErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestPostgresProjectEntitiesStayWithinMonorepoComponent(t *testing.T) {
+	adapter := &codebaseindex.PostgresAdapter{}
+	ddl := `CREATE SCHEMA app; CREATE TABLE app.items (id BIGINT PRIMARY KEY);`
+	entry := func(filePath string) *codebaseindex.FileEntry {
+		symbols, err := adapter.ExtractSymbols(filePath, []byte(ddl))
+		if err != nil {
+			t.Fatalf("extract %s: %v", filePath, err)
+		}
+		return &codebaseindex.FileEntry{Path: filePath, Language: "postgresql", Symbols: symbols}
+	}
+	scan := &codebaseindex.ScanResult{
+		IsMonorepo: true,
+		Components: []*codebaseindex.CodebaseComponent{
+			{Name: "service-a", Root: "services/a", Language: "go", Kind: "backend", FileCount: 2},
+			{Name: "service-b", Root: "services/b", Language: "go", Kind: "backend", FileCount: 2},
+		},
+		Candidates: []*codebaseindex.FileEntry{
+			entry("services/a/db/001.sql"),
+			entry("services/b/db/001.sql"),
+		},
+	}
+	g := Build(scan, "monorepo")
+
+	componentA := NodeID("monorepo", "component:service-a")
+	componentB := NodeID("monorepo", "component:service-b")
+	schemaA := NodeID("monorepo", "semantic:10:postgresql:project:10:services/a:schema:app")
+	schemaB := NodeID("monorepo", "semantic:10:postgresql:project:10:services/b:schema:app")
+	if g.Nodes[schemaA] == nil || g.Nodes[schemaB] == nil || schemaA == schemaB {
+		t.Fatalf("project-scoped schemas were not separated by component: a=%+v b=%+v", g.Nodes[schemaA], g.Nodes[schemaB])
+	}
+	if g.Edges[EdgeID("monorepo", componentA, schemaA, EdgeContains)] == nil {
+		t.Fatal("service-a component does not contain its schema")
+	}
+	if g.Edges[EdgeID("monorepo", componentB, schemaB, EdgeContains)] == nil {
+		t.Fatal("service-b component does not contain its schema")
+	}
+	if g.Edges[EdgeID("monorepo", componentA, schemaB, EdgeContains)] != nil {
+		t.Fatal("service-a component leaked service-b schema")
+	}
+	for _, edge := range g.Edges {
+		if edge.SourceID == componentA && g.Nodes[edge.TargetID] != nil && g.Nodes[edge.TargetID].Kind == "column" {
+			t.Fatal("component linked directly to columns instead of preserving progressive schema/table drill-down")
+		}
+	}
+
+	store, err := semanticmemory.Open(filepath.Join(t.TempDir(), "graph.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := RebuildWithProgress(context.Background(), store, g, nil); err != nil {
+		t.Fatal(err)
+	}
+	focus, err := store.GetGraphNode(context.Background(), componentA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	view, err := NewQuerier(store, "monorepo").ScopedExportKinds(context.Background(), []semanticmemory.GraphNode{focus}, 2, DatabaseNodeKinds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	present := make(map[string]bool, len(view.Nodes))
+	for _, node := range view.Nodes {
+		present[node.ID] = true
+	}
+	if !present[LocalID(schemaA)] {
+		t.Fatal("database-only component view did not include its schema")
+	}
+	if present[LocalID(schemaB)] {
+		t.Fatal("database-only component view included another component's schema")
+	}
+	tableA := LocalID(NodeID("monorepo", "semantic:10:postgresql:project:10:services/a:table:app.items"))
+	if !present[tableA] {
+		t.Fatal("database-only component view did not include its table at depth 2")
+	}
+}
