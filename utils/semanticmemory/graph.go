@@ -565,6 +565,19 @@ func (s *Store) GraphNeighbors(ctx context.Context, namespace, nodeID string) ([
 // relationships. Browsers use it for progressive exploration of large graphs.
 // Offset pagination keeps the API simple while the client caches loaded pages.
 func (s *Store) GraphNeighborPage(ctx context.Context, namespace, nodeID string, limit, offset int) ([]GraphEdge, []GraphNode, bool, error) {
+	return s.graphNeighborPage(ctx, namespace, nodeID, limit, offset, nil)
+}
+
+// GraphNeighborPageKinds is GraphNeighborPage with the neighbor kind filter
+// applied before LIMIT/OFFSET. This matters for domain-specific views: if a
+// high-degree node has many code relationships, filtering an ordinary page
+// after it is fetched can yield an empty database page even when database
+// relationships exist later in the stable ordering.
+func (s *Store) GraphNeighborPageKinds(ctx context.Context, namespace, nodeID string, limit, offset int, kinds []string) ([]GraphEdge, []GraphNode, bool, error) {
+	return s.graphNeighborPage(ctx, namespace, nodeID, limit, offset, kinds)
+}
+
+func (s *Store) graphNeighborPage(ctx context.Context, namespace, nodeID string, limit, offset int, kinds []string) ([]GraphEdge, []GraphNode, bool, error) {
 	namespace = normalizeNamespace(namespace)
 	if limit <= 0 {
 		limit = 160
@@ -575,9 +588,25 @@ func (s *Store) GraphNeighborPage(ctx context.Context, namespace, nodeID string,
 	if offset < 0 {
 		offset = 0
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id, namespace, source_id, target_id, kind, confidence, evidence, created_at, updated_at
-        FROM graph_edges WHERE namespace = ? AND (source_id = ? OR target_id = ?)
-        ORDER BY id LIMIT ? OFFSET ?`, namespace, nodeID, nodeID, limit+1, offset)
+	query := `SELECT e.id, e.namespace, e.source_id, e.target_id, e.kind, e.confidence, e.evidence, e.created_at, e.updated_at
+        FROM graph_edges e WHERE e.namespace = ? AND (e.source_id = ? OR e.target_id = ?)`
+	args := []any{namespace, nodeID, nodeID}
+	if len(kinds) > 0 {
+		kindsJSON, err := json.Marshal(kinds)
+		if err != nil {
+			return nil, nil, false, fmt.Errorf("encode graph neighbor kinds: %w", err)
+		}
+		query += ` AND EXISTS (
+            SELECT 1 FROM graph_nodes n
+            WHERE n.id = CASE WHEN e.source_id = ? THEN e.target_id ELSE e.source_id END
+              AND n.namespace = e.namespace
+              AND n.kind IN (SELECT value FROM json_each(?))
+        )`
+		args = append(args, nodeID, string(kindsJSON))
+	}
+	query += ` ORDER BY e.id LIMIT ? OFFSET ?`
+	args = append(args, limit+1, offset)
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, nil, false, fmt.Errorf("list graph neighbor page: %w", err)
 	}

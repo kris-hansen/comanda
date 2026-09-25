@@ -457,7 +457,34 @@ func (q *Querier) DatabaseOverview(ctx context.Context) (*Overview, error) {
 // NeighborPage returns one bounded page of direct neighbors without scanning
 // or serializing the complete graph.
 func (q *Querier) NeighborPage(ctx context.Context, focus semanticmemory.GraphNode, limit, offset int) (*NeighborPage, error) {
-	edges, nodes, hasMore, err := q.store.GraphNeighborPage(ctx, q.namespace, focus.ID, limit, offset)
+	return q.neighborPage(ctx, focus, limit, offset, nil)
+}
+
+// NeighborPageKinds returns a bounded direct-neighbor page whose kind filter
+// is applied in the store before pagination. Filtering after NeighborPage is
+// too late for mixed, high-degree monorepo nodes because the requested domain
+// may not occur in the first generic page.
+func (q *Querier) NeighborPageKinds(ctx context.Context, focus semanticmemory.GraphNode, limit, offset int, allowKinds map[string]bool) (*NeighborPage, error) {
+	kinds := make([]string, 0, len(allowKinds))
+	for kind, allowed := range allowKinds {
+		if allowed {
+			kinds = append(kinds, kind)
+		}
+	}
+	sort.Strings(kinds)
+	return q.neighborPage(ctx, focus, limit, offset, kinds)
+}
+
+func (q *Querier) neighborPage(ctx context.Context, focus semanticmemory.GraphNode, limit, offset int, kinds []string) (*NeighborPage, error) {
+	var edges []semanticmemory.GraphEdge
+	var nodes []semanticmemory.GraphNode
+	var hasMore bool
+	var err error
+	if len(kinds) > 0 {
+		edges, nodes, hasMore, err = q.store.GraphNeighborPageKinds(ctx, q.namespace, focus.ID, limit, offset, kinds)
+	} else {
+		edges, nodes, hasMore, err = q.store.GraphNeighborPage(ctx, q.namespace, focus.ID, limit, offset)
+	}
 	if err != nil {
 		return nil, err
 	}
