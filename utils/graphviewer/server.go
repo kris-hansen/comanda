@@ -245,40 +245,18 @@ func (a *API) handleNeighbors(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, err.Error())
 			return
 		}
-		page, err := q.NeighborPage(r.Context(), *node, limit, offset)
+		var page *knowledgegraph.NeighborPage
+		if databaseOnly {
+			page, err = q.NeighborPageKinds(r.Context(), *node, limit, offset, knowledgegraph.DatabaseNodeKinds)
+		} else {
+			page, err = q.NeighborPage(r.Context(), *node, limit, offset)
+		}
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		if databaseOnly {
-			page.Graph = filterGraphToKinds(page.Graph, page.Focus.ID, knowledgegraph.DatabaseNodeKinds)
-		}
 		writeJSON(w, http.StatusOK, page)
 	})
-}
-
-// filterGraphToKinds keeps keepID (the focus node, regardless of its own
-// kind) and any other node whose kind is in allowKinds, then drops edges
-// whose endpoint was removed so the result never dangles. It backs the
-// "database only" neighbor page: GraphNeighborPage itself is a generic,
-// kind-agnostic bounded query, so the scope filter is applied once on the
-// small, already-bounded page it returns rather than plumbed into the store.
-func filterGraphToKinds(g knowledgegraph.ExportGraph, keepID string, allowKinds map[string]bool) knowledgegraph.ExportGraph {
-	kept := make(map[string]bool, len(g.Nodes))
-	nodes := make([]knowledgegraph.ExportNode, 0, len(g.Nodes))
-	for _, n := range g.Nodes {
-		if n.ID == keepID || allowKinds[n.Kind] {
-			kept[n.ID] = true
-			nodes = append(nodes, n)
-		}
-	}
-	edges := make([]knowledgegraph.ExportEdge, 0, len(g.Edges))
-	for _, e := range g.Edges {
-		if kept[e.Source] && kept[e.Target] {
-			edges = append(edges, e)
-		}
-	}
-	return knowledgegraph.ExportGraph{Namespace: g.Namespace, Nodes: nodes, Edges: edges, Truncated: g.Truncated}
 }
 
 func (a *API) handleSubgraph(w http.ResponseWriter, r *http.Request) {

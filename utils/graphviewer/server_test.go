@@ -399,7 +399,9 @@ func TestOverviewDatabaseScopeReturnsSchemaTableMapAndRestoresMixed(t *testing.T
 // drill-down API contract: focusing a table with scope=database returns its
 // columns and database relationships (ScopedExportKinds), and paging its
 // neighbors with scope=database never surfaces the code node planted right
-// next to it.
+// next to it. The code edge sorts before the database edge and the request is
+// limited to one result, reproducing the monorepo failure where filtering a
+// generic page after pagination made the database child disappear.
 func TestSubgraphAndNeighborsDatabaseScopeStayWithinDatabaseKinds(t *testing.T) {
 	store, err := semanticmemory.Open(filepath.Join(t.TempDir(), "graph.db"))
 	if err != nil {
@@ -420,10 +422,10 @@ func TestSubgraphAndNeighborsDatabaseScopeStayWithinDatabaseKinds(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.UpsertGraphEdge(ctx, semanticmemory.GraphEdge{ID: "demo|e1", Namespace: "demo", SourceID: table.ID, TargetID: column.ID, Kind: semanticmemory.GraphEdgeContains, Confidence: semanticmemory.GraphConfidenceExtracted}); err != nil {
+	if _, err := store.UpsertGraphEdge(ctx, semanticmemory.GraphEdge{ID: "demo|z-database", Namespace: "demo", SourceID: table.ID, TargetID: column.ID, Kind: semanticmemory.GraphEdgeContains, Confidence: semanticmemory.GraphConfidenceExtracted}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.UpsertGraphEdge(ctx, semanticmemory.GraphEdge{ID: "demo|e2", Namespace: "demo", SourceID: table.ID, TargetID: fn.ID, Kind: semanticmemory.GraphEdgeUses, Confidence: semanticmemory.GraphConfidenceExtracted}); err != nil {
+	if _, err := store.UpsertGraphEdge(ctx, semanticmemory.GraphEdge{ID: "demo|a-code", Namespace: "demo", SourceID: table.ID, TargetID: fn.ID, Kind: semanticmemory.GraphEdgeUses, Confidence: semanticmemory.GraphConfidenceExtracted}); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.RefreshGraphDegrees(ctx, "demo"); err != nil {
@@ -454,16 +456,25 @@ func TestSubgraphAndNeighborsDatabaseScopeStayWithinDatabaseKinds(t *testing.T) 
 		t.Fatal("scope=database subgraph for a table did not include its column")
 	}
 
-	neighbors := requestJSON(t, api, "/api/v1/neighbors?focus="+table.ID+"&scope=database")
+	neighbors := requestJSON(t, api, "/api/v1/neighbors?focus="+table.ID+"&limit=1&scope=database")
 	neighborGraph := neighbors["graph"].(map[string]any)
+	sawNeighborColumn := false
 	for _, n := range neighborGraph["nodes"].([]any) {
-		if n.(map[string]any)["kind"].(string) == semanticmemory.GraphNodeFunction {
+		kind := n.(map[string]any)["kind"].(string)
+		if kind == semanticmemory.GraphNodeFunction {
 			t.Fatal("scope=database neighbors leaked a function node")
 		}
+		if kind == "column" {
+			sawNeighborColumn = true
+		}
+	}
+	if !sawNeighborColumn {
+		t.Fatal("scope=database neighbors paginated before filtering and lost the column relationship")
 	}
 
-	// Without scope=database, the same neighbor page includes the function.
-	mixedNeighbors := requestJSON(t, api, "/api/v1/neighbors?focus="+table.ID)
+	// Without scope=database, the same first page still follows the generic
+	// ordering and includes the function rather than the later column edge.
+	mixedNeighbors := requestJSON(t, api, "/api/v1/neighbors?focus="+table.ID+"&limit=1")
 	mixedGraph := mixedNeighbors["graph"].(map[string]any)
 	sawFunction := false
 	for _, n := range mixedGraph["nodes"].([]any) {
