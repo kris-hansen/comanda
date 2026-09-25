@@ -452,6 +452,48 @@ func (s *Store) GraphEdgesForNodes(ctx context.Context, namespace string, nodeID
 	return edges, hasMore, nil
 }
 
+// GraphEdgesBetweenNodes returns edges whose source AND target are both in
+// the given ID set, capped at limit+1 rows so callers can detect truncation.
+// Unlike GraphEdgesForNodes (which matches source OR target and so pulls in
+// every edge to nodes outside the set — e.g. a table's edges to tens of
+// thousands of columns), this only returns edges strictly within the given
+// node set. That is the right shape for a compact hierarchy/relationship
+// view over a bounded set of nodes (e.g. an architecture-level schema/table
+// map) where nodes outside the set must never appear, and where the cost
+// must stay proportional to the given set, not to how many columns hang off
+// of it.
+func (s *Store) GraphEdgesBetweenNodes(ctx context.Context, namespace string, nodeIDs []string, limit int) ([]GraphEdge, bool, error) {
+	namespace = normalizeNamespace(namespace)
+	if len(nodeIDs) == 0 {
+		return nil, false, nil
+	}
+	if limit <= 0 {
+		limit = 2000
+	}
+	idsJSON, err := json.Marshal(nodeIDs)
+	if err != nil {
+		return nil, false, fmt.Errorf("encode graph node IDs: %w", err)
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id, namespace, source_id, target_id, kind, confidence, evidence, created_at, updated_at
+        FROM graph_edges WHERE namespace = ?
+            AND source_id IN (SELECT value FROM json_each(?))
+            AND target_id IN (SELECT value FROM json_each(?))
+        ORDER BY id LIMIT ?`, namespace, string(idsJSON), string(idsJSON), limit+1)
+	if err != nil {
+		return nil, false, fmt.Errorf("list graph edges between nodes: %w", err)
+	}
+	edges, err := collectGraphEdges(rows)
+	rows.Close()
+	if err != nil {
+		return nil, false, err
+	}
+	hasMore := len(edges) > limit
+	if hasMore {
+		edges = edges[:limit]
+	}
+	return edges, hasMore, nil
+}
+
 // GetGraphNodesByIDs batch-loads nodes by their stored IDs. Callers that
 // discover new node IDs incrementally (e.g. bounded BFS traversal) should use
 // this instead of one GetGraphNode call per ID.

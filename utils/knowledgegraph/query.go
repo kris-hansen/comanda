@@ -372,6 +372,88 @@ func (q *Querier) Overview(ctx context.Context) (*Overview, error) {
 	return out, nil
 }
 
+// DatabaseNodeKinds identifies the kinds that make up a database's own
+// self-contained graph, extracted from SQL DDL (see codebaseindex's Postgres
+// DDL parser). They never connect to source-code nodes directly, so a
+// scope-aware "database only" view needs its own fetch path rather than
+// hiding code-kind checkboxes over whatever code-oriented graph happens to
+// already be loaded client-side.
+var DatabaseNodeKinds = map[string]bool{"schema": true, "table": true, "column": true}
+
+// Bounds for DatabaseOverview's architecture-level database map. Table nodes
+// already carry a compact "N columns" summary from extraction, so the
+// architecture level never has to load column nodes — there can be tens of
+// thousands of them — to show the database's footprint.
+const (
+	maxDatabaseOverviewSchemas = 200
+	maxDatabaseOverviewTables  = 1000
+)
+
+// DatabaseOverview returns the architecture-level database map: every schema
+// and table node (bounded, highest-degree first), their containment
+// hierarchy and table-to-table foreign keys, and complete kind counts
+// (including columns) so the caller can report the full database footprint
+// without rendering a node per column. It degrades gracefully to an empty
+// map for a namespace with no database nodes. It is the database-scoped
+// counterpart to Overview, the cheap first request for visualizing a large
+// database schema.
+func (q *Querier) DatabaseOverview(ctx context.Context) (*Overview, error) {
+	counts, err := q.store.GraphNodeKindCounts(ctx, q.namespace)
+	if err != nil {
+		return nil, err
+	}
+	schemas, err := q.store.GraphNodesByKind(ctx, q.namespace, "schema", maxDatabaseOverviewSchemas)
+	if err != nil {
+		return nil, err
+	}
+	tables, err := q.store.GraphNodesByKind(ctx, q.namespace, "table", maxDatabaseOverviewTables)
+	if err != nil {
+		return nil, err
+	}
+
+	out := &Overview{
+		Namespace:      q.namespace,
+		Nodes:          make([]ExportNode, 0, len(schemas)+len(tables)),
+		NodeKindCounts: counts,
+		Truncated:      counts["schema"] > len(schemas) || counts["table"] > len(tables),
+	}
+	inScope := make(map[string]bool, len(schemas)+len(tables))
+	ids := make([]string, 0, len(schemas)+len(tables))
+	for _, n := range schemas {
+		out.Nodes = append(out.Nodes, exportGraphNode(n))
+		inScope[n.ID] = true
+		ids = append(ids, n.ID)
+	}
+	for _, n := range tables {
+		out.Nodes = append(out.Nodes, exportGraphNode(n))
+		inScope[n.ID] = true
+		ids = append(ids, n.ID)
+	}
+	if len(ids) == 0 {
+		return out, nil
+	}
+
+	// GraphEdgesBetweenNodes (not GraphEdgesForNodes) is required here: a
+	// union query would pull in every table's edges to its columns before
+	// ever reaching the schema/table hierarchy this view wants, so a
+	// database with tens of thousands of columns would exhaust the edge
+	// budget on nodes the architecture level never shows.
+	edges, hasMore, err := q.store.GraphEdgesBetweenNodes(ctx, q.namespace, ids, maxScopedEdgesPerHop)
+	if err != nil {
+		return nil, err
+	}
+	if hasMore {
+		out.Truncated = true
+	}
+	for _, e := range edges {
+		out.Edges = append(out.Edges, ExportEdge{
+			Source: LocalID(e.SourceID), Target: LocalID(e.TargetID),
+			Kind: e.Kind, Confidence: e.Confidence, Evidence: e.Evidence,
+		})
+	}
+	return out, nil
+}
+
 // NeighborPage returns one bounded page of direct neighbors without scanning
 // or serializing the complete graph.
 func (q *Querier) NeighborPage(ctx context.Context, focus semanticmemory.GraphNode, limit, offset int) (*NeighborPage, error) {
@@ -455,6 +537,23 @@ const (
 // neighborhood, not the graph. See the maxScoped* bounds above for what
 // happens when a neighborhood is unusually large.
 func (q *Querier) ScopedExport(ctx context.Context, seeds []semanticmemory.GraphNode, hops int) (*ExportGraph, error) {
+	return q.scopedExport(ctx, seeds, hops, nil)
+}
+
+// ScopedExportKinds is ScopedExport restricted to a scope-aware node-kind
+// allow-list during traversal (e.g. DatabaseNodeKinds). Seed nodes are
+// always kept regardless of kind — the caller already chose them as the
+// focus — but every node discovered while expanding the frontier is only
+// admitted, and its edges only kept, when its kind is in allowKinds. This is
+// what lets "database only" drill into a table and see its columns and
+// foreign keys without crossing into unrelated node kinds, without assuming
+// the domains are actually disjoint (they are, today, but nothing here
+// depends on that).
+func (q *Querier) ScopedExportKinds(ctx context.Context, seeds []semanticmemory.GraphNode, hops int, allowKinds map[string]bool) (*ExportGraph, error) {
+	return q.scopedExport(ctx, seeds, hops, allowKinds)
+}
+
+func (q *Querier) scopedExport(ctx context.Context, seeds []semanticmemory.GraphNode, hops int, allowKinds map[string]bool) (*ExportGraph, error) {
 	if hops < 1 {
 		hops = 1
 	}
@@ -469,6 +568,11 @@ func (q *Querier) ScopedExport(ctx context.Context, seeds []semanticmemory.Graph
 	}
 
 	scopedEdges := make(map[string]semanticmemory.GraphEdge)
+	// filteredIDs holds node IDs excluded by allowKinds — a scope choice, not
+	// a size limit. An edge dropped only because its endpoint landed here
+	// must not mark the result Truncated: that word means "there was more
+	// and we stopped", not "the caller asked to see a narrower scope".
+	filteredIDs := make(map[string]bool)
 	truncated := false
 
 	for hop := 0; hop < hops && len(frontier) > 0; hop++ {
@@ -500,6 +604,9 @@ func (q *Querier) ScopedExport(ctx context.Context, seeds []semanticmemory.Graph
 				if _, seen := inScope[id]; seen {
 					continue
 				}
+				if filteredIDs[id] {
+					continue
+				}
 				if !seenNew[id] {
 					seenNew[id] = true
 					newIDs = append(newIDs, id)
@@ -521,6 +628,10 @@ func (q *Querier) ScopedExport(ctx context.Context, seeds []semanticmemory.Graph
 				return nil, err
 			}
 			for _, node := range nodes {
+				if allowKinds != nil && !allowKinds[node.Kind] {
+					filteredIDs[node.ID] = true
+					continue
+				}
 				inScope[node.ID] = node
 			}
 		}
@@ -528,13 +639,17 @@ func (q *Querier) ScopedExport(ctx context.Context, seeds []semanticmemory.Graph
 		// Only now that node admission is final, add edges whose endpoints
 		// both survived the caps. An edge whose endpoint was dropped for
 		// exceeding maxScopedTotalNodes must never appear in the output —
-		// it would dangle, pointing at a node the caller was never sent.
+		// it would dangle, pointing at a node the caller was never sent. An
+		// edge whose endpoint was dropped by allowKinds instead is simply
+		// out of scope, not truncated.
 		frontier = frontier[:0]
 		for _, e := range edges {
 			_, srcIn := inScope[e.SourceID]
 			_, tgtIn := inScope[e.TargetID]
 			if !srcIn || !tgtIn {
-				truncated = true
+				if !filteredIDs[e.SourceID] && !filteredIDs[e.TargetID] {
+					truncated = true
+				}
 				continue
 			}
 			scopedEdges[e.ID] = e

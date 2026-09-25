@@ -29,12 +29,18 @@ type API struct {
 
 // NewAPI creates a graph navigation API with these endpoints:
 //
-//	GET /api/v1/overview?namespace=<name>
+//	GET /api/v1/overview?namespace=<name>&scope=<all|database>
 //	GET /api/v1/graph?namespace=<name>
 //	GET /api/v1/search?q=<text>&limit=<n>&namespace=<name>
 //	GET /api/v1/query?question=<text>&namespace=<name>
-//	GET /api/v1/neighbors?focus=<node-id-or-name>&limit=<n>&offset=<n>&namespace=<name>
-//	GET /api/v1/subgraph?focus=<node-id-or-name>&depth=1..3&namespace=<name>
+//	GET /api/v1/neighbors?focus=<node-id-or-name>&limit=<n>&offset=<n>&namespace=<name>&scope=<all|database>
+//	GET /api/v1/subgraph?focus=<node-id-or-name>&depth=1..3&namespace=<name>&scope=<all|database>
+//
+// scope=database switches overview/neighbors/subgraph into the database-only
+// view: overview returns the schema/table architecture map instead of
+// component/package nodes, and neighbors/subgraph restrict traversal to
+// database node kinds so drilling into a schema or table only ever surfaces
+// its database neighborhood.
 func NewAPI(open OpenQuerier) *API {
 	return &API{open: open}
 }
@@ -130,8 +136,15 @@ func (a *API) handleAnnotations(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) handleOverview(w http.ResponseWriter, r *http.Request) {
+	databaseOnly := strings.TrimSpace(r.URL.Query().Get("scope")) == "database"
 	a.withQuerier(w, r, func(q *knowledgegraph.Querier) {
-		overview, err := q.Overview(r.Context())
+		var overview *knowledgegraph.Overview
+		var err error
+		if databaseOnly {
+			overview, err = q.DatabaseOverview(r.Context())
+		} else {
+			overview, err = q.Overview(r.Context())
+		}
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -225,6 +238,7 @@ func (a *API) handleNeighbors(w http.ResponseWriter, r *http.Request) {
 	}
 	limit := parseBoundedInt(r.URL.Query().Get("limit"), 160, 1, 500)
 	offset := parseBoundedInt(r.URL.Query().Get("offset"), 0, 0, 1_000_000)
+	databaseOnly := strings.TrimSpace(r.URL.Query().Get("scope")) == "database"
 	a.withQuerier(w, r, func(q *knowledgegraph.Querier) {
 		node, err := resolveFocus(r.Context(), q, focus)
 		if err != nil {
@@ -236,8 +250,35 @@ func (a *API) handleNeighbors(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+		if databaseOnly {
+			page.Graph = filterGraphToKinds(page.Graph, page.Focus.ID, knowledgegraph.DatabaseNodeKinds)
+		}
 		writeJSON(w, http.StatusOK, page)
 	})
+}
+
+// filterGraphToKinds keeps keepID (the focus node, regardless of its own
+// kind) and any other node whose kind is in allowKinds, then drops edges
+// whose endpoint was removed so the result never dangles. It backs the
+// "database only" neighbor page: GraphNeighborPage itself is a generic,
+// kind-agnostic bounded query, so the scope filter is applied once on the
+// small, already-bounded page it returns rather than plumbed into the store.
+func filterGraphToKinds(g knowledgegraph.ExportGraph, keepID string, allowKinds map[string]bool) knowledgegraph.ExportGraph {
+	kept := make(map[string]bool, len(g.Nodes))
+	nodes := make([]knowledgegraph.ExportNode, 0, len(g.Nodes))
+	for _, n := range g.Nodes {
+		if n.ID == keepID || allowKinds[n.Kind] {
+			kept[n.ID] = true
+			nodes = append(nodes, n)
+		}
+	}
+	edges := make([]knowledgegraph.ExportEdge, 0, len(g.Edges))
+	for _, e := range g.Edges {
+		if kept[e.Source] && kept[e.Target] {
+			edges = append(edges, e)
+		}
+	}
+	return knowledgegraph.ExportGraph{Namespace: g.Namespace, Nodes: nodes, Edges: edges, Truncated: g.Truncated}
 }
 
 func (a *API) handleSubgraph(w http.ResponseWriter, r *http.Request) {
@@ -247,13 +288,19 @@ func (a *API) handleSubgraph(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	depth := parseBoundedInt(r.URL.Query().Get("depth"), 1, 1, 3)
+	databaseOnly := strings.TrimSpace(r.URL.Query().Get("scope")) == "database"
 	a.withQuerier(w, r, func(q *knowledgegraph.Querier) {
 		node, err := resolveFocus(r.Context(), q, focus)
 		if err != nil {
 			writeError(w, http.StatusNotFound, err.Error())
 			return
 		}
-		graph, err := q.ScopedExport(r.Context(), []semanticmemory.GraphNode{*node}, depth)
+		var graph *knowledgegraph.ExportGraph
+		if databaseOnly {
+			graph, err = q.ScopedExportKinds(r.Context(), []semanticmemory.GraphNode{*node}, depth, knowledgegraph.DatabaseNodeKinds)
+		} else {
+			graph, err = q.ScopedExport(r.Context(), []semanticmemory.GraphNode{*node}, depth)
+		}
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
