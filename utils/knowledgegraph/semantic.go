@@ -9,9 +9,17 @@ import (
 )
 
 func semanticLocalID(f *codebaseindex.FileEntry, e codebaseindex.SemanticEntity) string {
+	return semanticLocalIDInProject(f, e, ".")
+}
+
+func semanticLocalIDInProject(f *codebaseindex.FileEntry, e codebaseindex.SemanticEntity, projectRoot string) string {
 	// Length prefixes avoid collisions between language, file and producer ID.
 	prefix := fmt.Sprintf("semantic:%d:%s:", len(f.Language), f.Language)
 	if e.Scope == "project" {
+		projectRoot = strings.TrimSpace(projectRoot)
+		if projectRoot != "" && projectRoot != "." {
+			return prefix + fmt.Sprintf("project:%d:%s:%s", len(projectRoot), projectRoot, e.ID)
+		}
 		return prefix + "project:" + e.ID
 	}
 	return prefix + fmt.Sprintf("file:%d:%s:%s", len(f.Path), f.Path, e.ID)
@@ -19,7 +27,7 @@ func semanticLocalID(f *codebaseindex.FileEntry, e codebaseindex.SemanticEntity)
 
 // addParserSemantics preserves typed, evidenced edges instead of encoding them
 // as text in a signature. Named references never resolve to an unrelated file.
-func addParserSemantics(g *Graph, scan *codebaseindex.ScanResult, packages, legacyImports map[string]string) {
+func addParserSemantics(g *Graph, scan *codebaseindex.ScanResult, packages, legacyImports map[string]string, componentIDsByRoot map[string][]string) {
 	anchors := make(map[string]map[string]string)
 	names := make(map[string]map[string][]string)
 	packageFiles := make(map[string][]*codebaseindex.FileEntry)
@@ -51,16 +59,25 @@ func addParserSemantics(g *Graph, scan *codebaseindex.ScanResult, packages, lega
 		if f.Symbols.SemanticGraph == nil || !valid[f.Path] {
 			continue
 		}
+		projectRoot := semanticProjectRoot(scan.Components, f.Path)
 		for _, e := range f.Symbols.SemanticGraph.Entities {
-			local := semanticLocalID(f, e)
+			local := semanticLocalIDInProject(f, e, projectRoot)
 			path, pkg := f.Path, packages[f.Path]
 			if e.Scope == "project" {
 				path, pkg = "", ""
+				if projectRoot != "." {
+					path = projectRoot
+				}
 			}
 			id := NodeID(g.Namespace, local)
 			// First definition in sorted path order gives deterministic shared metadata.
 			if g.Nodes[id] == nil {
 				g.AddNode(local, e.Kind, e.Name, path, pkg, e.Summary)
+			}
+			if e.Scope == "project" && e.Kind == "schema" {
+				for _, componentID := range componentIDsByRoot[projectRoot] {
+					g.AddEdge(componentID, id, EdgeContains, ConfidenceExtracted, "component project scope")
+				}
 			}
 			anchors[f.Path][e.ID] = id
 			if e.Referenceable {
@@ -146,4 +163,21 @@ func addParserSemantics(g *Graph, scan *codebaseindex.ScanResult, packages, lega
 			g.AddEdge(source, target, r.Kind, confidence, r.Evidence)
 		}
 	}
+}
+
+func semanticProjectRoot(components []*codebaseindex.CodebaseComponent, filePath string) string {
+	best := "."
+	for _, component := range components {
+		root := strings.TrimSpace(component.Root)
+		if root == "" {
+			root = "."
+		}
+		if root != "." && filePath != root && !strings.HasPrefix(filePath, strings.TrimSuffix(root, "/")+"/") {
+			continue
+		}
+		if root == "." || best == "." || len(root) > len(best) {
+			best = root
+		}
+	}
+	return best
 }
