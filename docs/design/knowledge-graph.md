@@ -192,3 +192,6 @@ recognize are conservatively skipped — they never fail extraction.
 - Hub ranking (`graph stats`) is computed at query time. Community detection,
   HTML visualization, MCP serving, and a dedicated `knowledge_graph.use`
   workflow step type are deliberately out of scope for v1.
+
+See [Codex Knowledge Graph Plugin](codex-knowledge-graph-plugin.md) for the
+proposed MCP tools and interactive graph panel that build on this model.
