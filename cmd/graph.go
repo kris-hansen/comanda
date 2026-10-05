@@ -352,7 +352,7 @@ func buildKnowledgeGraph(indexName, repoPath string, enhance bool, enhanceModel 
 	}
 
 	progress.Update("Building graph relationships", fmt.Sprintf("%d indexed files", len(scan.GraphFiles)), 0, 0)
-	graph := knowledgegraph.Build(scan, indexName)
+	graph := knowledgegraph.BuildWithRoot(scan, indexName, repoPath)
 
 	if enhance {
 		modelName, enhanceFunc, err := buildIndexEnhancer(enhanceModel)

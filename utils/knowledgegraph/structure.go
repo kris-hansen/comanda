@@ -10,7 +10,7 @@ import (
 func legacyImportPaths(scan *codebaseindex.ScanResult, packages map[string]string, namespace string) map[string]string {
 	paths := make(map[string]string)
 	for _, f := range scan.Candidates {
-		if f.PackagePath != "" || symbolPackage(f) == "" || path.Dir(f.Path) == "." {
+		if isMarkdownFile(f) || f.PackagePath != "" || symbolPackage(f) == "" || path.Dir(f.Path) == "." {
 			continue
 		}
 		dir := path.Dir(f.Path)
@@ -27,6 +27,11 @@ func legacyImportPaths(scan *codebaseindex.ScanResult, packages map[string]strin
 func packageKeys(files []*codebaseindex.FileEntry) map[string]string {
 	roots := make(map[string]map[string]bool)
 	for _, f := range files {
+		// A markdown "package" is the document's first H1, not a package;
+		// including it could split a real package's key across languages.
+		if isMarkdownFile(f) {
+			continue
+		}
 		pkg := symbolPackage(f)
 		if roots[pkg] == nil {
 			roots[pkg] = make(map[string]bool)
@@ -35,6 +40,9 @@ func packageKeys(files []*codebaseindex.FileEntry) map[string]string {
 	}
 	keys := make(map[string]string, len(files))
 	for _, f := range files {
+		if isMarkdownFile(f) {
+			continue
+		}
 		key := f.PackagePath
 		if key == "" {
 			key = symbolPackage(f)

@@ -72,7 +72,7 @@ func (m *Manager) Scan() (*ScanResult, []string, error) {
 	m.reportProgress(ProgressEvent{Phase: "Detecting languages", Current: m.config.Root})
 	m.adapters = m.detectAdapters()
 	if len(m.adapters) == 0 {
-		return nil, nil, fmt.Errorf("no language adapters detected for repository at %s (supported: Go, Python, TypeScript, Flutter, Java)", m.config.Root)
+		return nil, nil, fmt.Errorf("no language adapters detected for repository at %s (supported: Go, Python, TypeScript, Flutter, Java, Terraform, PostgreSQL, Markdown)", m.config.Root)
 	}
 
 	languages := make([]string, len(m.adapters))

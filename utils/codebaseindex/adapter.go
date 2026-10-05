@@ -64,6 +64,7 @@ func NewRegistry() *Registry {
 	r.Register(&JavaAdapter{})
 	r.Register(&TerraformAdapter{})
 	r.Register(&PostgresAdapter{})
+	r.Register(&MarkdownAdapter{})
 	return r
 }
 

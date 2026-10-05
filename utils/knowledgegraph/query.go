@@ -94,7 +94,14 @@ func (q *Querier) Explain(ctx context.Context, name string) (string, error) {
 		return "", err
 	}
 	for _, annotation := range annotations {
-		fmt.Fprintf(&b, "  Human guidance: %s\n", annotation.Content)
+		label := "Human guidance"
+		if annotation.Source == semanticmemory.GraphAnnotationFile {
+			label = "File guidance"
+			if annotation.SourcePath != "" {
+				label += " (" + annotation.SourcePath + ")"
+			}
+		}
+		fmt.Fprintf(&b, "  %s: %s\n", label, annotation.Content)
 	}
 	fmt.Fprintf(&b, "  Degree:  %d\n", node.Degree)
 	if len(edges) == 0 {

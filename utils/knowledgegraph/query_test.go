@@ -577,3 +577,150 @@ func TestScopedExportKindsExcludesUnrelatedKindsWithoutFalseTruncation(t *testin
 		t.Fatal("expected users.id column to still be present alongside the filtered-out cross-domain node")
 	}
 }
+
+// buildPagedDatabaseGraph builds a namespace where one table's first mixed
+// neighbor page (limit 160) is dominated by containment edges to its columns,
+// with table-to-table foreign keys and a column-to-column references edge
+// present alongside, plus a component/file code side linked to the table.
+func buildPagedDatabaseGraph(t *testing.T, store *semanticmemory.Store, namespace string) (component, users, orders, ordersUserID semanticmemory.GraphNode) {
+	t.Helper()
+	ctx := context.Background()
+	upsertNode := func(id, kind, name string) semanticmemory.GraphNode {
+		node, err := store.UpsertGraphNode(ctx, semanticmemory.GraphNode{
+			ID: namespace + "|" + id, Namespace: namespace, Kind: kind, Name: name,
+		})
+		if err != nil {
+			t.Fatalf("upsert node %s: %v", id, err)
+		}
+		return node
+	}
+	upsertEdge := func(id string, source, target semanticmemory.GraphNode, kind string) {
+		if _, err := store.UpsertGraphEdge(ctx, semanticmemory.GraphEdge{
+			ID: namespace + "|" + id, Namespace: namespace, SourceID: source.ID, TargetID: target.ID,
+			Kind: kind, Confidence: semanticmemory.GraphConfidenceExtracted,
+		}); err != nil {
+			t.Fatalf("upsert edge %s: %v", id, err)
+		}
+	}
+
+	component = upsertNode("component:app", semanticmemory.GraphNodeComponent, "app")
+	file := upsertNode("file:app/main.go", semanticmemory.GraphNodeFile, "app/main.go")
+	schema := upsertNode("schema:public", "schema", "public")
+	users = upsertNode("table:public.users", "table", "public.users")
+	orders = upsertNode("table:public.orders", "table", "public.orders")
+	usersID := upsertNode("column:public.users.id", "column", "public.users.id")
+	ordersUserID = upsertNode("column:public.orders.user_id", "column", "public.orders.user_id")
+
+	upsertEdge("b-component-file", component, file, semanticmemory.GraphEdgeContains)
+	upsertEdge("b-component-users", component, users, semanticmemory.GraphEdgeContains)
+	upsertEdge("b-schema-users", schema, users, semanticmemory.GraphEdgeContains)
+	upsertEdge("b-schema-orders", schema, orders, semanticmemory.GraphEdgeContains)
+	// Edge pages order by edge ID, so the foreign keys sort ahead of the column
+	// containment edges and land inside the first database-scoped page, while
+	// the >160 containment edges still dominate that page numerically.
+	upsertEdge("a-fk-orders-users", orders, users, "foreign_key")
+	upsertEdge("a-fk-orders-users-backfill", orders, users, "foreign_key")
+	upsertEdge("b-users-id", users, usersID, semanticmemory.GraphEdgeContains)
+	upsertEdge("b-orders-userid", orders, ordersUserID, semanticmemory.GraphEdgeContains)
+	for i := 0; i < 170; i++ {
+		column := upsertNode(fmt.Sprintf("column:public.users.c%03d", i), "column", fmt.Sprintf("public.users.c%03d", i))
+		upsertEdge(fmt.Sprintf("c-users-col%03d", i), users, column, semanticmemory.GraphEdgeContains)
+	}
+	upsertEdge("d-ref-orders-userid", ordersUserID, usersID, "references")
+
+	if err := store.RefreshGraphDegrees(ctx, namespace); err != nil {
+		t.Fatalf("refresh degrees: %v", err)
+	}
+	return component, users, orders, ordersUserID
+}
+
+// TestNeighborPageKindsDatabaseScopeSurfacesForeignKeys locks in the server
+// contract behind the graph viewer's "Database only" toggle: for a table
+// whose mixed first neighbor page is dominated by containment edges, the
+// database-scoped page must still surface its foreign_key edges on page 1 —
+// the kind filter is applied in SQL before LIMIT/OFFSET, not by filtering an
+// already-limited mixed page.
+func TestNeighborPageKindsDatabaseScopeSurfacesForeignKeys(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t)
+	_, users, _, ordersUserID := buildPagedDatabaseGraph(t, store, "pagedb")
+	q := NewQuerier(store, "pagedb")
+
+	mixed, err := q.NeighborPage(ctx, users, 160, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !mixed.HasMore {
+		t.Fatal("mixed first page should report has_more for a table with >160 relationships")
+	}
+	contains := 0
+	for _, e := range mixed.Graph.Edges {
+		if e.Kind == semanticmemory.GraphEdgeContains {
+			contains++
+		}
+	}
+	if contains < 150 {
+		t.Fatalf("mixed first page containment edges = %d of %d, want a containment-dominated page", contains, len(mixed.Graph.Edges))
+	}
+
+	dbPage, err := q.NeighborPageKinds(ctx, users, 160, 0, DatabaseNodeKinds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foreignKeys := 0
+	for _, e := range dbPage.Graph.Edges {
+		if e.Kind == "foreign_key" {
+			foreignKeys++
+		}
+	}
+	if foreignKeys != 2 {
+		t.Fatalf("database-scoped first page foreign_key edges = %d, want 2", foreignKeys)
+	}
+
+	columnPage, err := q.NeighborPageKinds(ctx, ordersUserID, 160, 0, DatabaseNodeKinds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sawReferences := false
+	for _, e := range columnPage.Graph.Edges {
+		if e.Kind == "references" {
+			sawReferences = true
+		}
+	}
+	if !sawReferences {
+		t.Fatal("database-scoped neighbors of the orders.user_id column missing its references edge")
+	}
+}
+
+// TestScopedExportKindsFromComponentIncludesForeignKeys proves a
+// database-scoped subgraph seeded at a component (the viewer's "Database
+// only" drill-down from a component scope view) reaches the tables and keeps
+// their foreign_key edges, while the component's file node stays out of scope.
+func TestScopedExportKindsFromComponentIncludesForeignKeys(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t)
+	component, _, _, _ := buildPagedDatabaseGraph(t, store, "scopedb")
+	q := NewQuerier(store, "scopedb")
+
+	out, err := q.ScopedExportKinds(ctx, []semanticmemory.GraphNode{component}, 2, DatabaseNodeKinds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Truncated {
+		t.Fatal("unexpectedly truncated for a bounded fixture")
+	}
+	foreignKeys := 0
+	for _, e := range out.Edges {
+		if e.Kind == "foreign_key" {
+			foreignKeys++
+		}
+	}
+	if foreignKeys != 2 {
+		t.Fatalf("component-seeded database subgraph foreign_key edges = %d, want 2", foreignKeys)
+	}
+	for _, n := range out.Nodes {
+		if n.Kind == semanticmemory.GraphNodeFile {
+			t.Fatal("file node leaked into a DatabaseNodeKinds-scoped export")
+		}
+	}
+}

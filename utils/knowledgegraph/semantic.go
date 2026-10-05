@@ -34,6 +34,33 @@ func addParserSemantics(g *Graph, scan *codebaseindex.ScanResult, packages, lega
 	valid := make(map[string]bool)
 	files := append([]*codebaseindex.FileEntry(nil), scan.Candidates...)
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+
+	// entityKind maps entity IDs across all files so relations can be traced
+	// back to the kind of their endpoints; schemaContained marks tables a
+	// schema already contains. Tables without a schema parent (unqualified
+	// DDL) would otherwise float with no path from their component, making
+	// them unreachable from component-scoped database views.
+	entityKind := make(map[string]string)
+	schemaContained := make(map[string]bool)
+	for _, f := range files {
+		if f.Symbols == nil || f.Symbols.SemanticGraph == nil {
+			continue
+		}
+		for _, e := range f.Symbols.SemanticGraph.Entities {
+			entityKind[e.ID] = e.Kind
+		}
+	}
+	for _, f := range files {
+		if f.Symbols == nil || f.Symbols.SemanticGraph == nil {
+			continue
+		}
+		for _, r := range f.Symbols.SemanticGraph.Relations {
+			if r.Kind == EdgeContains && entityKind[r.Source] == "schema" {
+				schemaContained[r.Target] = true
+			}
+		}
+	}
+
 	for _, f := range files {
 		if f.Symbols == nil {
 			continue
@@ -74,7 +101,7 @@ func addParserSemantics(g *Graph, scan *codebaseindex.ScanResult, packages, lega
 			if g.Nodes[id] == nil {
 				g.AddNode(local, e.Kind, e.Name, path, pkg, e.Summary)
 			}
-			if e.Scope == "project" && e.Kind == "schema" {
+			if e.Scope == "project" && (e.Kind == "schema" || (e.Kind == "table" && !schemaContained[e.ID])) {
 				for _, componentID := range componentIDsByRoot[projectRoot] {
 					g.AddEdge(componentID, id, EdgeContains, ConfidenceExtracted, "component project scope")
 				}
