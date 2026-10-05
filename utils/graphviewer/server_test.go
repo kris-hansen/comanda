@@ -3,6 +3,7 @@ package graphviewer
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -97,6 +98,10 @@ func TestAPIExportsSearchesAndFocusesGraph(t *testing.T) {
 	if got := items[0].(map[string]any)["content"]; got != "Do not change this boundary without a migration." {
 		t.Fatalf("annotation content = %q", got)
 	}
+	// Viewer POSTs carry no source; the store must default them to the human layer.
+	if got := items[0].(map[string]any)["source"]; got != "human" {
+		t.Fatalf("annotation source = %q, want human", got)
+	}
 }
 
 func TestAPIValidatesSearchAndFocus(t *testing.T) {
@@ -186,9 +191,16 @@ func TestViewerUIKeepsNodeClicksSeparateFromCanvasPanning(t *testing.T) {
 		`Map — stable code topology`,
 		`input → selected system → output flow`,
 		`marker-end="url(#arrow)"`,
+		`id="scene"`,
+		`function renderScene()`,
+		`function applyTransform()`,
+		`transform.scale=next;applyTransform()`,
+		`transform.y=drag.ty+e.clientY-drag.y;applyTransform()`,
 		`rowGap=Math.max(170`,
 		`layerGap=Math.max(132`,
-		`Human guidance`,
+		`<h2>Guidance</h2>`,
+		`a.source==='file'`,
+		`document:'var(--doc)'`,
 		`id="save-annotation"`,
 		`/api/v1/annotations`,
 		`Array.isArray(data.annotations)`,
@@ -310,7 +322,13 @@ func TestViewerUIStylesDatabaseKindsWithAccessibleControls(t *testing.T) {
 		`id="kinds-all"`,
 		`aria-label="Show database nodes only and hide code nodes and relationships"`,
 		`aria-label="Show all node kinds, mixing code and database"`,
-		`setKindsChecked(k=>DB_KINDS.has(k))`,
+		// "Database only" from a scope/component view always re-fetches the
+		// database-scoped subgraph (never checkbox-filters the already-loaded
+		// mixed page), and neighbor paging state is keyed by scope.
+		`const focus=selected||scopeFocus`,
+		`'&depth=3&scope=database'`,
+		`id+':'+(dbOnly?'db':'all')`,
+		`key.endsWith(':db')===dbOnly`,
 		`aria-label="Toggle ${esc(kind)} nodes`,
 		`aria-hidden="true" style="color:`,
 	} {
@@ -484,6 +502,85 @@ func TestSubgraphAndNeighborsDatabaseScopeStayWithinDatabaseKinds(t *testing.T) 
 	}
 	if !sawFunction {
 		t.Fatal("mixed-mode neighbors should still include the function node")
+	}
+}
+
+// TestDatabaseScopeAPIReturnsForeignKeysBeyondContainmentPages guards the
+// regression where the viewer's "filter by Database only showed only the
+// table, no relationships": the database-scoped neighbors and subgraph
+// endpoints must surface table-to-table foreign_key edges even when the
+// focus's first mixed page is dominated by containment edges.
+func TestDatabaseScopeAPIReturnsForeignKeysBeyondContainmentPages(t *testing.T) {
+	store, err := semanticmemory.Open(filepath.Join(t.TempDir(), "graph.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	ctx := context.Background()
+
+	upsertNode := func(id, kind, name string) semanticmemory.GraphNode {
+		node, err := store.UpsertGraphNode(ctx, semanticmemory.GraphNode{ID: "dbapi|" + id, Namespace: "dbapi", Kind: kind, Name: name})
+		if err != nil {
+			t.Fatalf("upsert node %s: %v", id, err)
+		}
+		return node
+	}
+	upsertEdge := func(id string, source, target semanticmemory.GraphNode, kind string) {
+		if _, err := store.UpsertGraphEdge(ctx, semanticmemory.GraphEdge{ID: "dbapi|" + id, Namespace: "dbapi", SourceID: source.ID, TargetID: target.ID, Kind: kind, Confidence: semanticmemory.GraphConfidenceExtracted}); err != nil {
+			t.Fatalf("upsert edge %s: %v", id, err)
+		}
+	}
+
+	component := upsertNode("component:app", semanticmemory.GraphNodeComponent, "app")
+	file := upsertNode("file:app/main.go", semanticmemory.GraphNodeFile, "app/main.go")
+	schema := upsertNode("schema:public", "schema", "public")
+	users := upsertNode("table:public.users", "table", "public.users")
+	orders := upsertNode("table:public.orders", "table", "public.orders")
+	upsertEdge("b-component-file", component, file, semanticmemory.GraphEdgeContains)
+	upsertEdge("b-component-users", component, users, semanticmemory.GraphEdgeContains)
+	upsertEdge("b-schema-users", schema, users, semanticmemory.GraphEdgeContains)
+	upsertEdge("b-schema-orders", schema, orders, semanticmemory.GraphEdgeContains)
+	upsertEdge("a-fk-orders-users", orders, users, "foreign_key")
+	// Containment edges dominate the focus's first mixed page (limit 160).
+	for i := 0; i < 170; i++ {
+		column := upsertNode(fmt.Sprintf("column:public.users.c%03d", i), "column", fmt.Sprintf("public.users.c%03d", i))
+		upsertEdge(fmt.Sprintf("c-users-col%03d", i), users, column, semanticmemory.GraphEdgeContains)
+	}
+	if err := store.RefreshGraphDegrees(ctx, "dbapi"); err != nil {
+		t.Fatal(err)
+	}
+
+	api := NewAPI(func(_ context.Context, namespace string) (*knowledgegraph.Querier, func() error, error) {
+		if namespace != "" && namespace != "dbapi" {
+			return nil, nil, &notFoundError{namespace}
+		}
+		return knowledgegraph.NewQuerier(store, "dbapi"), func() error { return nil }, nil
+	})
+
+	countForeignKeys := func(graph map[string]any) int {
+		count := 0
+		for _, e := range graph["edges"].([]any) {
+			if e.(map[string]any)["kind"] == "foreign_key" {
+				count++
+			}
+		}
+		return count
+	}
+
+	neighbors := requestJSON(t, api, "/api/v1/neighbors?focus="+users.ID+"&limit=160&scope=database")
+	if got := countForeignKeys(neighbors["graph"].(map[string]any)); got != 1 {
+		t.Fatalf("scope=database neighbors foreign_key edges = %d, want 1", got)
+	}
+
+	subgraph := requestJSON(t, api, "/api/v1/subgraph?focus="+component.ID+"&depth=2&scope=database")
+	subgraphGraph := subgraph["graph"].(map[string]any)
+	if got := countForeignKeys(subgraphGraph); got != 1 {
+		t.Fatalf("scope=database subgraph foreign_key edges = %d, want 1", got)
+	}
+	for _, n := range subgraphGraph["nodes"].([]any) {
+		if n.(map[string]any)["kind"] == semanticmemory.GraphNodeFile {
+			t.Fatal("scope=database subgraph leaked a file node")
+		}
 	}
 }
 

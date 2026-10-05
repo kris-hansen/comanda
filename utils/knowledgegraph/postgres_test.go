@@ -212,3 +212,119 @@ func TestPostgresProjectEntitiesStayWithinMonorepoComponent(t *testing.T) {
 		t.Fatal("database-only component view did not include its table at depth 2")
 	}
 }
+
+// TestPostgresSchemalessTablesLinkToComponent guards the regression behind
+// "enter a package in a monorepo, filter by db, see only a table with no
+// relationships": DDL without schema qualification produces project-scope
+// table entities with no schema containment, and before they were linked to
+// their component directly they were unreachable from component-scoped
+// database views at any depth.
+func TestPostgresSchemalessTablesLinkToComponent(t *testing.T) {
+	adapter := &codebaseindex.PostgresAdapter{}
+	ddl := `
+CREATE TABLE users (
+    id BIGSERIAL PRIMARY KEY,
+    email VARCHAR(255) NOT NULL
+);
+
+CREATE TABLE orders (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id),
+    total NUMERIC(10,2) NOT NULL
+);
+`
+	symbols, err := adapter.ExtractSymbols("db/schema.sql", []byte(ddl))
+	if err != nil {
+		t.Fatalf("extract: %v", err)
+	}
+	scan := &codebaseindex.ScanResult{
+		Components: []*codebaseindex.CodebaseComponent{
+			{Name: "app", Root: ".", Language: "go", Kind: "backend", FileCount: 3},
+		},
+		Candidates: []*codebaseindex.FileEntry{
+			{Path: "db/schema.sql", Language: "postgresql", Symbols: symbols},
+		},
+	}
+	g := Build(scan, "schemaless")
+
+	componentID := NodeID("schemaless", "component:app")
+	usersID := NodeID("schemaless", "semantic:10:postgresql:project:table:public.users")
+	ordersID := NodeID("schemaless", "semantic:10:postgresql:project:table:public.orders")
+	userIDCol := NodeID("schemaless", "semantic:10:postgresql:project:column:public.users.id")
+	orderUserIDCol := NodeID("schemaless", "semantic:10:postgresql:project:column:public.orders.user_id")
+
+	if g.Edges[EdgeID("schemaless", componentID, usersID, EdgeContains)] == nil {
+		t.Fatal("component does not contain schema-less users table")
+	}
+	if g.Edges[EdgeID("schemaless", componentID, ordersID, EdgeContains)] == nil {
+		t.Fatal("component does not contain schema-less orders table")
+	}
+	for _, edge := range g.Edges {
+		if edge.SourceID == componentID && g.Nodes[edge.TargetID] != nil && g.Nodes[edge.TargetID].Kind == "column" {
+			t.Fatal("component linked directly to columns instead of progressive table drill-down")
+		}
+	}
+
+	// The viewer's database-only path: component-scoped subgraph must surface
+	// both tables, the table-level foreign key, and the column-level
+	// references edge (component→table→column needs depth 3).
+	store, err := semanticmemory.Open(filepath.Join(t.TempDir(), "graph.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := RebuildWithProgress(context.Background(), store, g, nil); err != nil {
+		t.Fatal(err)
+	}
+	focus, err := store.GetGraphNode(context.Background(), componentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	view, err := NewQuerier(store, "schemaless").ScopedExportKinds(context.Background(), []semanticmemory.GraphNode{focus}, 3, DatabaseNodeKinds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	present := make(map[string]bool, len(view.Nodes))
+	for _, node := range view.Nodes {
+		present[node.ID] = true
+	}
+	if !present[LocalID(usersID)] || !present[LocalID(ordersID)] {
+		t.Fatalf("database-only component view missing tables: %v", present)
+	}
+	foundFK, foundRef := false, false
+	for _, e := range view.Edges {
+		if e.Kind == "foreign_key" && e.Source == LocalID(ordersID) && e.Target == LocalID(usersID) {
+			foundFK = true
+		}
+		if e.Kind == "references" && e.Source == LocalID(orderUserIDCol) && e.Target == LocalID(userIDCol) {
+			foundRef = true
+		}
+	}
+	if !foundFK {
+		t.Fatal("database-only component view missing foreign_key edge")
+	}
+	if !foundRef {
+		t.Fatal("database-only component view missing column-level references edge at depth 3")
+	}
+}
+
+// TestPostgresSchemaQualifiedTablesStayBehindSchema ensures the schema-less
+// component linking does not short-circuit the schema drill-down when the DDL
+// is schema-qualified: tables stay behind their schema node.
+func TestPostgresSchemaQualifiedTablesStayBehindSchema(t *testing.T) {
+	scan := postgresFixtureScan(t)
+	scan.Components = []*codebaseindex.CodebaseComponent{
+		{Name: "app", Root: ".", Language: "go", Kind: "backend", FileCount: 3},
+	}
+	g := Build(scan, "qualified")
+
+	componentID := NodeID("qualified", "component:app")
+	schemaID := NodeID("qualified", "semantic:10:postgresql:project:schema:app")
+	usersID := NodeID("qualified", "semantic:10:postgresql:project:table:app.users")
+	if g.Edges[EdgeID("qualified", componentID, schemaID, EdgeContains)] == nil {
+		t.Fatal("component does not contain its schema")
+	}
+	if g.Edges[EdgeID("qualified", componentID, usersID, EdgeContains)] != nil {
+		t.Fatal("schema-qualified table linked directly to component, bypassing the schema layer")
+	}
+}

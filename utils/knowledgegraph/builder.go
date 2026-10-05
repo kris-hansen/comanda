@@ -23,6 +23,13 @@ const minInferredNameLen = 3
 // `uses` edges between files and uniquely-named types are inferred from symbol
 // name references.
 func Build(scan *codebaseindex.ScanResult, namespace string) *Graph {
+	return BuildWithRoot(scan, namespace, "")
+}
+
+// BuildWithRoot is Build with the repository root available, enabling
+// file-derived guidance: context documents are read from disk and their
+// sections become file-layer annotations persisted by Rebuild.
+func BuildWithRoot(scan *codebaseindex.ScanResult, namespace, root string) *Graph {
 	if scan.GraphFiles != nil {
 		copy := *scan
 		copy.Candidates = scan.GraphFiles
@@ -31,8 +38,19 @@ func Build(scan *codebaseindex.ScanResult, namespace string) *Graph {
 	g := NewGraph(namespace)
 	packages := packageKeys(scan.Candidates)
 
-	// Pass 1: file and package nodes, belongs_to edges.
+	// Pass 1: file and package nodes, belongs_to edges. Markdown documents
+	// keep the stable file:<path> ID (so contains and doc links keep working)
+	// but take the document kind; their first H1 is a title, not a package,
+	// so they skip package attachment and attach via guides edges instead.
 	for _, f := range scan.Candidates {
+		if isMarkdownFile(f) {
+			summary := ""
+			if f.Symbols != nil {
+				summary = f.Symbols.Package
+			}
+			g.AddNode("file:"+f.Path, NodeDocument, path.Base(f.Path), f.Path, "", summary)
+			continue
+		}
 		summary := fileSummary(f)
 		g.AddNode("file:"+f.Path, NodeFile, path.Base(f.Path), f.Path, packages[f.Path], summary)
 		if pkg := symbolPackage(f); pkg != "" {
@@ -90,15 +108,30 @@ func Build(scan *codebaseindex.ScanResult, namespace string) *Graph {
 		}
 	}
 
+	// Pass 3.5: context documents guide the packages and components in their
+	// path scope (see addDocumentGuides for the prefix rule).
+	guided := addDocumentGuides(g, scan, packages, componentIDsByRoot)
+
 	// Pass 4: import edges. An import that resolves to a known local package
 	// links to that package node; anything else becomes an external package
-	// node so the graph keeps a record of third-party dependencies.
+	// node so the graph keeps a record of third-party dependencies. Markdown
+	// imports are raw document links instead: they resolve against the scanned
+	// document set and are skipped when the target was not indexed.
 	legacyImports := legacyImportPaths(scan, packages, namespace)
+	docLinks := newDocLinkIndex(scan)
 	for _, f := range scan.Candidates {
 		if f.Symbols == nil {
 			continue
 		}
 		fileID := NodeID(namespace, "file:"+f.Path)
+		if isMarkdownFile(f) {
+			for _, imp := range f.Symbols.Imports {
+				if target, ok := docLinks.resolve(namespace, f.Path, imp); ok {
+					g.AddEdge(fileID, target, EdgeImports, ConfidenceExtracted, "links to "+imp)
+				}
+			}
+			continue
+		}
 		for _, imp := range f.Symbols.Imports {
 			imp = strings.Trim(strings.TrimSpace(imp), "\"`")
 			if imp == "" {
@@ -112,6 +145,10 @@ func Build(scan *codebaseindex.ScanResult, namespace string) *Graph {
 	// Pass 5: inferred uses edges from symbol name references.
 	inferUses(g, scan, namespace)
 	addParserSemantics(g, scan, packages, legacyImports, componentIDsByRoot)
+
+	if root != "" {
+		deriveDocAnnotations(g, scan, root, guided)
+	}
 
 	return g
 }
@@ -574,7 +611,7 @@ func RebuildWithProgress(ctx context.Context, store *semanticmemory.Store, g *Gr
 	}
 	sort.Slice(edges, func(i, j int) bool { return edges[i].ID < edges[j].ID })
 
-	return store.ReplaceGraph(ctx, g.Namespace, nodes, edges, func(event semanticmemory.GraphWriteProgress) {
+	err := store.ReplaceGraph(ctx, g.Namespace, nodes, edges, func(event semanticmemory.GraphWriteProgress) {
 		if progress != nil {
 			progress(ProgressEvent{
 				Phase:     event.Phase,
@@ -584,4 +621,26 @@ func RebuildWithProgress(ctx context.Context, store *semanticmemory.Store, g *Gr
 			})
 		}
 	})
+	if err != nil {
+		return err
+	}
+	return syncFileAnnotations(ctx, store, g)
+}
+
+// syncFileAnnotations persists doc-derived guidance after a rebuild and prunes
+// file-layer annotations that no longer derive from the current documents.
+// Human annotations are out of scope here and survive rebuilds untouched.
+func syncFileAnnotations(ctx context.Context, store *semanticmemory.Store, g *Graph) error {
+	if g.Annotations == nil {
+		return nil
+	}
+	keep := make([]string, 0, len(g.Annotations))
+	for _, annotation := range g.Annotations {
+		saved, err := store.UpsertGraphAnnotation(ctx, annotation)
+		if err != nil {
+			return err
+		}
+		keep = append(keep, saved.ID)
+	}
+	return store.DeleteFileAnnotationsExcept(ctx, g.Namespace, keep)
 }

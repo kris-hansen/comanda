@@ -21,6 +21,7 @@ const (
 	NodeType      = semanticmemory.GraphNodeType
 	NodeFunction  = semanticmemory.GraphNodeFunction
 	NodeConcept   = semanticmemory.GraphNodeConcept
+	NodeDocument  = semanticmemory.GraphNodeDocument
 
 	EdgeContains  = semanticmemory.GraphEdgeContains
 	EdgeBelongsTo = semanticmemory.GraphEdgeBelongsTo
@@ -28,6 +29,7 @@ const (
 	EdgeDefines   = semanticmemory.GraphEdgeDefines
 	EdgeUses      = semanticmemory.GraphEdgeUses
 	EdgeReference = semanticmemory.GraphEdgeReference
+	EdgeGuides    = semanticmemory.GraphEdgeGuides
 
 	ConfidenceExtracted = semanticmemory.GraphConfidenceExtracted
 	ConfidenceInferred  = semanticmemory.GraphConfidenceInferred
@@ -38,6 +40,11 @@ type Graph struct {
 	Namespace string
 	Nodes     map[string]*semanticmemory.GraphNode
 	Edges     map[string]*semanticmemory.GraphEdge
+	// Annotations holds file-derived guidance for Rebuild to persist. A nil
+	// slice means the build never read documents (no scan root was given), so
+	// Rebuild leaves stored file annotations untouched; an empty non-nil slice
+	// means derivation ran and prunes anything stale.
+	Annotations []semanticmemory.GraphAnnotation
 }
 
 // NewGraph creates an empty graph for a namespace.

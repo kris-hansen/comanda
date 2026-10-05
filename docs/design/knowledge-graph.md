@@ -14,12 +14,39 @@ comanda graph query    →  traverse instead of grep
 ## Graph model
 
 - **Nodes** — `component`, `package`, `file`, `type`, `function`, `concept`
-  (concepts come only from the optional AI pass).
+  (concepts come only from the optional AI pass), `document` (markdown), and
+  the database kinds (`schema`, `table`, `column`) described below.
 - **Edges** — `contains`, `belongs_to`, `imports`, `defines` (structural),
-  `uses`, `references` (semantic).
+  `uses`, `references` (semantic), `guides` (context document →
+  package/component).
 - **Confidence** — every edge is tagged `extracted` (explicit in the source:
   imports, declarations, component roots) or `inferred` (symbol-name
   resolution or the AI pass). You always know what was read vs. guessed.
+
+## Markdown context documents and layered guidance
+
+Markdown files are indexed by a built-in markdown adapter, so documentation
+and agent-context files are first-class graph citizens:
+
+- **Document nodes** — every scanned `.md`/`.markdown` file becomes a
+  `document` node (same stable `file:<path>` ID), with its first `H1` as the
+  summary and headings as `defines`d types. Links between documents (relative
+  `[text](other.md)` and `[[wiki-style]]`) resolve to `imports` edges, so a
+  directory of interlinked notes graphs as a connected whole — and a
+  markdown-only directory can be indexed and graphed on its own.
+- **`guides` edges** — recognized agent-context files (`AGENTS.md`,
+  `CLAUDE.md`, `.cursorrules`, copilot instructions, and friends — see
+  `codebaseindex.IsContextFile`) guide the packages and components rooted at
+  or below the document's own directory: `pkg/foo/AGENTS.md` guides
+  `pkg:foo`; a root-level context file guides the whole repository. This is
+  how layered, directory-scoped guidance rides along the graph.
+- **Annotation layers** — graph annotations carry a `source`: `human`
+  (authored in the visualizer or API, surviving rebuilds as before) or `file`
+  (derived from context-file sections at build time, attached to the document
+  node and to the nodes it guides). File-derived annotations are pruned and
+  re-derived on each rebuild so edited docs never leave stale guidance; human
+  annotations are never touched. The visualizer badges each annotation with
+  its layer.
 
 ## Building
 
@@ -149,7 +176,10 @@ Extracted for each schema file:
 - **Schemas/namespaces** — only when explicitly present, either a
   `CREATE SCHEMA` statement or a schema-qualified name (`app.orders`).
   Unqualified tables default internally to `public` for stable IDs, but no
-  `public` schema node is invented.
+  `public` schema node is invented. Tables without a schema parent are linked
+  directly to their component (`component --contains--> table`) so
+  schema-less DDL is still reachable from component-scoped database views;
+  schema-qualified tables stay behind their schema node.
 - **Tables** — one `table` node per schema-qualified table, deduplicated by
   qualified name across every scanned file (a table created in one migration
   and referenced from another resolves to the same node).
