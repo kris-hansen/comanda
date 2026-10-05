@@ -2,6 +2,7 @@ package codebaseindex
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -212,6 +213,9 @@ func (m *Manager) synthesizeStructured(scan *ScanResult) (string, error) {
 	// Entry points
 	m.writeEntryPoints(&sb, scan)
 
+	// Agent-context and guidance documents
+	m.writeContextGuidance(&sb, scan)
+
 	// Code conventions and agent guidance
 	m.writeCodeConventions(&sb, scan, 0)
 
@@ -252,6 +256,9 @@ func (m *Manager) synthesizeFull(scan *ScanResult) (string, error) {
 
 	// 5.5. Code conventions and agent guidance
 	m.writeCodeConventions(&sb, scan, 0)
+
+	// 5.6. Agent-context and guidance documents
+	m.writeContextGuidance(&sb, scan)
 
 	// 6. Important files (always include)
 	m.writeImportantFiles(&sb, scan)
@@ -842,6 +849,90 @@ func (m *Manager) detectConventions(scan *ScanResult) []string {
 	}
 
 	return hints
+}
+
+// writeContextGuidance writes the Context & Guidance section listing recognized
+// agent-context documents (AGENTS.md, CLAUDE.md, README.md, .cursorrules, ...).
+// Repository-root files are listed first, then per-subdirectory files, each with
+// a one-line summary from its first H1 heading (or first non-empty line). For
+// markdown-only repositories this section carries the index's real content.
+func (m *Manager) writeContextGuidance(sb *strings.Builder, scan *ScanResult) {
+	var rootFiles, subdirFiles []*FileEntry
+	for _, f := range allScanFiles(scan) {
+		if !IsContextFile(f.Path) {
+			continue
+		}
+		if f.Depth == 0 {
+			rootFiles = append(rootFiles, f)
+		} else {
+			subdirFiles = append(subdirFiles, f)
+		}
+	}
+	if len(rootFiles) == 0 && len(subdirFiles) == 0 {
+		return
+	}
+
+	sortByPath := func(files []*FileEntry) {
+		sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+	}
+	sortByPath(rootFiles)
+	sortByPath(subdirFiles)
+
+	sb.WriteString("## Context & Guidance\n\n")
+	sb.WriteString("Agent-facing context and documentation files detected in this repository.\n\n")
+
+	writeEntries := func(files []*FileEntry) {
+		for _, f := range files {
+			sb.WriteString("- `")
+			sb.WriteString(filepath.ToSlash(f.Path))
+			sb.WriteString("`")
+			if summary := m.contextFileSummary(f); summary != "" {
+				sb.WriteString(" — ")
+				sb.WriteString(summary)
+			}
+			sb.WriteString("\n")
+		}
+		sb.WriteString("\n")
+	}
+
+	if len(rootFiles) > 0 {
+		sb.WriteString("### Repository Root\n\n")
+		writeEntries(rootFiles)
+	}
+	if len(subdirFiles) > 0 {
+		sb.WriteString("### Subdirectories\n\n")
+		writeEntries(subdirFiles)
+	}
+}
+
+// contextFileSummary returns a one-line summary for a context file: its first
+// H1 heading when symbols were extracted, otherwise the first non-empty line
+// read from disk.
+func (m *Manager) contextFileSummary(f *FileEntry) string {
+	if f.Symbols != nil && f.Symbols.Package != "" {
+		return f.Symbols.Package
+	}
+
+	path := f.Path
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(m.config.Root, path)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(line), "#"))
+		if line == "" {
+			continue
+		}
+		const maxSummaryLen = 120
+		if len(line) > maxSummaryLen {
+			line = line[:maxSummaryLen-3] + "..."
+		}
+		return line
+	}
+	return ""
 }
 
 // writeTokenBudget writes the token budget section for large files
