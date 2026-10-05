@@ -2,7 +2,6 @@ package codebaseindex
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -905,32 +904,12 @@ func (m *Manager) writeContextGuidance(sb *strings.Builder, scan *ScanResult) {
 	}
 }
 
-// contextFileSummary returns a one-line summary for a context file: its first
-// H1 heading when symbols were extracted, otherwise the first non-empty line
-// read from disk.
+// contextFileSummary returns a one-line summary for a context file: the title
+// captured during symbol extraction (first H1, or first non-empty line for
+// heading-less documents). No disk read — scanned content is the source.
 func (m *Manager) contextFileSummary(f *FileEntry) string {
-	if f.Symbols != nil && f.Symbols.Package != "" {
+	if f.Symbols != nil {
 		return f.Symbols.Package
-	}
-
-	path := f.Path
-	if !filepath.IsAbs(path) {
-		path = filepath.Join(m.config.Root, path)
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(line), "#"))
-		if line == "" {
-			continue
-		}
-		const maxSummaryLen = 120
-		if len(line) > maxSummaryLen {
-			line = line[:maxSummaryLen-3] + "..."
-		}
-		return line
 	}
 	return ""
 }

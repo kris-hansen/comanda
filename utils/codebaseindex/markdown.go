@@ -146,6 +146,23 @@ func extractMarkdownSymbols(_ string, content []byte) (*SymbolInfo, error) {
 		prose = append(prose, line)
 	}
 
+	// Heading-less documents still get a title: the first non-empty line, so
+	// downstream summaries never need to re-read the file from disk.
+	if info.Package == "" {
+		for _, line := range prose {
+			line = strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(line), "#"))
+			if line == "" {
+				continue
+			}
+			const maxTitleLen = 120
+			if len(line) > maxTitleLen {
+				line = line[:maxTitleLen-3] + "..."
+			}
+			info.Package = line
+			break
+		}
+	}
+
 	body := strings.Join(prose, "\n")
 	for _, match := range mdInlineLinkRe.FindAllStringSubmatch(body, -1) {
 		if target := localMarkdownTarget(match[1]); target != "" {

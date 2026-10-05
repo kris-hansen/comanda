@@ -58,6 +58,25 @@ Text with # a trailing hash is not a heading.
 	}
 }
 
+func TestExtractMarkdownTitleFallsBackToFirstLine(t *testing.T) {
+	info, err := extractMarkdownSymbols("notes.md", []byte("\nScratch notes about retries.\n\nMore detail here.\n"))
+	if err != nil {
+		t.Fatalf("extractMarkdownSymbols failed: %v", err)
+	}
+	if info.Package != "Scratch notes about retries." {
+		t.Errorf("Package should fall back to first non-empty line, got %q", info.Package)
+	}
+
+	long := strings.Repeat("a", 200) + "\n"
+	info, err = extractMarkdownSymbols("long.md", []byte(long))
+	if err != nil {
+		t.Fatalf("extractMarkdownSymbols failed: %v", err)
+	}
+	if len(info.Package) > 120 {
+		t.Errorf("Package fallback should be bounded to 120 chars, got %d", len(info.Package))
+	}
+}
+
 func TestExtractMarkdownLinks(t *testing.T) {
 	content := []byte(`# Notes
 
