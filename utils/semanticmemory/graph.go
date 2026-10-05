@@ -18,6 +18,7 @@ const (
 	GraphNodeType      = "type"
 	GraphNodeFunction  = "function"
 	GraphNodeConcept   = "concept"
+	GraphNodeDocument  = "document"
 )
 
 // Graph edge kinds.
@@ -28,6 +29,14 @@ const (
 	GraphEdgeDefines   = "defines"
 	GraphEdgeUses      = "uses"
 	GraphEdgeReference = "references"
+	GraphEdgeGuides    = "guides"
+)
+
+// Graph annotation sources: human notes are written through the API, file
+// notes are derived from agent-context documents during a graph build.
+const (
+	GraphAnnotationHuman = "human"
+	GraphAnnotationFile  = "file"
 )
 
 // Graph edge confidence tags: extracted edges are explicit in the source,
@@ -105,16 +114,20 @@ type GraphEdge struct {
 	UpdatedAt  time.Time
 }
 
-// GraphAnnotation is durable, human-authored guidance attached to a graph
-// node. It intentionally survives graph rebuilds so a fresh scan never
-// discards a maintainer's direction to agents.
+// GraphAnnotation is durable guidance attached to a graph node. Annotations
+// intentionally survive graph rebuilds so a fresh scan never discards a
+// maintainer's direction to agents. Source distinguishes the layers: human
+// notes written through the API versus file notes derived from agent-context
+// documents (SourcePath) on each build.
 type GraphAnnotation struct {
-	ID        string    `json:"id"`
-	Namespace string    `json:"namespace"`
-	NodeID    string    `json:"node_id"`
-	Content   string    `json:"content"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID         string    `json:"id"`
+	Namespace  string    `json:"namespace"`
+	NodeID     string    `json:"node_id"`
+	Content    string    `json:"content"`
+	Source     string    `json:"source"`
+	SourcePath string    `json:"source_path"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 var graphMigrateStatements = []string{
@@ -156,10 +169,57 @@ var graphMigrateStatements = []string{
         namespace TEXT NOT NULL,
         node_id TEXT NOT NULL,
         content TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'human',
+        source_path TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
     )`,
 	`CREATE INDEX IF NOT EXISTS idx_graph_annotations_namespace_node ON graph_annotations(namespace, node_id, updated_at DESC)`,
+}
+
+// migrateGraphAnnotationColumns upgrades pre-layering graph_annotations tables.
+// The CREATE statement above only reaches fresh databases, so existing stores
+// gain the annotation-layer columns through ALTER TABLE, guarded by a PRAGMA
+// inspection to keep repeated opens idempotent.
+func (s *Store) migrateGraphAnnotationColumns(ctx context.Context) error {
+	rows, err := s.db.QueryContext(ctx, `PRAGMA table_info(graph_annotations)`)
+	if err != nil {
+		return fmt.Errorf("inspect graph annotations schema: %w", err)
+	}
+	columns := make(map[string]bool)
+	for rows.Next() {
+		var cid int
+		var name, columnType string
+		var notNull int
+		var defaultValue any
+		var pk int
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &pk); err != nil {
+			rows.Close()
+			return fmt.Errorf("inspect graph annotations schema: %w", err)
+		}
+		columns[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("inspect graph annotations schema: %w", err)
+	}
+	rows.Close()
+
+	for _, column := range []struct {
+		name string
+		ddl  string
+	}{
+		{"source", `ALTER TABLE graph_annotations ADD COLUMN source TEXT NOT NULL DEFAULT 'human'`},
+		{"source_path", `ALTER TABLE graph_annotations ADD COLUMN source_path TEXT NOT NULL DEFAULT ''`},
+	} {
+		if columns[column.name] {
+			continue
+		}
+		if _, err := s.db.ExecContext(ctx, column.ddl); err != nil {
+			return fmt.Errorf("migrate graph annotations schema: %w", err)
+		}
+	}
+	return nil
 }
 
 // UpsertGraphNode writes a graph node, refreshes its FTS entry, and mirrors it
@@ -263,13 +323,20 @@ func (s *Store) UpsertGraphEdge(ctx context.Context, edge GraphEdge) (GraphEdge,
 	return edge, nil
 }
 
-// UpsertGraphAnnotation stores a human note and mirrors it as a graph_node
+// UpsertGraphAnnotation stores a guidance note and mirrors it as a graph_node
 // memory record. Existing graph-aware semantic recall therefore includes the
 // guidance without requiring each workflow to learn a separate annotation type.
+// An empty Source defaults to human; file-derived notes carry the document path
+// they were extracted from.
 func (s *Store) UpsertGraphAnnotation(ctx context.Context, annotation GraphAnnotation) (GraphAnnotation, error) {
 	annotation.Namespace = normalizeNamespace(annotation.Namespace)
 	annotation.NodeID = strings.TrimSpace(annotation.NodeID)
 	annotation.Content = strings.TrimSpace(annotation.Content)
+	annotation.Source = strings.TrimSpace(strings.ToLower(annotation.Source))
+	if annotation.Source == "" {
+		annotation.Source = GraphAnnotationHuman
+	}
+	annotation.SourcePath = strings.TrimSpace(annotation.SourcePath)
 	if annotation.ID == "" || annotation.NodeID == "" || annotation.Content == "" {
 		return GraphAnnotation{}, fmt.Errorf("graph annotation ID, node ID, and content are required")
 	}
@@ -278,20 +345,25 @@ func (s *Store) UpsertGraphAnnotation(ctx context.Context, annotation GraphAnnot
 		annotation.CreatedAt = now
 	}
 	annotation.UpdatedAt = now
-	_, err := s.db.ExecContext(ctx, `INSERT INTO graph_annotations (id, namespace, node_id, content, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET content=excluded.content, updated_at=excluded.updated_at`,
+	_, err := s.db.ExecContext(ctx, `INSERT INTO graph_annotations (id, namespace, node_id, content, source, source_path, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET content=excluded.content, source=excluded.source, source_path=excluded.source_path, updated_at=excluded.updated_at`,
 		annotation.ID, annotation.Namespace, annotation.NodeID, annotation.Content,
+		annotation.Source, annotation.SourcePath,
 		annotation.CreatedAt.Format(time.RFC3339Nano), annotation.UpdatedAt.Format(time.RFC3339Nano))
 	if err != nil {
 		return GraphAnnotation{}, fmt.Errorf("write graph annotation: %w", err)
+	}
+	origin := "Human guidance"
+	if annotation.Source == GraphAnnotationFile {
+		origin = "Guidance from " + annotation.SourcePath
 	}
 	if _, err := s.Upsert(ctx, Record{
 		ID:        graphAnnotationRecordPrefix + annotation.ID,
 		Namespace: annotation.Namespace,
 		Type:      "graph_node",
 		Priority:  90,
-		Content:   "Human guidance for " + annotation.NodeID + ": " + annotation.Content,
+		Content:   origin + " for " + annotation.NodeID + ": " + annotation.Content,
 		SourceRef: graphAnnotationSourceRef(annotation.Namespace, annotation.NodeID),
 	}); err != nil {
 		return GraphAnnotation{}, fmt.Errorf("mirror graph annotation into memory: %w", err)
@@ -299,9 +371,10 @@ func (s *Store) UpsertGraphAnnotation(ctx context.Context, annotation GraphAnnot
 	return annotation, nil
 }
 
-// GraphAnnotations lists durable human guidance for one graph node.
+// GraphAnnotations lists durable guidance for one graph node, across both the
+// human and file-derived layers.
 func (s *Store) GraphAnnotations(ctx context.Context, namespace, nodeID string) ([]GraphAnnotation, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, namespace, node_id, content, created_at, updated_at
+	rows, err := s.db.QueryContext(ctx, `SELECT id, namespace, node_id, content, source, source_path, created_at, updated_at
         FROM graph_annotations WHERE namespace = ? AND node_id = ? ORDER BY updated_at DESC`, normalizeNamespace(namespace), nodeID)
 	if err != nil {
 		return nil, fmt.Errorf("list graph annotations: %w", err)
@@ -313,7 +386,8 @@ func (s *Store) GraphAnnotations(ctx context.Context, namespace, nodeID string) 
 	for rows.Next() {
 		var annotation GraphAnnotation
 		var createdAt, updatedAt string
-		if err := rows.Scan(&annotation.ID, &annotation.Namespace, &annotation.NodeID, &annotation.Content, &createdAt, &updatedAt); err != nil {
+		if err := rows.Scan(&annotation.ID, &annotation.Namespace, &annotation.NodeID, &annotation.Content,
+			&annotation.Source, &annotation.SourcePath, &createdAt, &updatedAt); err != nil {
 			return nil, err
 		}
 		annotation.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAt)
@@ -321,6 +395,67 @@ func (s *Store) GraphAnnotations(ctx context.Context, namespace, nodeID string) 
 		annotations = append(annotations, annotation)
 	}
 	return annotations, rows.Err()
+}
+
+// DeleteFileAnnotationsExcept removes file-derived annotations outside the
+// keep set, together with their memory mirrors. Rebuilds call it with the IDs
+// just derived from the current documents so edited or removed docs leave no
+// stale guidance. Human-authored annotations are never touched.
+func (s *Store) DeleteFileAnnotationsExcept(ctx context.Context, namespace string, keepIDs []string) error {
+	namespace = normalizeNamespace(namespace)
+	// json.Marshal(nil) is "null", which json_each reads as a single NULL row
+	// and so poisons NOT IN; an empty keep set must prune everything instead.
+	if len(keepIDs) == 0 {
+		keepIDs = []string{}
+	}
+	keepJSON, err := json.Marshal(keepIDs)
+	if err != nil {
+		return fmt.Errorf("encode annotation keep set: %w", err)
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM graph_annotations
+        WHERE namespace = ? AND source = ? AND id NOT IN (SELECT value FROM json_each(?))`,
+		namespace, GraphAnnotationFile, string(keepJSON))
+	if err != nil {
+		return fmt.Errorf("list stale file annotations: %w", err)
+	}
+	var stale []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return fmt.Errorf("list stale file annotations: %w", err)
+		}
+		stale = append(stale, id)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("list stale file annotations: %w", err)
+	}
+	rows.Close()
+	if len(stale) == 0 {
+		return nil
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("start file annotation cleanup: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, id := range stale {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM graph_annotations WHERE id = ?`, id); err != nil {
+			return fmt.Errorf("delete stale file annotation: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM memory_fts WHERE id = ?`, graphAnnotationRecordPrefix+id); err != nil {
+			return fmt.Errorf("delete stale file annotation index: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM memories WHERE id = ?`, graphAnnotationRecordPrefix+id); err != nil {
+			return fmt.Errorf("delete stale file annotation mirror: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit file annotation cleanup: %w", err)
+	}
+	return nil
 }
 
 // RefreshGraphDegrees recomputes the degree column for every node in a
