@@ -249,6 +249,10 @@ func TestRebuildWithProgressReportsStoragePhases(t *testing.T) {
 	ctx := context.Background()
 	store := openTestStore(t)
 	graph := Build(fixtureScan(), "proj")
+	for _, node := range graph.Nodes {
+		graph.Annotations = []semanticmemory.GraphAnnotation{{ID: "test-annotation", Namespace: "proj", NodeID: node.ID, Content: "Example guidance", Source: semanticmemory.GraphAnnotationFile, SourcePath: "README.md"}}
+		break
+	}
 	var events []ProgressEvent
 
 	if err := RebuildWithProgress(ctx, store, graph, func(event ProgressEvent) {
@@ -260,12 +264,18 @@ func TestRebuildWithProgressReportsStoragePhases(t *testing.T) {
 	if len(events) == 0 || events[0].Phase != "Removing stale graph data" {
 		t.Fatalf("first progress event = %#v, want stale-data removal", events)
 	}
-	last := events[len(events)-1]
-	if last.Phase != "Refreshing graph relationships" {
-		t.Fatalf("last progress phase = %q", last.Phase)
+	phases := make(map[string]ProgressEvent)
+	for _, event := range events {
+		phases[event.Phase] = event
 	}
-	if last.Completed != len(graph.Nodes)+len(graph.Edges) || last.Total != last.Completed {
-		t.Fatalf("final progress = %d/%d, want %d/%d", last.Completed, last.Total, len(graph.Nodes)+len(graph.Edges), len(graph.Nodes)+len(graph.Edges))
+	for _, phase := range []string{"Refreshing graph relationships", "Committing graph transaction", "Syncing graph annotations", "Pruning stale graph annotations"} {
+		if _, ok := phases[phase]; !ok {
+			t.Fatalf("missing progress phase %q", phase)
+		}
+	}
+	commit := phases["Committing graph transaction"]
+	if commit.Completed != len(graph.Nodes)+len(graph.Edges) || commit.Total != commit.Completed {
+		t.Fatalf("commit progress = %d/%d, want %d/%d", commit.Completed, commit.Total, len(graph.Nodes)+len(graph.Edges), len(graph.Nodes)+len(graph.Edges))
 	}
 }
 
