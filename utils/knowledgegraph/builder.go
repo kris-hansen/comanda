@@ -624,23 +624,29 @@ func RebuildWithProgress(ctx context.Context, store *semanticmemory.Store, g *Gr
 	if err != nil {
 		return err
 	}
-	return syncFileAnnotations(ctx, store, g)
+	return syncFileAnnotations(ctx, store, g, progress)
 }
 
 // syncFileAnnotations persists doc-derived guidance after a rebuild and prunes
 // file-layer annotations that no longer derive from the current documents.
 // Human annotations are out of scope here and survive rebuilds untouched.
-func syncFileAnnotations(ctx context.Context, store *semanticmemory.Store, g *Graph) error {
+func syncFileAnnotations(ctx context.Context, store *semanticmemory.Store, g *Graph, progress ProgressFunc) error {
 	if g.Annotations == nil {
 		return nil
 	}
 	keep := make([]string, 0, len(g.Annotations))
-	for _, annotation := range g.Annotations {
+	for i, annotation := range g.Annotations {
+		if progress != nil && i%100 == 0 {
+			progress(ProgressEvent{Phase: "Syncing graph annotations", Completed: i, Total: len(g.Annotations)})
+		}
 		saved, err := store.UpsertGraphAnnotation(ctx, annotation)
 		if err != nil {
 			return err
 		}
 		keep = append(keep, saved.ID)
+	}
+	if progress != nil {
+		progress(ProgressEvent{Phase: "Pruning stale graph annotations", Completed: len(keep), Total: len(keep)})
 	}
 	return store.DeleteFileAnnotationsExcept(ctx, g.Namespace, keep)
 }

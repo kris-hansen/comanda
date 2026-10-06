@@ -144,6 +144,9 @@ func (s *Store) ReplaceGraph(ctx context.Context, namespace string, nodes []Grap
     WHERE namespace = ?`, namespace, namespace, namespace); err != nil {
 		return fmt.Errorf("refresh graph degrees: %w", err)
 	}
+	if progress != nil {
+		progress(GraphWriteProgress{Phase: "Committing graph transaction", Completed: completed, Total: total})
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit graph replacement: %w", err)
 	}
