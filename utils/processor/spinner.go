@@ -2,9 +2,12 @@ package processor
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/term"
 )
@@ -69,6 +72,7 @@ func (s *Spinner) Start(message string) {
 		defer s.wg.Done()
 		// Hide cursor during spinner animation (only if stdout is a terminal)
 		isTTY := term.IsTerminal(int(os.Stdout.Fd()))
+		lastWidth := 0
 		if isTTY {
 			fmt.Print("\033[?25l")
 		}
@@ -82,7 +86,7 @@ func (s *Spinner) Start(message string) {
 				s.mu.Unlock()
 
 				if !disabled {
-					fmt.Printf("\r%s     \n", msg)
+					writeSpinnerLine(os.Stdout, msg, isTTY, &lastWidth, true)
 				}
 				// Show cursor again (only if stdout is a terminal)
 				if isTTY {
@@ -103,7 +107,7 @@ func (s *Spinner) Start(message string) {
 					if s.detail != "" {
 						spinMsg += fmt.Sprintf("  ·  %s", s.detail)
 					}
-					fmt.Printf("\r%s", spinMsg)
+					writeSpinnerLine(os.Stdout, spinMsg, isTTY, &lastWidth, false)
 					// Don't send spinner updates through progress writer
 					s.index = (s.index + 1) % len(s.chars)
 				}
@@ -112,6 +116,21 @@ func (s *Spinner) Start(message string) {
 			}
 		}
 	}()
+}
+
+// writeSpinnerLine clears the previous frame before drawing the next one.
+// Non-terminal output is padded instead of receiving ANSI escape sequences.
+func writeSpinnerLine(w io.Writer, line string, isTTY bool, lastWidth *int, finish bool) {
+	if isTTY {
+		fmt.Fprintf(w, "\r\033[2K%s", line)
+	} else {
+		width := utf8.RuneCountInString(line)
+		fmt.Fprintf(w, "\r%s%s", line, strings.Repeat(" ", max(0, *lastWidth-width)))
+		*lastWidth = width
+	}
+	if finish {
+		fmt.Fprint(w, "\n")
+	}
 }
 
 // SetProgress updates the live spinner label and optional detail. Commands
