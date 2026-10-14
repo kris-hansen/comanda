@@ -250,7 +250,7 @@ var graphVisualizeCmd = &cobra.Command{
 
 The visualizer supports full-graph exploration, FTS-backed search, filters,
 focused one-to-three-hop subgraphs, and incremental neighbor expansion. Its
-inspector exposes Focus subgraph (two hops) and Expand neighbors while keeping
+inspector exposes selectable one-to-three-hop Focus subgraph and Expand neighbors while keeping
 the same scope/query behavior as the server API. Its API is also available to local
 clients such as Canvas:
   GET /api/v1/graph
@@ -363,7 +363,15 @@ func buildKnowledgeGraph(indexName, repoPath string, enhance bool, enhanceModel 
 		if verbose {
 			log.Printf("Enhancing graph with model: %s\n", modelName)
 		}
-		if err := knowledgegraph.Enhance(graph, enhanceFunc); err != nil {
+		indexContext := ""
+		if envConfig != nil && envConfig.Indexes != nil {
+			if entry := envConfig.Indexes[indexName]; entry != nil && entry.IndexPath != "" {
+				if data, readErr := os.ReadFile(entry.IndexPath); readErr == nil {
+					indexContext = graphPrepContext(string(data))
+				}
+			}
+		}
+		if err := knowledgegraph.EnhanceWithIndexContext(graph, enhanceFunc, indexContext); err != nil {
 			log.Printf("Warning: graph enhancement skipped: %v\n", err)
 		}
 	}
@@ -389,6 +397,20 @@ func buildKnowledgeGraph(indexName, repoPath string, enhance bool, enhanceModel 
 	log.Printf("Knowledge graph built: %d nodes, %d edges (namespace %s, db %s)\n",
 		len(graph.Nodes), len(graph.Edges), indexName, dbPath)
 	return nil
+}
+
+// graphPrepContext uses only the dedicated section of an AI-enhanced index.
+// It avoids losing graph guidance when a long macro analysis precedes it.
+func graphPrepContext(index string) string {
+	start := strings.Index(index, "### Graph Prep")
+	if start < 0 {
+		return ""
+	}
+	section := index[start:]
+	if end := strings.Index(section[len("### Graph Prep"):], "\n### "); end >= 0 {
+		section = section[:len("### Graph Prep")+end]
+	}
+	return section
 }
 
 // graphBuildProgress adapts the shared Comanda spinner to the graph builder's

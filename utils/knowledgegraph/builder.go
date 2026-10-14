@@ -87,6 +87,8 @@ func BuildWithRoot(scan *codebaseindex.ScanResult, namespace, root string) *Grap
 
 	// Pass 3: component contains edges.
 	componentNames := make(map[string]int)
+	filesByPath := append([]*codebaseindex.FileEntry(nil), scan.Candidates...)
+	sort.Slice(filesByPath, func(i, j int) bool { return filesByPath[i].Path < filesByPath[j].Path })
 	componentIDsByRoot := make(map[string][]string)
 	for _, c := range scan.Components {
 		componentNames[c.Name]++
@@ -101,9 +103,27 @@ func BuildWithRoot(scan *codebaseindex.ScanResult, namespace, root string) *Grap
 		componentID := NodeID(namespace, local)
 		root := path.Clean(c.Root)
 		componentIDsByRoot[root] = append(componentIDsByRoot[root], componentID)
-		for _, f := range scan.Candidates {
-			if path.Clean(c.Root) == "." || f.Path == c.Root || strings.HasPrefix(f.Path, strings.TrimSuffix(c.Root, "/")+"/") {
-				g.AddEdge(componentID, NodeID(namespace, "file:"+f.Path), EdgeContains, ConfidenceExtracted, "component root")
+		// Sorted paths let each component visit only files in its subtree.
+		// The previous nested scan visited every file for every component.
+		addFile := func(f *codebaseindex.FileEntry) {
+			g.AddEdge(componentID, NodeID(namespace, "file:"+f.Path), EdgeContains, ConfidenceExtracted, "component root")
+		}
+		if root == "." {
+			for _, f := range filesByPath {
+				addFile(f)
+			}
+		} else {
+			prefix := strings.TrimSuffix(root, "/") + "/"
+			start := sort.Search(len(filesByPath), func(i int) bool { return filesByPath[i].Path >= root })
+			for i := start; i < len(filesByPath); i++ {
+				f := filesByPath[i]
+				if f.Path == root || strings.HasPrefix(f.Path, prefix) {
+					addFile(f)
+					continue
+				}
+				if f.Path > prefix {
+					break
+				}
 			}
 		}
 	}
@@ -408,7 +428,14 @@ type llmGraph struct {
 // graph outline. Everything it adds is tagged inferred. A malformed response
 // is an error for the caller to warn about, never a partial mutation.
 func Enhance(g *Graph, fn EnhanceFunc) error {
-	prompt := buildEnhancePrompt(g)
+	return EnhanceWithIndexContext(g, fn, "")
+}
+
+// EnhanceWithIndexContext grounds inferred relationships in an optional
+// graph-prep section from an LLM-enhanced index. Deterministic graph extraction
+// remains the source of truth; the index context is only guidance to the model.
+func EnhanceWithIndexContext(g *Graph, fn EnhanceFunc, indexContext string) error {
+	prompt := buildEnhancePrompt(g, indexContext)
 	response, err := fn(prompt)
 	if err != nil {
 		return fmt.Errorf("enhancement model call failed: %w", err)
@@ -494,18 +521,66 @@ func resolvePriority(kind string) int {
 // maxEnhanceNodes bounds how much of the outline is sent to the model.
 const maxEnhanceNodes = 150
 
-func buildEnhancePrompt(g *Graph) string {
+func buildEnhancePrompt(g *Graph, indexContext string) string {
 	var b strings.Builder
 	b.WriteString("You are enriching a knowledge graph extracted from a codebase. ")
 	b.WriteString("Below are the known nodes (format: name [kind]).\n\n")
-	count := 0
+	nodes := make([]*semanticmemory.GraphNode, 0, len(g.Nodes))
 	for _, node := range g.Nodes {
-		if count >= maxEnhanceNodes {
-			fmt.Fprintf(&b, "... and %d more nodes\n", len(g.Nodes)-count)
+		nodes = append(nodes, node)
+	}
+	sort.Slice(nodes, func(i, j int) bool {
+		if nodes[i].Kind != nodes[j].Kind {
+			return nodes[i].Kind < nodes[j].Kind
+		}
+		if nodes[i].Path != nodes[j].Path {
+			return nodes[i].Path < nodes[j].Path
+		}
+		return nodes[i].ID < nodes[j].ID
+	})
+	// Sample kinds in rounds so large code repositories cannot crowd database
+	// and guidance nodes out of the model's bounded graph outline.
+	byKind := make(map[string][]*semanticmemory.GraphNode)
+	var kindOrder []string
+	for _, node := range nodes {
+		if _, ok := byKind[node.Kind]; !ok {
+			kindOrder = append(kindOrder, node.Kind)
+		}
+		byKind[node.Kind] = append(byKind[node.Kind], node)
+	}
+	count := 0
+	for round := 0; count < maxEnhanceNodes; round++ {
+		added := false
+		for _, kind := range kindOrder {
+			if round >= len(byKind[kind]) {
+				continue
+			}
+			node := byKind[kind][round]
+			fmt.Fprintf(&b, "- %s [%s]", node.Name, node.Kind)
+			if node.Path != "" {
+				fmt.Fprintf(&b, " (%s)", node.Path)
+			}
+			b.WriteByte('\n')
+			count++
+			added = true
+			if count >= maxEnhanceNodes {
+				break
+			}
+		}
+		if !added {
 			break
 		}
-		fmt.Fprintf(&b, "- %s [%s]\n", node.Name, node.Kind)
-		count++
+	}
+	if count < len(nodes) {
+		fmt.Fprintf(&b, "... and %d more nodes\n", len(nodes)-count)
+	}
+	if indexContext != "" {
+		if len(indexContext) > 12000 {
+			indexContext = indexContext[:12000]
+		}
+		b.WriteString("\n--- LLM INDEX GRAPH PREP (guidance, verify against nodes) ---\n")
+		b.WriteString(indexContext)
+		b.WriteString("\n--- END INDEX GRAPH PREP ---\n")
 	}
 	b.WriteString(`
 Respond with JSON only (no prose, no code fences) in this exact shape:
@@ -516,6 +591,8 @@ Respond with JSON only (no prose, no code fences) in this exact shape:
 Rules:
 - "nodes" are high-level concepts, subsystems, or cross-cutting concerns (at most 10).
 - "edges" connect EXISTING node names or new concept nodes; kind is "references" or "uses".
+- Connect concepts to concrete code, database, and documentation nodes when evidence supports it.
+- Treat index guidance as a hypothesis; only add relationships grounded in existing nodes and cited paths.
 - Only add edges you are confident about.`)
 	return b.String()
 }
