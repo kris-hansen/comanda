@@ -65,6 +65,20 @@ comanda graph build
 comanda graph update
 ```
 
+For an LLM-informed graph, run `comanda index capture --enhance` (or
+`comanda index update --enhance`) before `comanda graph build --enhance`.
+The index analysis now includes an evidenced **Graph Prep** section describing
+code, database, and guidance relationships. The graph enhancement pass reads
+that section as context, but only adds inferred relationships between actual
+graph nodes. Without these flags, extraction remains local and deterministic.
+The graph build reuses cached symbols for unchanged files, and component
+containment looks up files by path prefix rather than scanning every file for
+every component.
+
+In `comanda graph visualize`, choose a one-, two-, or three-hop focused view
+from the inspector. Deeper views are bounded; a truncated status means there
+are more relationships to page through with **Expand neighbors**.
+
 Unnamed index and graph commands select the nearest registered project root.
 Nested registered projects take precedence over their parents. If multiple
 indexes share that nearest root, specify the exact registered name from

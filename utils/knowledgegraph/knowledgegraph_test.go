@@ -315,3 +315,46 @@ func TestIdentifierTokensPreserveWholeIdentifierMatching(t *testing.T) {
 		t.Fatal("inferred uses edge matched Store inside a longer identifier")
 	}
 }
+
+func TestComponentContainmentUsesPathBoundary(t *testing.T) {
+	scan := &codebaseindex.ScanResult{
+		Candidates: []*codebaseindex.FileEntry{
+			{Path: "src/main.go", Language: "go"},
+			{Path: "src/deep/worker.go", Language: "go"},
+			{Path: "src-old/legacy.go", Language: "go"},
+		},
+		Components: []*codebaseindex.CodebaseComponent{{Name: "app", Root: "src", Kind: "app"}},
+	}
+	g := Build(scan, "test")
+	component := NodeID("test", "component:app")
+	for _, file := range []string{"src/main.go", "src/deep/worker.go"} {
+		id := EdgeID("test", component, NodeID("test", "file:"+file), EdgeContains)
+		if g.Edges[id] == nil {
+			t.Errorf("missing containment edge for %s", file)
+		}
+	}
+	id := EdgeID("test", component, NodeID("test", "file:src-old/legacy.go"), EdgeContains)
+	if g.Edges[id] != nil {
+		t.Fatal("component leaked across path boundary")
+	}
+}
+
+func TestEnhanceWithIndexContextIncludesAllGraphDimensions(t *testing.T) {
+	g := NewGraph("test")
+	g.AddNode("file:app.go", NodeFile, "app.go", "app.go", "", "")
+	g.AddNode("table:users", "table", "users", "schema.sql", "", "")
+	g.AddNode("doc:guide", NodeDocument, "guide.md", "guide.md", "", "")
+	var prompt string
+	err := EnhanceWithIndexContext(g, func(p string) (string, error) {
+		prompt = p
+		return `{"nodes":[],"edges":[]}`, nil
+	}, "## AI Macro Analysis\n### Graph Prep\napp.go reads users; guide.md explains it")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"app.go [file]", "users [table]", "guide.md [document]", "Graph Prep"} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("prompt missing %q", want)
+		}
+	}
+}

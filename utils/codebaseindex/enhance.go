@@ -134,6 +134,8 @@ Rules:
   - Cross-Cutting Conventions
   - Agent Change Playbook
   - Unknowns / Follow-up Exploration
+  - Graph Prep: evidenced code-to-database and code-to-guidance relationships
+- In Graph Prep, name exact source paths and symbols, database schemas/tables/columns when present, and relevant guidance documents. Describe directional relationships and evidence; distinguish observed links from hypotheses. This section seeds optional graph enhancement and must never invent a node.
 - In Deep Code Conventions & Agent Editing Rules, use compact entries with Why, Agent guidance, Evidence paths, and Confidence when repeated code patterns support them.
 - Cite concrete evidence paths inline. Do not invent files, frameworks, services, or business domains.
 - Avoid generic advice like "follow best practices". Every claim should explain what pattern appears in this repository and how an agent should change code safely.
