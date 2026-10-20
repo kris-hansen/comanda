@@ -23,3 +23,46 @@ jobs:
 
       - name: Run Tests
         run: make test
+
+  pr-complexity:
+    name: PR complexity (advisory)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install git-weight v0.6.0
+        shell: bash
+        run: |
+          archive="$RUNNER_TEMP/git-weight-linux-amd64.tar.gz"
+          curl --fail --location --silent --show-error --retry 3 \
+            https://github.com/kris-hansen/git-weight/releases/download/v0.6.0/git-weight-linux-amd64.tar.gz \
+            --output "$archive"
+          echo "0ba776a1f85529c79a1304a4e5e3c45acd43664e81f1c8699df3ea4a4621262d  $archive" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/git-weight"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/git-weight"
+          "$RUNNER_TEMP/git-weight/git-weight" --version
+
+      - name: Score PR complexity
+        shell: bash
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          score_json=$("$RUNNER_TEMP/git-weight/git-weight" pr \
+            --base "$PR_BASE_SHA" --to "$PR_HEAD_SHA" --json)
+          printf '%s\n' "$score_json"
+          {
+            echo '### PR complexity (advisory)'
+            echo
+            echo "$score_json" | jq -r '"- Total points: **\(.total_points)** (work: \(.work_points), observable complexity: \(.complexity_points))"'
+            echo "$score_json" | jq -r '"- Changed files: \(.changed_files); lines: +\(.added_lines)/-\(.removed_lines); new branches: \(.added_branches)"'
+            echo "$score_json" | jq -r '"- Internal imports: \(.dimensions.internal_imports); external URL hosts: \(.dimensions.external_integrations); dependency manifests: \(.dimensions.dependency_manifests_changed)"'
+            echo "$score_json" | jq -r '"- UI components: \(.dimensions.new_ui_components) new, \(.dimensions.changed_shared_ui_components) changed, \(.dimensions.reused_ui_components) reused imports"'
+            echo
+            echo 'Evidence samples:'
+            echo "$score_json" | jq -r '.evidence[:10][] | "- \(.dimension): `\(.path)` — \(.detail)"'
+            echo
+            echo 'This is a heuristic signal for reviewers, not an automatic approval or rejection.'
+          } >> "$GITHUB_STEP_SUMMARY"
