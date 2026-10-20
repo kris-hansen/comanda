@@ -32,6 +32,7 @@ var (
 	graphExportOutput    string
 	graphVisualizePort   int
 	graphVisualizeNoOpen bool
+	graphVisualizeInput  string
 )
 
 var graphCmd = &cobra.Command{
@@ -60,6 +61,7 @@ Examples:
   comanda graph stats                        # Counts and hub nodes
   comanda graph export -o graph.json         # graphify-style JSON export
   comanda graph visualize                    # Browse the graph in a local browser
+  comanda graph visualize --input graph.json # Browse an export without source code
   comanda graph remove myproject             # Delete a graph namespace (index stays registered)`,
 }
 
@@ -248,6 +250,10 @@ var graphVisualizeCmd = &cobra.Command{
 	Short: "Open an interactive local graph navigator",
 	Long: `Serve a local graph navigation API and browser UI on localhost.
 
+Pass --input graph.json to explore a graph exported on another machine without
+access to its repository or a Comanda index. The imported graph is held in
+memory and the visualizer does not write annotations in this mode.
+
 The visualizer supports full-graph exploration, FTS-backed search, filters,
 focused one-to-three-hop subgraphs, and incremental neighbor expansion. Its
 inspector exposes selectable one-to-three-hop Focus subgraph and Expand neighbors while keeping
@@ -284,6 +290,7 @@ func init() {
 	graphExportCmd.Flags().StringVarP(&graphExportOutput, "output", "o", "", "Write export to a file instead of stdout")
 	graphVisualizeCmd.Flags().IntVar(&graphVisualizePort, "port", 0, "Local port to listen on (0 selects a free port)")
 	graphVisualizeCmd.Flags().BoolVar(&graphVisualizeNoOpen, "no-open", false, "Start the API without opening a browser")
+	graphVisualizeCmd.Flags().StringVar(&graphVisualizeInput, "input", "", "Visualize a graph export JSON file without a local index or database")
 }
 
 // buildKnowledgeGraph scans the repo behind a registered index and rebuilds
@@ -585,6 +592,12 @@ func runGraphVisualize(_ *cobra.Command, _ []string) error {
 	if graphVisualizePort < 0 || graphVisualizePort > 65535 {
 		return fmt.Errorf("port must be between 0 and 65535")
 	}
+	if graphVisualizeInput != "" && (graphNamespace != "" || graphDBPath != "") {
+		return fmt.Errorf("--input cannot be combined with --namespace or --db")
+	}
+	if graphVisualizeInput != "" {
+		return runImportedGraphVisualize(graphVisualizeInput)
+	}
 	open := func(_ context.Context, requestedNamespace string) (*knowledgegraph.Querier, func() error, error) {
 		if graphNamespace != "" && requestedNamespace != "" && requestedNamespace != graphNamespace {
 			return nil, nil, fmt.Errorf("this visualizer is bound to namespace %q", graphNamespace)
@@ -594,7 +607,11 @@ func runGraphVisualize(_ *cobra.Command, _ []string) error {
 		}
 		return openGraphQuerierFor(requestedNamespace, graphDBPath)
 	}
-	handler, err := graphviewer.VisualizationHandler(open)
+	return serveGraphVisualizer(open, false)
+}
+
+func serveGraphVisualizer(open graphviewer.OpenQuerier, readOnly bool) error {
+	handler, err := graphVisualizerHandler(open, readOnly)
 	if err != nil {
 		return err
 	}
@@ -603,6 +620,9 @@ func runGraphVisualize(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("start graph visualizer: %w", err)
 	}
 	url := "http://" + listener.Addr().String()
+	if readOnly {
+		url += "?readonly=1"
+	}
 	fmt.Printf("Comanda graph visualizer: %s\nPress Ctrl-C to stop.\n", url)
 	if !graphVisualizeNoOpen {
 		if err := openBrowser(url); err != nil {
@@ -617,6 +637,24 @@ func runGraphVisualize(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("serve graph visualizer: %w", err)
 	}
 	return nil
+}
+
+func graphVisualizerHandler(open graphviewer.OpenQuerier, readOnly bool) (http.Handler, error) {
+	handler, err := graphviewer.VisualizationHandler(open)
+	if err != nil {
+		return nil, err
+	}
+	if readOnly {
+		base := handler
+		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPost {
+				http.Error(w, "imported graphs are read-only", http.StatusMethodNotAllowed)
+				return
+			}
+			base.ServeHTTP(w, r)
+		})
+	}
+	return handler, nil
 }
 
 func openBrowser(url string) error {
