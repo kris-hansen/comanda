@@ -227,6 +227,7 @@ comanda graph query "what uses the store?"      # scoped subgraph for a question
 comanda graph stats                             # counts and hub nodes
 comanda graph export -o graph.json              # graphify-style JSON
 comanda graph visualize                          # interactive local graph navigator
+comanda graph visualize --input graph.json       # explore an export without the source repo
 ```
 
 `comanda graph visualize` opens a localhost-only browser view for navigating
@@ -238,6 +239,12 @@ all-symbol hairball. Inspector mode also accepts durable human guidance for a
 selected file, component, or symbol; it survives graph rebuilds and is included
 in graph-aware agent recall. The navigation contract is available to native
 clients through the visualizer and the configured Comanda server:
+
+With `--input graph.json`, the same navigator reads an exported graph into an
+in-memory store. It needs no local index, source checkout, or persistent graph
+database. Imported graphs are read-only: annotation writes are disabled. Graph
+exports can still expose names, paths, summaries, and edge evidence; review
+them before sharing outside the source team's trust boundary.
 
 ### Explore a codebase as a map
 
