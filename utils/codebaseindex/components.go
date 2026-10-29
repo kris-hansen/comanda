@@ -15,6 +15,7 @@ var componentMarkers = map[string]string{
 	"requirements.txt":    "python",
 	"setup.py":            "python",
 	"Pipfile":             "python",
+	"Gemfile":             "ruby",
 	"pubspec.yaml":        "flutter",
 	"pom.xml":             "java",
 	"build.gradle":        "java",
@@ -31,6 +32,7 @@ var backendFrameworks = map[string]bool{
 	"gin": true, "echo": true, "fiber": true, "gorilla": true, "stdlib-http": true,
 	"grpc": true, "graphql": true, "express": true, "fastify": true, "nestjs": true,
 	"flask": true, "django": true, "fastapi": true, "starlette": true, "spring": true,
+	"rails": true, "sinatra": true, "roda": true, "hanami": true,
 }
 
 // analyzeComponents infers macro component boundaries after symbol extraction.
