@@ -112,6 +112,10 @@ comanda index update my-project
 
 See [codebase-index examples](examples/codebase-index/README.md).
 
+Ruby and Rails projects are detected automatically. The built-in Ruby adapter
+extracts namespaces, classes, methods, constants, and dependencies for indexes
+and knowledge graphs without requiring Ruby. See [Ruby indexing](docs/ruby-indexing.md).
+
 ## Build a workflow once. Run it everywhere.
 
 Workflows are plain files. Review them in pull requests, run them from the terminal or CI, serve them over HTTP, or expose them to MCP clients.

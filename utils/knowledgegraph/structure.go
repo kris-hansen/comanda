@@ -3,6 +3,7 @@ package knowledgegraph
 import (
 	"fmt"
 	"path"
+	"strings"
 
 	"github.com/kris-hansen/comanda/utils/codebaseindex"
 )
@@ -76,7 +77,11 @@ func linkMethods(g *Graph, scan *codebaseindex.ScanResult, namespace string, pac
 			if !fn.IsMethod || fn.Receiver == "" {
 				continue
 			}
-			owners := types[packages[f.Path]+"|"+fn.Receiver]
+			receiver := fn.Receiver
+			if f.Language == "ruby" {
+				receiver = strings.TrimSuffix(receiver, ".self")
+			}
+			owners := types[packages[f.Path]+"|"+receiver]
 			if len(owners) == 1 {
 				id := NodeID(namespace, fmt.Sprintf("func:%s.%s@%s", fn.Receiver, fn.Name, f.Path))
 				g.AddEdge(owners[0], id, EdgeDefines, ConfidenceExtracted, "method receiver "+fn.Receiver)

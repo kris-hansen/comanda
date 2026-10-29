@@ -59,6 +59,7 @@ func NewRegistry() *Registry {
 	// Register default adapters
 	r.Register(&GoAdapter{})
 	r.Register(&PythonAdapter{})
+	r.Register(&RubyAdapter{})
 	r.Register(&TypeScriptAdapter{})
 	r.Register(&FlutterAdapter{})
 	r.Register(&JavaAdapter{})

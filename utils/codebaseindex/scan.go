@@ -210,6 +210,16 @@ func (m *Manager) processFile(path string) *FileEntry {
 		}
 	}
 
+	// Some languages use extensionless source files, such as Ruby's Gemfile.
+	if entry.Language == "" {
+		for _, adapter := range m.adapters {
+			if matcher, ok := adapter.(interface{ MatchesFilename(string) bool }); ok && matcher.MatchesFilename(filepath.Base(path)) {
+				entry.Language = adapter.Name()
+				break
+			}
+		}
+	}
+
 	// Check if entrypoint or config
 	name := filepath.Base(path)
 	entry.IsEntrypoint = m.isEntrypoint(name, relPath)
