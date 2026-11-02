@@ -113,8 +113,8 @@ func TestBuildMarkdownDocuments(t *testing.T) {
 		if e.Kind == EdgeGuides && (e.SourceID == NodeID("proj", "file:docs/plain.md") || e.SourceID == NodeID("proj", "file:pkg/foo/notes.md")) {
 			t.Errorf("non-context document %s has a guides edge", e.SourceID)
 		}
-		if e.Kind == EdgeGuides && e.Confidence != ConfidenceExtracted {
-			t.Errorf("guides edge confidence = %s, want extracted", e.Confidence)
+		if e.Kind == EdgeGuides && e.Confidence != ConfidenceInferred {
+			t.Errorf("directory-derived guides edge confidence = %s, want inferred", e.Confidence)
 		}
 	}
 

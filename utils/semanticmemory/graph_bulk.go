@@ -8,7 +8,6 @@ import (
 )
 
 // GraphWriteProgress reports bounded milestones from a bulk graph replace.
-// It intentionally does not expose a database transaction to callers.
 type GraphWriteProgress struct {
 	Phase     string
 	Current   string
@@ -16,11 +15,14 @@ type GraphWriteProgress struct {
 	Total     int
 }
 
-// ReplaceGraph atomically replaces one namespace using a single SQLite
-// transaction. Rebuilds previously committed once per node, once per mirrored
-// memory record, and once per edge; large graphs therefore spent most of their
-// time in transaction overhead rather than graph work.
+// ReplaceGraph atomically replaces one namespace using a single SQLite transaction.
 func (s *Store) ReplaceGraph(ctx context.Context, namespace string, nodes []GraphNode, edges []GraphEdge, progress func(GraphWriteProgress)) error {
+	return s.ReplaceGraphWithEvidence(ctx, namespace, nodes, edges, nil, progress)
+}
+
+// ReplaceGraphWithEvidence atomically replaces graph structure and all source
+// citations for a namespace.
+func (s *Store) ReplaceGraphWithEvidence(ctx context.Context, namespace string, nodes []GraphNode, edges []GraphEdge, evidence []GraphEvidence, progress func(GraphWriteProgress)) error {
 	namespace = normalizeNamespace(namespace)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -35,6 +37,7 @@ func (s *Store) ReplaceGraph(ctx context.Context, namespace string, nodes []Grap
 		query string
 		args  []any
 	}{
+		{`DELETE FROM graph_evidence WHERE namespace = ?`, []any{namespace}},
 		{`DELETE FROM graph_edges WHERE namespace = ?`, []any{namespace}},
 		{`DELETE FROM graph_nodes_fts WHERE namespace = ?`, []any{namespace}},
 		{`DELETE FROM graph_nodes WHERE namespace = ?`, []any{namespace}},
@@ -47,13 +50,14 @@ func (s *Store) ReplaceGraph(ctx context.Context, namespace string, nodes []Grap
 	}
 
 	nodeStmt, err := tx.PrepareContext(ctx, `INSERT INTO graph_nodes (
-        id, namespace, kind, name, path, package, summary, degree, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        id, namespace, kind, name, path, package, summary, content, properties,
+        start_line, end_line, degree, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("prepare graph node write: %w", err)
 	}
 	defer nodeStmt.Close()
-	graphFTSStmt, err := tx.PrepareContext(ctx, `INSERT INTO graph_nodes_fts(id, namespace, name, summary) VALUES (?, ?, ?, ?)`)
+	graphFTSStmt, err := tx.PrepareContext(ctx, `INSERT INTO graph_nodes_fts(id, namespace, name, summary, content) VALUES (?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("prepare graph node index: %w", err)
 	}
@@ -77,8 +81,16 @@ func (s *Store) ReplaceGraph(ctx context.Context, namespace string, nodes []Grap
 		return fmt.Errorf("prepare graph edge write: %w", err)
 	}
 	defer edgeStmt.Close()
+	evidenceStmt, err := tx.PrepareContext(ctx, `INSERT INTO graph_evidence (
+        id, namespace, edge_id, source_path, start_line, end_line, quote,
+        extractor, parser_version, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return fmt.Errorf("prepare graph evidence write: %w", err)
+	}
+	defer evidenceStmt.Close()
 
-	total := len(nodes) + len(edges)
+	total := len(nodes) + len(edges) + len(evidence)
 	completed := 0
 	report := func(phase, current string) {
 		if progress != nil && (completed%100 == 0 || completed == total) {
@@ -93,16 +105,17 @@ func (s *Store) ReplaceGraph(ctx context.Context, namespace string, nodes []Grap
 		if node.ID == "" || node.Name == "" {
 			return fmt.Errorf("graph node ID and name are required")
 		}
-		if _, err := nodeStmt.ExecContext(ctx, node.ID, namespace, node.Kind, node.Name, node.Path, node.Package, node.Summary, 0, now, now); err != nil {
+		if node.Properties == "" {
+			node.Properties = "{}"
+		}
+		if _, err := nodeStmt.ExecContext(ctx, node.ID, namespace, node.Kind, node.Name, node.Path, node.Package,
+			node.Summary, node.Content, node.Properties, node.StartLine, node.EndLine, 0, now, now); err != nil {
 			return fmt.Errorf("write graph node: %w", err)
 		}
-		if _, err := graphFTSStmt.ExecContext(ctx, node.ID, namespace, node.Name, node.Summary); err != nil {
+		if _, err := graphFTSStmt.ExecContext(ctx, node.ID, namespace, node.Name, node.Summary, node.Content); err != nil {
 			return fmt.Errorf("index graph node: %w", err)
 		}
-		content := node.Name
-		if node.Summary != "" {
-			content += " — " + node.Summary
-		}
+		content := graphNodeMemoryContent(node)
 		mirrorID := graphMirrorRecordPrefix + node.ID
 		if _, err := memoryStmt.ExecContext(ctx, mirrorID, namespace, "graph_node", 50, 1.0, content, "", "", graphMirrorSourceRef(namespace), now, now); err != nil {
 			return fmt.Errorf("mirror graph node into memory: %w", err)
@@ -113,6 +126,7 @@ func (s *Store) ReplaceGraph(ctx context.Context, namespace string, nodes []Grap
 		completed++
 		report("Writing graph nodes", node.Name)
 	}
+	edgeIDs := make(map[string]bool, len(edges))
 	for _, edge := range edges {
 		edge.Namespace = namespace
 		edge.Kind = strings.TrimSpace(strings.ToLower(edge.Kind))
@@ -126,8 +140,20 @@ func (s *Store) ReplaceGraph(ctx context.Context, namespace string, nodes []Grap
 		if _, err := edgeStmt.ExecContext(ctx, edge.ID, namespace, edge.SourceID, edge.TargetID, edge.Kind, confidence, edge.Evidence, now, now); err != nil {
 			return fmt.Errorf("write graph edge: %w", err)
 		}
+		edgeIDs[edge.ID] = true
 		completed++
 		report("Writing graph edges", edge.Kind)
+	}
+	for _, item := range evidence {
+		if item.ID == "" || !edgeIDs[item.EdgeID] {
+			return fmt.Errorf("graph evidence requires an ID and valid edge")
+		}
+		if _, err := evidenceStmt.ExecContext(ctx, item.ID, namespace, item.EdgeID, item.SourcePath,
+			item.StartLine, item.EndLine, item.Quote, item.Extractor, item.ParserVersion, now); err != nil {
+			return fmt.Errorf("write graph evidence: %w", err)
+		}
+		completed++
+		report("Writing graph evidence", item.SourcePath)
 	}
 	if progress != nil {
 		progress(GraphWriteProgress{Phase: "Refreshing graph relationships", Completed: completed, Total: total})

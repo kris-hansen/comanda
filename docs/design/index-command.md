@@ -20,14 +20,16 @@ A dedicated CLI command with registry persistence enables:
 - Cross-codebase awareness in workflows
 - Better tooling for agents (list, show, diff)
 
-Markdown is indexed alongside code via a built-in markdown adapter: headings
-become symbols and links to other local markdown files become imports, so
-agent-context files (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, etc.) and
-documentation trees are captured — and a directory of pure markdown (e.g. an
-analysis-notes folder) can be indexed on its own. Recognized context files
-score highly enough to survive file-count capping; the generated index
-includes a "Context & Guidance" section listing them by layer (repository
-root, then per-subdirectory).
+Markdown is indexed alongside code via a built-in CommonMark/GFM adapter.
+Frontmatter, nested sections, body text, source lines, and precise links are
+retained in a structured document model; legacy heading/import fields remain
+available for older consumers. Agent-context files (`AGENTS.md`, `CLAUDE.md`,
+`.cursorrules`, etc.) and documentation trees are captured — and a directory
+of pure Markdown can be indexed on its own. Recognized context files score
+highly enough to survive file-count capping; the generated index includes a
+"Context & Guidance" section listing them by layer (repository root, then
+per-subdirectory). Extractor versions are persisted in index and graph caches
+so parser improvements invalidate stale symbols automatically.
 
 ## Command Structure
 

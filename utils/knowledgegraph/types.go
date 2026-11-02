@@ -6,6 +6,7 @@
 package knowledgegraph
 
 import (
+	"encoding/json"
 	"fmt"
 	"hash/fnv"
 
@@ -15,31 +16,52 @@ import (
 // Node and edge kinds are re-exported from semanticmemory so callers use one
 // vocabulary end to end.
 const (
-	NodeComponent = semanticmemory.GraphNodeComponent
-	NodePackage   = semanticmemory.GraphNodePackage
-	NodeFile      = semanticmemory.GraphNodeFile
-	NodeType      = semanticmemory.GraphNodeType
-	NodeFunction  = semanticmemory.GraphNodeFunction
-	NodeConcept   = semanticmemory.GraphNodeConcept
-	NodeDocument  = semanticmemory.GraphNodeDocument
+	NodeComponent        = semanticmemory.GraphNodeComponent
+	NodePackage          = semanticmemory.GraphNodePackage
+	NodeFile             = semanticmemory.GraphNodeFile
+	NodeType             = semanticmemory.GraphNodeType
+	NodeFunction         = semanticmemory.GraphNodeFunction
+	NodeConcept          = semanticmemory.GraphNodeConcept
+	NodeDocument         = semanticmemory.GraphNodeDocument
+	NodeSection          = semanticmemory.GraphNodeSection
+	NodeBlock            = semanticmemory.GraphNodeBlock
+	NodeExternalResource = semanticmemory.GraphNodeExternalResource
 
-	EdgeContains  = semanticmemory.GraphEdgeContains
-	EdgeBelongsTo = semanticmemory.GraphEdgeBelongsTo
-	EdgeImports   = semanticmemory.GraphEdgeImports
-	EdgeDefines   = semanticmemory.GraphEdgeDefines
-	EdgeUses      = semanticmemory.GraphEdgeUses
-	EdgeReference = semanticmemory.GraphEdgeReference
-	EdgeGuides    = semanticmemory.GraphEdgeGuides
+	EdgeContains   = semanticmemory.GraphEdgeContains
+	EdgeBelongsTo  = semanticmemory.GraphEdgeBelongsTo
+	EdgeImports    = semanticmemory.GraphEdgeImports
+	EdgeDefines    = semanticmemory.GraphEdgeDefines
+	EdgeUses       = semanticmemory.GraphEdgeUses
+	EdgeReference  = semanticmemory.GraphEdgeReference
+	EdgeGuides     = semanticmemory.GraphEdgeGuides
+	EdgeLinksTo    = semanticmemory.GraphEdgeLinksTo
+	EdgeMentions   = semanticmemory.GraphEdgeMentions
+	EdgeDescribes  = semanticmemory.GraphEdgeDescribes
+	EdgeSupersedes = semanticmemory.GraphEdgeSupersedes
+	EdgeDependsOn  = semanticmemory.GraphEdgeDependsOn
+	EdgeRelatedTo  = semanticmemory.GraphEdgeRelatedTo
+	EdgeDocuments  = semanticmemory.GraphEdgeDocuments
 
 	ConfidenceExtracted = semanticmemory.GraphConfidenceExtracted
 	ConfidenceInferred  = semanticmemory.GraphConfidenceInferred
 )
 
+// GraphDiagnostic describes a non-fatal extraction or resolution problem.
+type GraphDiagnostic struct {
+	Kind    string `json:"kind"`
+	Path    string `json:"path,omitempty"`
+	Line    int    `json:"line,omitempty"`
+	Message string `json:"message"`
+}
+
 // Graph is an in-memory knowledge graph under construction.
 type Graph struct {
-	Namespace string
-	Nodes     map[string]*semanticmemory.GraphNode
-	Edges     map[string]*semanticmemory.GraphEdge
+	Namespace       string
+	OntologyVersion int
+	Nodes           map[string]*semanticmemory.GraphNode
+	Edges           map[string]*semanticmemory.GraphEdge
+	Evidence        []semanticmemory.GraphEvidence
+	Diagnostics     []GraphDiagnostic
 	// Annotations holds file-derived guidance for Rebuild to persist. A nil
 	// slice means the build never read documents (no scan root was given), so
 	// Rebuild leaves stored file annotations untouched; an empty non-nil slice
@@ -50,9 +72,10 @@ type Graph struct {
 // NewGraph creates an empty graph for a namespace.
 func NewGraph(namespace string) *Graph {
 	return &Graph{
-		Namespace: namespace,
-		Nodes:     make(map[string]*semanticmemory.GraphNode),
-		Edges:     make(map[string]*semanticmemory.GraphEdge),
+		Namespace:       namespace,
+		OntologyVersion: DocumentOntologyVersion,
+		Nodes:           make(map[string]*semanticmemory.GraphNode),
+		Edges:           make(map[string]*semanticmemory.GraphEdge),
 	}
 }
 
@@ -127,13 +150,17 @@ func LocalID(id string) string {
 
 // ExportNode is the JSON export shape for a node (graphify-style graph.json).
 type ExportNode struct {
-	ID      string `json:"id"`
-	Kind    string `json:"kind"`
-	Name    string `json:"name"`
-	Path    string `json:"path,omitempty"`
-	Package string `json:"package,omitempty"`
-	Summary string `json:"summary,omitempty"`
-	Degree  int    `json:"degree"`
+	ID         string          `json:"id"`
+	Kind       string          `json:"kind"`
+	Name       string          `json:"name"`
+	Path       string          `json:"path,omitempty"`
+	Package    string          `json:"package,omitempty"`
+	Summary    string          `json:"summary,omitempty"`
+	Content    string          `json:"content,omitempty"`
+	Properties json.RawMessage `json:"properties,omitempty"`
+	StartLine  int             `json:"start_line,omitempty"`
+	EndLine    int             `json:"end_line,omitempty"`
+	Degree     int             `json:"degree"`
 }
 
 // ExportEdge is the JSON export shape for an edge.
@@ -150,10 +177,11 @@ type ExportEdge struct {
 // rather than materializing an unbounded neighborhood; Export itself (the
 // full namespace dump) never sets it.
 type ExportGraph struct {
-	Namespace string       `json:"namespace"`
-	Nodes     []ExportNode `json:"nodes"`
-	Edges     []ExportEdge `json:"edges"`
-	Truncated bool         `json:"truncated,omitempty"`
+	Namespace string                         `json:"namespace"`
+	Nodes     []ExportNode                   `json:"nodes"`
+	Edges     []ExportEdge                   `json:"edges"`
+	Evidence  []semanticmemory.GraphEvidence `json:"evidence,omitempty"`
+	Truncated bool                           `json:"truncated,omitempty"`
 }
 
 // Overview is the small architectural map shown before a visualizer loads any
@@ -183,7 +211,14 @@ type NeighborPage struct {
 // String renders a node for display.
 func NodeLabel(n *semanticmemory.GraphNode) string {
 	if n.Path != "" {
-		return fmt.Sprintf("%s (%s, %s)", n.Name, n.Kind, n.Path)
+		location := n.Path
+		if n.StartLine > 0 {
+			location = fmt.Sprintf("%s:%d", location, n.StartLine)
+			if n.EndLine > n.StartLine {
+				location = fmt.Sprintf("%s-%d", location, n.EndLine)
+			}
+		}
+		return fmt.Sprintf("%s (%s, %s)", n.Name, n.Kind, location)
 	}
 	return fmt.Sprintf("%s (%s)", n.Name, n.Kind)
 }

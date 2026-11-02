@@ -3,6 +3,7 @@ package knowledgegraph
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -34,13 +35,21 @@ func (q *Querier) Annotate(ctx context.Context, node semanticmemory.GraphNode, c
 	return q.store.UpsertGraphAnnotation(ctx, semanticmemory.GraphAnnotation{ID: annotationID(node.ID, content), Namespace: q.namespace, NodeID: node.ID, Content: content})
 }
 
-// resolve finds the single best node for a user-supplied name. Exact
-// case-sensitive matches win, then case-insensitive, then more specific kinds
-// (a type named "Store" beats a package named "store"), then FTS ranking.
+// resolve finds a node by stable stored/local ID first, then by the single
+// best name or FTS match.
 func (q *Querier) resolve(ctx context.Context, name string) (*semanticmemory.GraphNode, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, fmt.Errorf("empty node name")
+	}
+	if strings.Contains(name, ":") {
+		id := name
+		if !strings.Contains(id, "|") {
+			id = NodeID(q.namespace, id)
+		}
+		if node, err := q.store.GetGraphNode(ctx, id); err == nil && node.Namespace == q.namespace {
+			return &node, nil
+		}
 	}
 	nodes, err := q.store.GraphFindNodes(ctx, q.namespace, name, 10)
 	if err != nil {
@@ -72,6 +81,10 @@ func (q *Querier) Explain(ctx context.Context, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return q.explainNode(ctx, *node)
+}
+
+func (q *Querier) explainNode(ctx context.Context, node semanticmemory.GraphNode) (string, error) {
 	edges, neighbors, err := q.store.GraphNeighbors(ctx, q.namespace, node.ID)
 	if err != nil {
 		return "", err
@@ -82,14 +95,17 @@ func (q *Querier) Explain(ctx context.Context, name string) (string, error) {
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "Node: %s\n", NodeLabel(node))
+	fmt.Fprintf(&b, "Node: %s\n", NodeLabel(&node))
 	if node.Package != "" {
 		fmt.Fprintf(&b, "  Package: %s\n", node.Package)
 	}
 	if node.Summary != "" {
 		fmt.Fprintf(&b, "  Summary: %s\n", node.Summary)
 	}
-	annotations, err := q.Annotations(ctx, *node)
+	if node.Content != "" {
+		fmt.Fprintf(&b, "\nContent:\n%s\n", node.Content)
+	}
+	annotations, err := q.Annotations(ctx, node)
 	if err != nil {
 		return "", err
 	}
@@ -255,7 +271,7 @@ func (q *Querier) Query(ctx context.Context, question string) (string, error) {
 	fmt.Fprintf(&b, "Subgraph for %q (%d seed nodes):\n", question, len(seeds))
 	used := 0
 	for i := range seeds {
-		section, err := q.Explain(ctx, seeds[i].Name)
+		section, err := q.explainNode(ctx, seeds[i])
 		if err != nil {
 			continue
 		}
@@ -323,16 +339,18 @@ func (q *Querier) Export(ctx context.Context) (*ExportGraph, error) {
 	if err != nil {
 		return nil, err
 	}
+	evidence, err := q.store.GraphEvidence(ctx, q.namespace)
+	if err != nil {
+		return nil, err
+	}
 	out := &ExportGraph{
 		Namespace: q.namespace,
 		Nodes:     make([]ExportNode, 0, len(nodes)),
 		Edges:     make([]ExportEdge, 0, len(edges)),
+		Evidence:  evidence,
 	}
 	for _, n := range nodes {
-		out.Nodes = append(out.Nodes, ExportNode{
-			ID: LocalID(n.ID), Kind: n.Kind, Name: n.Name, Path: n.Path,
-			Package: n.Package, Summary: n.Summary, Degree: n.Degree,
-		})
+		out.Nodes = append(out.Nodes, exportGraphNode(n))
 	}
 	for _, e := range edges {
 		out.Edges = append(out.Edges, ExportEdge{
@@ -736,6 +754,8 @@ func nodeShortName(n semanticmemory.GraphNode) string {
 func exportGraphNode(node semanticmemory.GraphNode) ExportNode {
 	return ExportNode{
 		ID: LocalID(node.ID), Kind: node.Kind, Name: node.Name, Path: node.Path,
-		Package: node.Package, Summary: node.Summary, Degree: node.Degree,
+		Package: node.Package, Summary: node.Summary, Content: node.Content,
+		Properties: json.RawMessage(node.Properties), StartLine: node.StartLine,
+		EndLine: node.EndLine, Degree: node.Degree,
 	}
 }
