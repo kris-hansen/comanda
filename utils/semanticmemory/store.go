@@ -126,7 +126,10 @@ func (s *Store) migrate(ctx context.Context) error {
 			return fmt.Errorf("initialize memory store: %w", err)
 		}
 	}
-	return s.migrateGraphAnnotationColumns(ctx)
+	if err := s.migrateGraphAnnotationColumns(ctx); err != nil {
+		return err
+	}
+	return s.migrateGraphNodeColumns(ctx)
 }
 
 // Upsert writes a fact and refreshes its FTS entry. Callers can pass a stable

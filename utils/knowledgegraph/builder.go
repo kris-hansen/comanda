@@ -61,9 +61,10 @@ func BuildWithRoot(scan *codebaseindex.ScanResult, namespace, root string) *Grap
 		}
 	}
 
-	// Pass 2: symbol nodes and defines edges.
+	// Pass 2: symbol nodes and defines edges. AST-backed Markdown documents
+	// receive section and block nodes instead of pretending headings are types.
 	for _, f := range scan.Candidates {
-		if f.Symbols == nil {
+		if f.Symbols == nil || isMarkdownFile(f) && f.Symbols.Document != nil {
 			continue
 		}
 		fileID := NodeID(namespace, "file:"+f.Path)
@@ -84,6 +85,7 @@ func BuildWithRoot(scan *codebaseindex.ScanResult, namespace, root string) *Grap
 		}
 	}
 	linkMethods(g, scan, namespace, packages)
+	documentIndex := addDocumentStructure(g, scan)
 
 	// Pass 3: component contains edges.
 	componentNames := make(map[string]int)
@@ -145,9 +147,11 @@ func BuildWithRoot(scan *codebaseindex.ScanResult, namespace, root string) *Grap
 		}
 		fileID := NodeID(namespace, "file:"+f.Path)
 		if isMarkdownFile(f) {
-			for _, imp := range f.Symbols.Imports {
-				if target, ok := docLinks.resolve(namespace, f.Path, imp); ok {
-					g.AddEdge(fileID, target, EdgeImports, ConfidenceExtracted, "links to "+imp)
+			if f.Symbols.Document == nil {
+				for _, imp := range f.Symbols.Imports {
+					if target, ok := docLinks.resolve(namespace, f.Path, imp); ok {
+						g.AddEdge(fileID, target, EdgeImports, ConfidenceExtracted, "links to "+imp)
+					}
 				}
 			}
 			continue
@@ -161,6 +165,7 @@ func BuildWithRoot(scan *codebaseindex.ScanResult, namespace, root string) *Grap
 			g.AddEdge(fileID, target, EdgeImports, ConfidenceExtracted, "import "+imp)
 		}
 	}
+	addDocumentLinksAndRelations(g, scan, documentIndex)
 
 	// Pass 5: inferred uses edges from symbol name references.
 	inferUses(g, scan, namespace)
@@ -644,7 +649,7 @@ func Save(ctx context.Context, store *semanticmemory.Store, g *Graph) error {
 }
 
 func save(ctx context.Context, store *semanticmemory.Store, g *Graph, progress ProgressFunc) error {
-	total := len(g.Nodes) + len(g.Edges)
+	total := len(g.Nodes) + len(g.Edges) + len(g.Evidence)
 	completed := 0
 	for _, node := range g.Nodes {
 		if _, err := store.UpsertGraphNode(ctx, *node); err != nil {
@@ -662,6 +667,15 @@ func save(ctx context.Context, store *semanticmemory.Store, g *Graph, progress P
 		completed++
 		if progress != nil {
 			progress(ProgressEvent{Phase: "Writing graph edges", Current: edge.Kind, Completed: completed, Total: total})
+		}
+	}
+	for _, evidence := range g.Evidence {
+		if _, err := store.UpsertGraphEvidence(ctx, evidence); err != nil {
+			return err
+		}
+		completed++
+		if progress != nil {
+			progress(ProgressEvent{Phase: "Writing graph evidence", Current: evidence.SourcePath, Completed: completed, Total: total})
 		}
 	}
 	if progress != nil {
@@ -687,8 +701,10 @@ func RebuildWithProgress(ctx context.Context, store *semanticmemory.Store, g *Gr
 		edges = append(edges, *edge)
 	}
 	sort.Slice(edges, func(i, j int) bool { return edges[i].ID < edges[j].ID })
+	evidence := append([]semanticmemory.GraphEvidence(nil), g.Evidence...)
+	sort.Slice(evidence, func(i, j int) bool { return evidence[i].ID < evidence[j].ID })
 
-	err := store.ReplaceGraph(ctx, g.Namespace, nodes, edges, func(event semanticmemory.GraphWriteProgress) {
+	err := store.ReplaceGraphWithEvidence(ctx, g.Namespace, nodes, edges, evidence, func(event semanticmemory.GraphWriteProgress) {
 		if progress != nil {
 			progress(ProgressEvent{
 				Phase:     event.Phase,

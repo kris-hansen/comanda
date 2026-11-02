@@ -219,6 +219,12 @@ func (m *Manager) processFile(path string) *FileEntry {
 			}
 		}
 	}
+	for _, adapter := range m.adapters {
+		if adapter.Name() == entry.Language {
+			entry.ExtractorVersion = adapterExtractorVersion(adapter)
+			break
+		}
+	}
 
 	// Check if entrypoint or config
 	name := filepath.Base(path)

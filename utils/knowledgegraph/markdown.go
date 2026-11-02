@@ -31,6 +31,13 @@ func isMarkdownFile(f *codebaseindex.FileEntry) bool {
 	return strings.HasSuffix(lower, ".md") || strings.HasSuffix(lower, ".markdown")
 }
 
+func isAgentInstructionDocument(f *codebaseindex.FileEntry) bool {
+	if f.Symbols != nil && f.Symbols.Document != nil {
+		return f.Symbols.Document.Role == "agent_instruction"
+	}
+	return codebaseindex.IsAgentInstructionFile(f.Path)
+}
+
 // withinDir reports whether p sits inside dir, where "." is the repository
 // root containing everything.
 func withinDir(dir, p string) bool {
@@ -48,7 +55,7 @@ func withinDir(dir, p string) bool {
 func addDocumentGuides(g *Graph, scan *codebaseindex.ScanResult, packages map[string]string, componentIDsByRoot map[string][]string) map[string][]string {
 	guided := make(map[string][]string)
 	for _, doc := range scan.Candidates {
-		if !isMarkdownFile(doc) || !codebaseindex.IsContextFile(doc.Path) {
+		if !isMarkdownFile(doc) || !isAgentInstructionDocument(doc) {
 			continue
 		}
 		docID := NodeID(g.Namespace, "file:"+doc.Path)
@@ -73,7 +80,7 @@ func addDocumentGuides(g *Graph, scan *codebaseindex.ScanResult, packages map[st
 			if g.Nodes[targetID] == nil {
 				continue
 			}
-			g.AddEdge(docID, targetID, EdgeGuides, ConfidenceExtracted, "context scope "+dir)
+			g.AddEdge(docID, targetID, EdgeGuides, ConfidenceInferred, "directory context scope "+dir)
 			guided[doc.Path] = append(guided[doc.Path], targetID)
 		}
 	}
@@ -135,14 +142,14 @@ func (index docLinkIndex) resolve(namespace, fromPath, target string) (string, b
 	return "", false
 }
 
-// deriveDocAnnotations reads each recognized context document from disk and
+// deriveDocAnnotations reads each agent-instruction document from disk and
 // turns its sections into file-layer annotations: every section annotates the
 // document node itself, and the lead section also annotates each node the
 // document guides. Content-hashed IDs keep rebuilds idempotent.
 func deriveDocAnnotations(g *Graph, scan *codebaseindex.ScanResult, root string, guided map[string][]string) {
 	g.Annotations = []semanticmemory.GraphAnnotation{}
 	for _, f := range scan.Candidates {
-		if !isMarkdownFile(f) || !codebaseindex.IsContextFile(f.Path) {
+		if !isMarkdownFile(f) || !isAgentInstructionDocument(f) {
 			continue
 		}
 		// Best-effort like the adapter's own extraction: an unreadable doc

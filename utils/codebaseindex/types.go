@@ -118,11 +118,12 @@ type Config struct {
 // Index updates validate the content hash; graph-only scans can use size and
 // modification time when no hash is requested.
 type SymbolCacheEntry struct {
-	Hash     string      `json:"hash,omitempty"`
-	Language string      `json:"language"`
-	Size     int64       `json:"size"`
-	ModTime  int64       `json:"mod_time"`
-	Symbols  *SymbolInfo `json:"symbols"`
+	Hash             string      `json:"hash,omitempty"`
+	Language         string      `json:"language"`
+	ExtractorVersion string      `json:"extractor_version"`
+	Size             int64       `json:"size"`
+	ModTime          int64       `json:"mod_time"`
+	Symbols          *SymbolInfo `json:"symbols"`
 }
 
 // ProgressEvent describes the current deterministic indexing operation.
@@ -259,8 +260,9 @@ type FileEntry struct {
 	IsConfig     bool
 	IsGenerated  bool
 
-	// Language association
-	Language string
+	// Language association and extraction implementation version.
+	Language         string
+	ExtractorVersion string
 
 	// Extracted symbols (populated during extraction phase)
 	Symbols *SymbolInfo
@@ -318,6 +320,63 @@ type SymbolInfo struct {
 	// SemanticGraph optionally carries parser-defined entities and evidenced
 	// relationships. Existing parsers can omit it without changing behavior.
 	SemanticGraph *SemanticGraph `json:",omitempty"`
+
+	// Document carries the lossless structural representation used for Markdown
+	// graph construction and section-level retrieval.
+	Document *DocumentInfo `json:",omitempty"`
+}
+
+// DocumentInfo is the parser-independent representation of a Markdown file.
+type DocumentInfo struct {
+	ID          string               `json:",omitempty"`
+	Title       string               `json:",omitempty"`
+	Role        string               `json:",omitempty"`
+	Aliases     []string             `json:",omitempty"`
+	Tags        []string             `json:",omitempty"`
+	Properties  map[string]any       `json:",omitempty"`
+	Sections    []DocumentSection    `json:",omitempty"`
+	Links       []DocumentLink       `json:",omitempty"`
+	Relations   []DocumentRelation   `json:",omitempty"`
+	Diagnostics []DocumentDiagnostic `json:",omitempty"`
+}
+
+// DocumentSection is a heading-delimited, independently retrievable passage.
+type DocumentSection struct {
+	ID          string `json:"id"`
+	ParentID    string `json:"parent_id,omitempty"`
+	Title       string `json:"title"`
+	HeadingPath string `json:"heading_path"`
+	Anchor      string `json:"anchor,omitempty"`
+	Content     string `json:"content"`
+	ContentHash string `json:"content_hash"`
+	Level       int    `json:"level"`
+	StartLine   int    `json:"start_line"`
+	EndLine     int    `json:"end_line"`
+	BodyEndLine int    `json:"body_end_line"`
+}
+
+// DocumentLink retains the source section and fragment lost by the legacy
+// package/import representation. Kind is markdown, file, anchor, or external.
+type DocumentLink struct {
+	Target        string `json:"target"`
+	Fragment      string `json:"fragment,omitempty"`
+	SourceSection string `json:"source_section,omitempty"`
+	Kind          string `json:"kind"`
+	Line          int    `json:"line"`
+	Wiki          bool   `json:"wiki,omitempty"`
+}
+
+// DocumentRelation is an explicit frontmatter relationship declaration.
+type DocumentRelation struct {
+	Kind   string `json:"kind"`
+	Target string `json:"target"`
+}
+
+// DocumentDiagnostic reports a non-fatal document extraction problem.
+type DocumentDiagnostic struct {
+	Kind    string `json:"kind"`
+	Message string `json:"message"`
+	Line    int    `json:"line,omitempty"`
 }
 
 // FunctionInfo describes a function or method

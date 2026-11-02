@@ -345,7 +345,7 @@ func runCapture(cmd *cobra.Command, args []string) error {
 
 	// Optionally build the knowledge graph into semantic memory
 	if indexGraph && !cfg.Encrypt {
-		if err := buildKnowledgeGraph(name, absPath, indexEnhance, indexEnhanceModel); err != nil {
+		if err := buildKnowledgeGraphUsingScan(name, absPath, manager.LastScan(), indexEnhance, indexEnhanceModel); err != nil {
 			log.Printf("Warning: knowledge graph build failed: %v\n", err)
 		}
 	}
@@ -570,7 +570,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 
 	// Keep an existing graph synchronized, including during schema upgrades.
 	if refreshGraph {
-		if err := buildKnowledgeGraph(name, entry.Path, indexEnhance, indexEnhanceModel); err != nil {
+		if err := buildKnowledgeGraphUsingScan(name, entry.Path, manager.LastScan(), indexEnhance, indexEnhanceModel); err != nil {
 			return fmt.Errorf("index updated but knowledge graph rebuild failed: %w", err)
 		}
 	}

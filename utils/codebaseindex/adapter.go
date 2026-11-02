@@ -8,6 +8,15 @@ import (
 )
 
 // Adapter defines the interface for language-specific indexing adapters
+func adapterExtractorVersion(adapter Adapter) string {
+	if versioned, ok := adapter.(interface{ ExtractorVersion() string }); ok {
+		if version := strings.TrimSpace(versioned.ExtractorVersion()); version != "" {
+			return version
+		}
+	}
+	return adapter.Name() + "-v1"
+}
+
 type Adapter interface {
 	// Name returns the adapter identifier (e.g., "go", "python")
 	Name() string
@@ -36,8 +45,8 @@ type Adapter interface {
 	// (e.g., "go.mod", "package.json")
 	ConfigPatterns() []string
 
-	// ExtractSymbols extracts symbols from file content
-	// Only first maxBytes of content is provided for performance
+	// ExtractSymbols extracts symbols and optional structured semantics from
+	// complete file content.
 	ExtractSymbols(path string, content []byte) (*SymbolInfo, error)
 
 	// ScoreFile returns a score modifier for file prioritization

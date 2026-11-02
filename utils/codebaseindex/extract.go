@@ -73,8 +73,8 @@ func (m *Manager) extractSymbols(candidates []*FileEntry) error {
 		}
 		if cacheable {
 			if cached, ok := m.config.SymbolCache[entry.Path]; ok &&
-				cached.Language == entry.Language && cached.Size == entry.Size &&
-				cached.Symbols != nil &&
+				cached.Language == entry.Language && cached.ExtractorVersion == entry.ExtractorVersion &&
+				cached.Size == entry.Size && cached.Symbols != nil &&
 				((entry.Hash != "" && cached.Hash == entry.Hash) ||
 					(entry.Hash == "" && cached.ModTime == entry.ModTime.UnixNano())) {
 				entry.Symbols = cached.Symbols
@@ -123,11 +123,12 @@ func BuildSymbolCache(candidates []*FileEntry) map[string]SymbolCacheEntry {
 			continue
 		}
 		cache[entry.Path] = SymbolCacheEntry{
-			Hash:     entry.Hash,
-			Language: entry.Language,
-			Size:     entry.Size,
-			ModTime:  entry.ModTime.UnixNano(),
-			Symbols:  entry.Symbols,
+			Hash:             entry.Hash,
+			Language:         entry.Language,
+			ExtractorVersion: entry.ExtractorVersion,
+			Size:             entry.Size,
+			ModTime:          entry.ModTime.UnixNano(),
+			Symbols:          entry.Symbols,
 		}
 	}
 	return cache

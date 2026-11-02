@@ -12,24 +12,34 @@ import (
 
 // Graph node kinds.
 const (
-	GraphNodeComponent = "component"
-	GraphNodePackage   = "package"
-	GraphNodeFile      = "file"
-	GraphNodeType      = "type"
-	GraphNodeFunction  = "function"
-	GraphNodeConcept   = "concept"
-	GraphNodeDocument  = "document"
+	GraphNodeComponent        = "component"
+	GraphNodePackage          = "package"
+	GraphNodeFile             = "file"
+	GraphNodeType             = "type"
+	GraphNodeFunction         = "function"
+	GraphNodeConcept          = "concept"
+	GraphNodeDocument         = "document"
+	GraphNodeSection          = "section"
+	GraphNodeBlock            = "block"
+	GraphNodeExternalResource = "external_resource"
 )
 
 // Graph edge kinds.
 const (
-	GraphEdgeContains  = "contains"
-	GraphEdgeBelongsTo = "belongs_to"
-	GraphEdgeImports   = "imports"
-	GraphEdgeDefines   = "defines"
-	GraphEdgeUses      = "uses"
-	GraphEdgeReference = "references"
-	GraphEdgeGuides    = "guides"
+	GraphEdgeContains   = "contains"
+	GraphEdgeBelongsTo  = "belongs_to"
+	GraphEdgeImports    = "imports"
+	GraphEdgeDefines    = "defines"
+	GraphEdgeUses       = "uses"
+	GraphEdgeReference  = "references"
+	GraphEdgeGuides     = "guides"
+	GraphEdgeLinksTo    = "links_to"
+	GraphEdgeMentions   = "mentions"
+	GraphEdgeDescribes  = "describes"
+	GraphEdgeSupersedes = "supersedes"
+	GraphEdgeDependsOn  = "depends_on"
+	GraphEdgeRelatedTo  = "related_to"
+	GraphEdgeDocuments  = "documents"
 )
 
 // Graph annotation sources: human notes are written through the API, file
@@ -89,16 +99,20 @@ func (s *Store) GraphSummaries(ctx context.Context) ([]GraphSummary, error) {
 
 // GraphNode is one vertex in a knowledge graph stored alongside durable memory.
 type GraphNode struct {
-	ID        string
-	Namespace string
-	Kind      string
-	Name      string
-	Path      string
-	Package   string
-	Summary   string
-	Degree    int
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID         string
+	Namespace  string
+	Kind       string
+	Name       string
+	Path       string
+	Package    string
+	Summary    string
+	Content    string
+	Properties string
+	StartLine  int
+	EndLine    int
+	Degree     int
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 // GraphEdge is one typed, confidence-tagged connection between two nodes.
@@ -112,6 +126,20 @@ type GraphEdge struct {
 	Evidence   string
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+}
+
+// GraphEvidence preserves one independently cited source passage for an edge.
+type GraphEvidence struct {
+	ID            string    `json:"id"`
+	Namespace     string    `json:"namespace"`
+	EdgeID        string    `json:"edge_id"`
+	SourcePath    string    `json:"source_path"`
+	StartLine     int       `json:"start_line,omitempty"`
+	EndLine       int       `json:"end_line,omitempty"`
+	Quote         string    `json:"quote,omitempty"`
+	Extractor     string    `json:"extractor"`
+	ParserVersion string    `json:"parser_version"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 // GraphAnnotation is durable guidance attached to a graph node. Annotations
@@ -139,6 +167,10 @@ var graphMigrateStatements = []string{
         path TEXT NOT NULL DEFAULT '',
         package TEXT NOT NULL DEFAULT '',
         summary TEXT NOT NULL DEFAULT '',
+        content TEXT NOT NULL DEFAULT '',
+        properties TEXT NOT NULL DEFAULT '{}',
+        start_line INTEGER NOT NULL DEFAULT 0,
+        end_line INTEGER NOT NULL DEFAULT 0,
         degree INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
@@ -149,6 +181,7 @@ var graphMigrateStatements = []string{
         namespace UNINDEXED,
         name,
         summary,
+        content,
         tokenize='unicode61'
     )`,
 	`CREATE TABLE IF NOT EXISTS graph_edges (
@@ -164,6 +197,19 @@ var graphMigrateStatements = []string{
     )`,
 	`CREATE INDEX IF NOT EXISTS idx_graph_edges_namespace_source ON graph_edges(namespace, source_id)`,
 	`CREATE INDEX IF NOT EXISTS idx_graph_edges_namespace_target ON graph_edges(namespace, target_id)`,
+	`CREATE TABLE IF NOT EXISTS graph_evidence (
+        id TEXT PRIMARY KEY,
+        namespace TEXT NOT NULL,
+        edge_id TEXT NOT NULL,
+        source_path TEXT NOT NULL DEFAULT '',
+        start_line INTEGER NOT NULL DEFAULT 0,
+        end_line INTEGER NOT NULL DEFAULT 0,
+        quote TEXT NOT NULL DEFAULT '',
+        extractor TEXT NOT NULL,
+        parser_version TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+    )`,
+	`CREATE INDEX IF NOT EXISTS idx_graph_evidence_namespace_edge ON graph_evidence(namespace, edge_id)`,
 	`CREATE TABLE IF NOT EXISTS graph_annotations (
         id TEXT PRIMARY KEY,
         namespace TEXT NOT NULL,
@@ -222,6 +268,68 @@ func (s *Store) migrateGraphAnnotationColumns(ctx context.Context) error {
 	return nil
 }
 
+func (s *Store) migrateGraphNodeColumns(ctx context.Context) error {
+	columns, err := graphTableColumns(ctx, s.db, "graph_nodes")
+	if err != nil {
+		return err
+	}
+	for _, column := range []struct {
+		name string
+		ddl  string
+	}{
+		{"content", `ALTER TABLE graph_nodes ADD COLUMN content TEXT NOT NULL DEFAULT ''`},
+		{"properties", `ALTER TABLE graph_nodes ADD COLUMN properties TEXT NOT NULL DEFAULT '{}'`},
+		{"start_line", `ALTER TABLE graph_nodes ADD COLUMN start_line INTEGER NOT NULL DEFAULT 0`},
+		{"end_line", `ALTER TABLE graph_nodes ADD COLUMN end_line INTEGER NOT NULL DEFAULT 0`},
+	} {
+		if columns[column.name] {
+			continue
+		}
+		if _, err := s.db.ExecContext(ctx, column.ddl); err != nil {
+			return fmt.Errorf("migrate graph nodes schema: %w", err)
+		}
+	}
+
+	ftsColumns, err := graphTableColumns(ctx, s.db, "graph_nodes_fts")
+	if err != nil {
+		return err
+	}
+	if ftsColumns["content"] {
+		return nil
+	}
+	if _, err := s.db.ExecContext(ctx, `DROP TABLE graph_nodes_fts`); err != nil {
+		return fmt.Errorf("rebuild graph search schema: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `CREATE VIRTUAL TABLE graph_nodes_fts USING fts5(
+        id UNINDEXED, namespace UNINDEXED, name, summary, content, tokenize='unicode61')`); err != nil {
+		return fmt.Errorf("create graph search schema: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO graph_nodes_fts(id, namespace, name, summary, content)
+        SELECT id, namespace, name, summary, content FROM graph_nodes`); err != nil {
+		return fmt.Errorf("backfill graph search index: %w", err)
+	}
+	return nil
+}
+
+func graphTableColumns(ctx context.Context, db *sql.DB, table string) (map[string]bool, error) {
+	rows, err := db.QueryContext(ctx, "PRAGMA table_info("+table+")")
+	if err != nil {
+		return nil, fmt.Errorf("inspect %s schema: %w", table, err)
+	}
+	defer rows.Close()
+	columns := map[string]bool{}
+	for rows.Next() {
+		var cid, notNull, pk int
+		var name, columnType string
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &pk); err != nil {
+			return nil, err
+		}
+		columns[name] = true
+	}
+	return columns, rows.Err()
+}
+
 // UpsertGraphNode writes a graph node, refreshes its FTS entry, and mirrors it
 // as a memory record (type graph_node) so memory search and workflow recall
 // can find graph concepts. Callers should pass a stable ID so rebuilds update
@@ -248,14 +356,20 @@ func (s *Store) UpsertGraphNode(ctx context.Context, node GraphNode) (GraphNode,
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	if node.Properties == "" {
+		node.Properties = "{}"
+	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO graph_nodes (
-        id, namespace, kind, name, path, package, summary, degree, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, namespace, kind, name, path, package, summary, content, properties, start_line, end_line, degree, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
         namespace=excluded.namespace, kind=excluded.kind, name=excluded.name,
         path=excluded.path, package=excluded.package, summary=excluded.summary,
+        content=excluded.content, properties=excluded.properties,
+        start_line=excluded.start_line, end_line=excluded.end_line,
         updated_at=excluded.updated_at`,
 		node.ID, node.Namespace, node.Kind, node.Name, node.Path, node.Package, node.Summary,
+		node.Content, node.Properties, node.StartLine, node.EndLine,
 		node.Degree, node.CreatedAt.Format(time.RFC3339Nano), node.UpdatedAt.Format(time.RFC3339Nano))
 	if err != nil {
 		return GraphNode{}, fmt.Errorf("write graph node: %w", err)
@@ -263,8 +377,8 @@ func (s *Store) UpsertGraphNode(ctx context.Context, node GraphNode) (GraphNode,
 	if _, err := tx.ExecContext(ctx, `DELETE FROM graph_nodes_fts WHERE id = ?`, node.ID); err != nil {
 		return GraphNode{}, fmt.Errorf("refresh graph node index: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO graph_nodes_fts(id, namespace, name, summary) VALUES (?, ?, ?, ?)`,
-		node.ID, node.Namespace, node.Name, node.Summary); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO graph_nodes_fts(id, namespace, name, summary, content) VALUES (?, ?, ?, ?, ?)`,
+		node.ID, node.Namespace, node.Name, node.Summary, node.Content); err != nil {
 		return GraphNode{}, fmt.Errorf("index graph node: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -272,10 +386,7 @@ func (s *Store) UpsertGraphNode(ctx context.Context, node GraphNode) (GraphNode,
 	}
 
 	// Mirror into durable memory so FTS search/recall sees graph concepts.
-	content := node.Name
-	if node.Summary != "" {
-		content = node.Name + " — " + node.Summary
-	}
+	content := graphNodeMemoryContent(node)
 	if _, err := s.Upsert(ctx, Record{
 		ID:        graphMirrorRecordPrefix + node.ID,
 		Namespace: node.Namespace,
@@ -480,7 +591,7 @@ func (s *Store) RefreshGraphDegrees(ctx context.Context, namespace string) error
 
 // GetGraphNode returns a graph node by ID.
 func (s *Store) GetGraphNode(ctx context.Context, id string) (GraphNode, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id, namespace, kind, name, path, package, summary, degree, created_at, updated_at
+	row := s.db.QueryRowContext(ctx, `SELECT id, namespace, kind, name, path, package, summary, content, properties, start_line, end_line, degree, created_at, updated_at
         FROM graph_nodes WHERE id = ?`, id)
 	return scanGraphNode(row)
 }
@@ -488,7 +599,7 @@ func (s *Store) GetGraphNode(ctx context.Context, id string) (GraphNode, error) 
 // GraphNodes returns all nodes in a namespace.
 func (s *Store) GraphNodes(ctx context.Context, namespace string) ([]GraphNode, error) {
 	namespace = normalizeNamespace(namespace)
-	rows, err := s.db.QueryContext(ctx, `SELECT id, namespace, kind, name, path, package, summary, degree, created_at, updated_at
+	rows, err := s.db.QueryContext(ctx, `SELECT id, namespace, kind, name, path, package, summary, content, properties, start_line, end_line, degree, created_at, updated_at
         FROM graph_nodes WHERE namespace = ? ORDER BY degree DESC, name`, namespace)
 	if err != nil {
 		return nil, fmt.Errorf("list graph nodes: %w", err)
@@ -504,7 +615,7 @@ func (s *Store) GraphNodesByKind(ctx context.Context, namespace, kind string, li
 	if limit <= 0 {
 		limit = 100
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id, namespace, kind, name, path, package, summary, degree, created_at, updated_at
+	rows, err := s.db.QueryContext(ctx, `SELECT id, namespace, kind, name, path, package, summary, content, properties, start_line, end_line, degree, created_at, updated_at
         FROM graph_nodes WHERE namespace = ? AND kind = ? ORDER BY degree DESC, name LIMIT ?`, namespace, kind, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list graph nodes by kind: %w", err)
@@ -640,7 +751,7 @@ func (s *Store) GetGraphNodesByIDs(ctx context.Context, ids []string) ([]GraphNo
 	if err != nil {
 		return nil, fmt.Errorf("encode graph node IDs: %w", err)
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id, namespace, kind, name, path, package, summary, degree, created_at, updated_at
+	rows, err := s.db.QueryContext(ctx, `SELECT id, namespace, kind, name, path, package, summary, content, properties, start_line, end_line, degree, created_at, updated_at
         FROM graph_nodes WHERE id IN (SELECT value FROM json_each(?))`, string(idsJSON))
 	if err != nil {
 		return nil, fmt.Errorf("batch load graph nodes: %w", err)
@@ -683,7 +794,7 @@ func (s *Store) GraphNeighbors(ctx context.Context, namespace, nodeID string) ([
 	if err != nil {
 		return nil, nil, fmt.Errorf("encode neighbor IDs: %w", err)
 	}
-	nodeRows, err := s.db.QueryContext(ctx, `SELECT id, namespace, kind, name, path, package, summary, degree, created_at, updated_at
+	nodeRows, err := s.db.QueryContext(ctx, `SELECT id, namespace, kind, name, path, package, summary, content, properties, start_line, end_line, degree, created_at, updated_at
         FROM graph_nodes WHERE id IN (SELECT value FROM json_each(?))`, string(idsJSON))
 	if err != nil {
 		return nil, nil, fmt.Errorf("load graph neighbor nodes: %w", err)
@@ -774,7 +885,7 @@ func (s *Store) graphNeighborPage(ctx context.Context, namespace, nodeID string,
 	if err != nil {
 		return nil, nil, false, fmt.Errorf("encode paged graph neighbor IDs: %w", err)
 	}
-	nodeRows, err := s.db.QueryContext(ctx, `SELECT id, namespace, kind, name, path, package, summary, degree, created_at, updated_at
+	nodeRows, err := s.db.QueryContext(ctx, `SELECT id, namespace, kind, name, path, package, summary, content, properties, start_line, end_line, degree, created_at, updated_at
         FROM graph_nodes WHERE id IN (SELECT value FROM json_each(?))`, string(idsJSON))
 	if err != nil {
 		return nil, nil, false, fmt.Errorf("load paged graph neighbor nodes: %w", err)
@@ -787,8 +898,8 @@ func (s *Store) graphNeighborPage(ctx context.Context, namespace, nodeID string,
 	return edges, nodes, hasMore, nil
 }
 
-// GraphFindNodes looks nodes up by name/summary with FTS5, degrading to a
-// LIKE search when the query cannot be expressed as FTS syntax.
+// GraphFindNodes looks nodes up by name, summary, and content with FTS5,
+// degrading to a LIKE search when the query cannot be expressed as FTS syntax.
 func (s *Store) GraphFindNodes(ctx context.Context, namespace, query string, limit int) ([]GraphNode, error) {
 	namespace = normalizeNamespace(namespace)
 	if limit <= 0 {
@@ -801,7 +912,7 @@ func (s *Store) GraphFindNodes(ctx context.Context, namespace, query string, lim
 	if ftsQuery == "" {
 		return nil, nil
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT n.id, n.namespace, n.kind, n.name, n.path, n.package, n.summary, n.degree, n.created_at, n.updated_at
+	rows, err := s.db.QueryContext(ctx, `SELECT n.id, n.namespace, n.kind, n.name, n.path, n.package, n.summary, n.content, n.properties, n.start_line, n.end_line, n.degree, n.created_at, n.updated_at
         FROM graph_nodes_fts f JOIN graph_nodes n ON n.id = f.id
         WHERE graph_nodes_fts MATCH ? AND n.namespace = ?
         ORDER BY bm25(graph_nodes_fts), n.degree DESC LIMIT ?`, ftsQuery, namespace, limit)
@@ -809,9 +920,9 @@ func (s *Store) GraphFindNodes(ctx context.Context, namespace, query string, lim
 		defer rows.Close()
 		return collectGraphNodes(rows)
 	}
-	rows, fallbackErr := s.db.QueryContext(ctx, `SELECT id, namespace, kind, name, path, package, summary, degree, created_at, updated_at
-        FROM graph_nodes WHERE namespace = ? AND (name LIKE ? OR summary LIKE ?)
-        ORDER BY degree DESC, name LIMIT ?`, namespace, "%"+strings.TrimSpace(query)+"%", "%"+strings.TrimSpace(query)+"%", limit)
+	rows, fallbackErr := s.db.QueryContext(ctx, `SELECT id, namespace, kind, name, path, package, summary, content, properties, start_line, end_line, degree, created_at, updated_at
+        FROM graph_nodes WHERE namespace = ? AND (name LIKE ? OR summary LIKE ? OR content LIKE ?)
+        ORDER BY degree DESC, name LIMIT ?`, namespace, "%"+strings.TrimSpace(query)+"%", "%"+strings.TrimSpace(query)+"%", "%"+strings.TrimSpace(query)+"%", limit)
 	if fallbackErr != nil {
 		return nil, fmt.Errorf("find graph nodes: %w", err)
 	}
@@ -833,6 +944,7 @@ func (s *Store) DeleteGraphNamespace(ctx context.Context, namespace string) erro
 		query string
 		args  []any
 	}{
+		{`DELETE FROM graph_evidence WHERE namespace = ?`, []any{namespace}},
 		{`DELETE FROM graph_edges WHERE namespace = ?`, []any{namespace}},
 		{`DELETE FROM graph_annotations WHERE namespace = ?`, []any{namespace}},
 		{`DELETE FROM graph_nodes_fts WHERE namespace = ?`, []any{namespace}},
@@ -854,11 +966,23 @@ func (s *Store) DeleteGraphNamespace(ctx context.Context, namespace string) erro
 	return nil
 }
 
+func graphNodeMemoryContent(node GraphNode) string {
+	content := node.Name
+	if node.Summary != "" {
+		content += " — " + node.Summary
+	}
+	if node.Content != "" {
+		content += "\n\n" + node.Content
+	}
+	return content
+}
+
 func scanGraphNode(row rowScanner) (GraphNode, error) {
 	var node GraphNode
 	var createdAt, updatedAt string
 	if err := row.Scan(&node.ID, &node.Namespace, &node.Kind, &node.Name, &node.Path, &node.Package,
-		&node.Summary, &node.Degree, &createdAt, &updatedAt); err != nil {
+		&node.Summary, &node.Content, &node.Properties, &node.StartLine, &node.EndLine,
+		&node.Degree, &createdAt, &updatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return GraphNode{}, fmt.Errorf("graph node not found")
 		}

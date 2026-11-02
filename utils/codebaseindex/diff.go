@@ -26,14 +26,15 @@ type IndexMetadata struct {
 
 // FileMetadata stores per-file metadata for diffing
 type FileMetadata struct {
-	PackagePath string      `json:"package_path,omitempty"`
-	ModTimeNano int64       `json:"mod_time_nano,omitempty"`
-	Language    string      `json:"language,omitempty"`
-	Symbols     *SymbolInfo `json:"symbols,omitempty"`
-	Path        string      `json:"path"`
-	Hash        string      `json:"hash"`
-	Size        int64       `json:"size"`
-	ModTime     int64       `json:"mod_time"` // Unix timestamp
+	PackagePath      string      `json:"package_path,omitempty"`
+	ModTimeNano      int64       `json:"mod_time_nano,omitempty"`
+	Language         string      `json:"language,omitempty"`
+	ExtractorVersion string      `json:"extractor_version,omitempty"`
+	Symbols          *SymbolInfo `json:"symbols,omitempty"`
+	Path             string      `json:"path"`
+	Hash             string      `json:"hash"`
+	Size             int64       `json:"size"`
+	ModTime          int64       `json:"mod_time"` // Unix timestamp
 }
 
 // DiffResult contains the results of comparing current state to stored index
@@ -128,12 +129,13 @@ func (m *Manager) SaveMetadata(result *Result, candidates []*FileEntry) error {
 
 	for i, f := range candidates {
 		meta.Files[i] = FileMetadata{
-			ModTimeNano: f.ModTime.UnixNano(),
-			Language:    f.Language,
-			Path:        f.Path,
-			Hash:        f.Hash,
-			Size:        f.Size,
-			ModTime:     f.ModTime.Unix(),
+			ModTimeNano:      f.ModTime.UnixNano(),
+			Language:         f.Language,
+			ExtractorVersion: f.ExtractorVersion,
+			Path:             f.Path,
+			Hash:             f.Hash,
+			Size:             f.Size,
+			ModTime:          f.ModTime.Unix(),
 		}
 		// Encrypted indexes must not expose source-derived symbols in plaintext.
 		if !m.config.Encrypt {
@@ -161,7 +163,10 @@ func LoadIndexSymbolCache(indexPath, root string) map[string]SymbolCacheEntry {
 	cache := make(map[string]SymbolCacheEntry, len(meta.Files))
 	for _, f := range meta.Files {
 		if f.Symbols != nil {
-			cache[f.Path] = SymbolCacheEntry{Language: f.Language, Hash: f.Hash, Size: f.Size, ModTime: f.ModTimeNano, Symbols: f.Symbols}
+			cache[f.Path] = SymbolCacheEntry{
+				Language: f.Language, ExtractorVersion: f.ExtractorVersion, Hash: f.Hash,
+				Size: f.Size, ModTime: f.ModTimeNano, Symbols: f.Symbols,
+			}
 		}
 	}
 	return cache

@@ -354,6 +354,19 @@ func buildKnowledgeGraph(indexName, repoPath string, enhance bool, enhanceModel 
 	if err != nil {
 		return fmt.Errorf("graph scan failed: %w", err)
 	}
+	return buildKnowledgeGraphFromScan(indexName, repoPath, scan, enhance, enhanceModel, progress)
+}
+
+func buildKnowledgeGraphUsingScan(indexName, repoPath string, scan *codebaseindex.ScanResult, enhance bool, enhanceModel string) error {
+	progress := newGraphBuildProgress(indexName)
+	defer progress.Stop()
+	return buildKnowledgeGraphFromScan(indexName, repoPath, scan, enhance, enhanceModel, progress)
+}
+
+func buildKnowledgeGraphFromScan(indexName, repoPath string, scan *codebaseindex.ScanResult, enhance bool, enhanceModel string, progress *graphBuildProgress) error {
+	if scan == nil {
+		return fmt.Errorf("graph build requires a completed index scan")
+	}
 	if err := codebaseindex.SaveSymbolCache(repoPath, indexName, scan.GraphFiles); err != nil && verbose {
 		log.Printf("Warning: could not save graph symbol cache: %v\n", err)
 	}
@@ -399,10 +412,12 @@ func buildKnowledgeGraph(indexName, repoPath string, enhance bool, enhanceModel 
 	if err := knowledgegraph.RebuildWithProgress(context.Background(), store, graph, progress.UpdateGraph); err != nil {
 		return fmt.Errorf("failed to store graph: %w", err)
 	}
+	if err := writeGraphBuildReport(dbPath, graph); err != nil {
+		return fmt.Errorf("write graph build report: %w", err)
+	}
 
-	progress.Stop()
-	log.Printf("Knowledge graph built: %d nodes, %d edges (namespace %s, db %s)\n",
-		len(graph.Nodes), len(graph.Edges), indexName, dbPath)
+	log.Printf("Knowledge graph built: %d nodes, %d edges, %d diagnostics (namespace %s, db %s)\n",
+		len(graph.Nodes), len(graph.Edges), len(graph.Diagnostics), indexName, dbPath)
 	return nil
 }
 

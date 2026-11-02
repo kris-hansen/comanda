@@ -16,6 +16,7 @@ type Manager struct {
 	registry *Registry
 	adapters []Adapter
 	verbose  bool
+	lastScan *ScanResult
 }
 
 // NewManager creates a new index manager with the given configuration
@@ -112,7 +113,14 @@ func (m *Manager) Scan() (*ScanResult, []string, error) {
 		return nil, nil, err
 	}
 
+	m.lastScan = scanResult
 	return scanResult, languages, nil
+}
+
+// LastScan returns the most recent successful scan, allowing index synthesis
+// and graph construction to share one extraction pass.
+func (m *Manager) LastScan() *ScanResult {
+	return m.lastScan
 }
 
 func (m *Manager) reportProgress(event ProgressEvent) {

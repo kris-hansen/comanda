@@ -14,39 +14,57 @@ comanda graph query    →  traverse instead of grep
 ## Graph model
 
 - **Nodes** — `component`, `package`, `file`, `type`, `function`, `concept`
-  (concepts come only from the optional AI pass), `document` (markdown), and
-  the database kinds (`schema`, `table`, `column`) described below.
+  (concepts come only from the optional AI pass), Markdown `document`,
+  `section`, `block`, and `external_resource` nodes, and the database kinds
+  (`schema`, `table`, `column`) described below.
 - **Edges** — `contains`, `belongs_to`, `imports`, `defines` (structural),
-  `uses`, `references` (semantic), `guides` (context document →
-  package/component).
+  `uses`, `references` (semantic), `links_to` (precise document links),
+  `guides`, and the declared document relations `related_to`, `supersedes`,
+  `depends_on`, and `describes`.
 - **Confidence** — every edge is tagged `extracted` (explicit in the source:
-  imports, declarations, component roots) or `inferred` (symbol-name
-  resolution or the AI pass). You always know what was read vs. guessed.
+  imports, declarations, component roots, AST links, or frontmatter) or
+  `inferred` (symbol-name resolution, directory-scoped guidance, or the AI
+  pass). You always know what was read vs. guessed.
+- **Provenance** — nodes can carry content, JSON properties, and source line
+  spans. A separate evidence collection retains multiple cited passages for a
+  deduplicated edge, including extractor and parser versions. Full JSON exports
+  include these fields additively.
 
-## Markdown context documents and layered guidance
+## Markdown documents and layered guidance
 
-Markdown files are indexed by a built-in markdown adapter, so documentation
-and agent-context files are first-class graph citizens:
+Markdown files are parsed with a CommonMark/GFM AST rather than regular
+expressions, so documentation and agent-context files are first-class graph
+citizens:
 
-- **Document nodes** — every scanned `.md`/`.markdown` file becomes a
-  `document` node (same stable `file:<path>` ID), with its first `H1` as the
-  summary and headings as `defines`d types. Links between documents (relative
-  `[text](other.md)` and `[[wiki-style]]`) resolve to `imports` edges, so a
-  directory of interlinked notes graphs as a connected whole — and a
-  markdown-only directory can be indexed and graphed on its own.
-- **`guides` edges** — recognized agent-context files (`AGENTS.md`,
-  `CLAUDE.md`, `.cursorrules`, copilot instructions, and friends — see
-  `codebaseindex.IsContextFile`) guide the packages and components rooted at
-  or below the document's own directory: `pkg/foo/AGENTS.md` guides
-  `pkg:foo`; a root-level context file guides the whole repository. This is
-  how layered, directory-scoped guidance rides along the graph.
+- **Documents and sections** — every scanned `.md`/`.markdown` file becomes a
+  `document` node (same stable `file:<path>` ID). ATX and Setext headings form
+  a nested `section` hierarchy with duplicate-safe anchors, body text, heading
+  paths, content hashes, and source lines. Oversized sections are split into
+  bounded `block` nodes. Section and block bodies participate in graph FTS and
+  memory recall, and query/explain output includes their content and citations.
+- **Frontmatter** — YAML `id`, `title`, `role`/`type`, `aliases`, and `tags`
+  set document metadata; unknown fields remain JSON properties. Declared
+  `related_to`, `supersedes`, `depends_on`, `describes`, and `guides` targets
+  become extracted edges after validation against the versioned document
+  ontology. Ambiguous or invalid targets produce diagnostics rather than
+  arbitrary links.
+- **Links** — relative Markdown links resolve only by path, while wiki links
+  resolve by unique basename, document ID, or alias. Anchors target section
+  nodes, source-file links target code file nodes, and external URLs become
+  external-resource nodes. Unresolved and ambiguous links are reported without
+  silently selecting a same-named file elsewhere.
+- **`guides` edges** — recognized agent-instruction files (`AGENTS.md`,
+  `CLAUDE.md`, `.cursorrules`, copilot instructions, and friends) guide the
+  packages and components rooted at or below their own directory. These
+  directory-derived edges are `inferred`; explicit frontmatter guidance is
+  `extracted`. READMEs, changelogs, and other general documentation remain
+  searchable but do not become repository-wide instruction hubs.
 - **Annotation layers** — graph annotations carry a `source`: `human`
   (authored in the visualizer or API, surviving rebuilds as before) or `file`
-  (derived from context-file sections at build time, attached to the document
-  node and to the nodes it guides). File-derived annotations are pruned and
-  re-derived on each rebuild so edited docs never leave stale guidance; human
-  annotations are never touched. The visualizer badges each annotation with
-  its layer.
+  (derived from instruction-file sections at build time, attached to the
+  document node and to the nodes it guides). File-derived annotations are
+  pruned and re-derived on each rebuild so edited docs never leave stale
+  guidance; human annotations are never touched.
 
 ## Building
 
@@ -71,9 +89,16 @@ The index analysis now includes an evidenced **Graph Prep** section describing
 code, database, and guidance relationships. The graph enhancement pass reads
 that section as context, but only adds inferred relationships between actual
 graph nodes. Without these flags, extraction remains local and deterministic.
-The graph build reuses cached symbols for unchanged files, and component
-containment looks up files by path prefix rather than scanning every file for
-every component.
+The graph build reuses cached symbols for unchanged files, and cache entries
+include the adapter's extractor version so parser upgrades invalidate stale
+structure. Component containment looks up files by path prefix rather than
+scanning every file for every component. `index capture --graph` and changed
+`index update --graph` runs pass their completed index scan directly to graph
+construction instead of scanning the repository twice.
+
+Each successful build writes `<graph-db>.graph-build.json` beside the selected
+database. The report contains the ontology version, node/edge/evidence counts,
+and machine-readable parse, link-resolution, and relation diagnostics.
 
 In `comanda graph visualize`, choose a one-, two-, or three-hop focused view
 from the inspector. Deeper views are bounded; a truncated status means there
