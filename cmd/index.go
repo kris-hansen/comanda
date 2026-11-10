@@ -280,10 +280,7 @@ func runCapture(cmd *cobra.Command, args []string) error {
 	// Set encryption
 	cfg.Encrypt = indexEncrypt
 	if indexEncrypt {
-		cfg.EncryptionKey = os.Getenv("COMANDA_INDEX_KEY")
-		if cfg.EncryptionKey == "" && envConfig != nil {
-			cfg.EncryptionKey = envConfig.IndexEncryptionKey
-		}
+		cfg.EncryptionKey = resolveIndexEncryptionKey()
 		if cfg.EncryptionKey == "" {
 			return fmt.Errorf("encryption requested but no key configured (set COMANDA_INDEX_KEY or run 'comanda configure')")
 		}
@@ -509,8 +506,11 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	}
 
 	cfg.Encrypt = entry.Encrypted
-	if entry.Encrypted && envConfig != nil {
-		cfg.EncryptionKey = envConfig.IndexEncryptionKey
+	if entry.Encrypted {
+		cfg.EncryptionKey = resolveIndexEncryptionKey()
+		if cfg.EncryptionKey == "" {
+			return fmt.Errorf("index '%s' is encrypted but no key is configured (set COMANDA_INDEX_KEY or run 'comanda configure')", name)
+		}
 	}
 
 	if indexEnhance {
@@ -543,9 +543,8 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("index update failed: %w", err)
 		}
 	} else {
-		// Try incremental update
-		var wasIncremental bool
-		result, wasIncremental, err = manager.GenerateIncremental(entry.IndexPath)
+		// Regenerates only when files changed since the stored index
+		result, _, err = manager.GenerateIncremental(entry.IndexPath)
 		if err != nil {
 			return fmt.Errorf("index update failed: %w", err)
 		}
@@ -556,11 +555,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 			}
 			return nil
 		}
-		if wasIncremental {
-			log.Printf("Performed incremental update\n")
-		} else {
-			log.Printf("Performed full regeneration (incremental not possible)\n")
-		}
+		log.Printf("Changes detected, index regenerated\n")
 	}
 
 	// Update registry
@@ -900,3 +895,17 @@ func findIndex(name string) (*config.IndexEntry, string, error) {
 }
 
 // Config helpers - use config.LoadEnvConfig and config.SaveEnvConfig directly
+
+// resolveIndexEncryptionKey returns the index encryption key, preferring the
+// COMANDA_INDEX_KEY environment variable over the configured key. Capture and
+// update must agree on this, or an index captured with the env var cannot be
+// updated.
+func resolveIndexEncryptionKey() string {
+	if key := os.Getenv("COMANDA_INDEX_KEY"); key != "" {
+		return key
+	}
+	if envConfig != nil {
+		return envConfig.IndexEncryptionKey
+	}
+	return ""
+}

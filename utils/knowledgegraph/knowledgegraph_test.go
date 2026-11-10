@@ -3,6 +3,7 @@ package knowledgegraph
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -356,5 +357,45 @@ func TestEnhanceWithIndexContextIncludesAllGraphDimensions(t *testing.T) {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("prompt missing %q", want)
 		}
+	}
+}
+
+// A type with many methods used to resolve to one of the methods, because the
+// exact match was only searched for inside the top full-text hits.
+func TestResolvePrefersExactNameOverFullTextRank(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t)
+
+	symbols := &codebaseindex.SymbolInfo{
+		Package: "graph",
+		Types:   []codebaseindex.TypeInfo{{Name: "Querier", Kind: "struct", IsExported: true}},
+	}
+	for i := 0; i < 30; i++ {
+		symbols.Functions = append(symbols.Functions, codebaseindex.FunctionInfo{
+			Name: fmt.Sprintf("Method%d", i), IsMethod: true, Receiver: "Querier", IsExported: true,
+		})
+	}
+	scan := &codebaseindex.ScanResult{Candidates: []*codebaseindex.FileEntry{
+		{Path: "graph/query.go", Language: "go", Symbols: symbols},
+	}}
+	if err := Rebuild(ctx, store, Build(scan, "proj")); err != nil {
+		t.Fatal(err)
+	}
+
+	node, err := NewQuerier(store, "proj").resolve(ctx, "Querier")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if node.Kind != NodeType || node.Name != "Querier" {
+		t.Fatalf("resolved %q (%s), want the Querier type", node.Name, node.Kind)
+	}
+
+	// Case-insensitive input still finds it, and unknown names still fall
+	// back to full-text search.
+	if node, err = NewQuerier(store, "proj").resolve(ctx, "querier"); err != nil || node.Name != "Querier" {
+		t.Fatalf("case-insensitive resolve = %v, %v", node, err)
+	}
+	if node, err = NewQuerier(store, "proj").resolve(ctx, "Method7"); err != nil || node.Name != "Querier.Method7" {
+		t.Fatalf("full-text fallback resolve = %v, %v", node, err)
 	}
 }

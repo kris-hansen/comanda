@@ -145,10 +145,13 @@ func minInt(a, b int) int {
 func extractGoSymbols(path string, content []byte) (*SymbolInfo, error) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, path, content, parser.ParseComments)
-	if err != nil {
-		// Fall back to regex if parsing fails
+	if err != nil && (file == nil || file.Name == nil || file.Name.Name == "_") {
+		// Nothing usable was parsed; fall back to regex.
 		return extractGoSymbolsRegex(content)
 	}
+	// On a syntax error the parser still returns the declarations it could
+	// read. That partial AST keeps imports and receivers, which the regex
+	// fallback cannot recover.
 
 	info := &SymbolInfo{
 		Package: file.Name.Name,

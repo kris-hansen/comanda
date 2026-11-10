@@ -3,6 +3,7 @@ package codebaseindex
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -115,6 +116,9 @@ func (r *Registry) Detect(repoPath string) []Adapter {
 			detected = append(detected, adapter)
 		}
 	}
+	// The registry is a map; sort so the language list and every section
+	// derived from adapter order is the same on each run.
+	sort.Slice(detected, func(i, j int) bool { return detected[i].Name() < detected[j].Name() })
 	return detected
 }
 
