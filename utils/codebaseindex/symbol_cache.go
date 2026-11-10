@@ -7,7 +7,9 @@ import (
 	"regexp"
 )
 
-const symbolCacheVersion = 3
+// symbolCacheVersion must be bumped whenever symbol extraction changes, so
+// caches written by an older extractor are discarded instead of reused.
+const symbolCacheVersion = 4
 
 type symbolCacheFile struct {
 	Version int                         `json:"version"`

@@ -35,8 +35,11 @@ func (q *Querier) Annotate(ctx context.Context, node semanticmemory.GraphNode, c
 	return q.store.UpsertGraphAnnotation(ctx, semanticmemory.GraphAnnotation{ID: annotationID(node.ID, content), Namespace: q.namespace, NodeID: node.ID, Content: content})
 }
 
-// resolve finds a node by stable stored/local ID first, then by the single
-// best name or FTS match.
+// resolve finds a node by stable stored/local ID first, then by name. Nodes
+// whose name equals the query win outright: case-sensitive matches first,
+// then more specific kinds (a type named "Store" beats a package named
+// "store"), then the most connected. Only when nothing has that name does FTS
+// ranking decide.
 func (q *Querier) resolve(ctx context.Context, name string) (*semanticmemory.GraphNode, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -51,6 +54,22 @@ func (q *Querier) resolve(ctx context.Context, name string) (*semanticmemory.Gra
 			return &node, nil
 		}
 	}
+	// Exact lookup goes straight to the table. Searching for it inside the
+	// top FTS hits misses a type whenever enough of its methods outrank it.
+	exact, err := q.store.GraphFindNodesByName(ctx, q.namespace, name, 0)
+	if err != nil {
+		return nil, err
+	}
+	if len(exact) > 0 {
+		sort.SliceStable(exact, func(i, j int) bool {
+			ci, cj := exact[i].Name == name, exact[j].Name == name
+			if ci != cj {
+				return ci
+			}
+			return resolvePriority(exact[i].Kind) < resolvePriority(exact[j].Kind)
+		})
+		return &exact[0], nil
+	}
 	nodes, err := q.store.GraphFindNodes(ctx, q.namespace, name, 10)
 	if err != nil {
 		return nil, err
@@ -61,16 +80,6 @@ func (q *Querier) resolve(ctx context.Context, name string) (*semanticmemory.Gra
 	sort.SliceStable(nodes, func(i, j int) bool {
 		return resolvePriority(nodes[i].Kind) < resolvePriority(nodes[j].Kind)
 	})
-	for i := range nodes {
-		if nodes[i].Name == name {
-			return &nodes[i], nil
-		}
-	}
-	for i := range nodes {
-		if strings.EqualFold(nodes[i].Name, name) {
-			return &nodes[i], nil
-		}
-	}
 	return &nodes[0], nil
 }
 

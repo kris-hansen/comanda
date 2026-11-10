@@ -930,6 +930,29 @@ func (s *Store) GraphFindNodes(ctx context.Context, namespace, query string, lim
 	return collectGraphNodes(rows)
 }
 
+// GraphFindNodesByName returns the nodes whose name equals the given name,
+// ignoring case, most connected first. Full-text search ranks a short name
+// below the longer names that contain it (a type below its own methods), so
+// callers resolving a specific node should try this before GraphFindNodes.
+func (s *Store) GraphFindNodesByName(ctx context.Context, namespace, name string, limit int) ([]GraphNode, error) {
+	namespace = normalizeNamespace(namespace)
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, nil
+	}
+	if limit <= 0 || limit > 50 {
+		limit = 50
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id, namespace, kind, name, path, package, summary, content, properties, start_line, end_line, degree, created_at, updated_at
+        FROM graph_nodes WHERE namespace = ? AND name = ? COLLATE NOCASE
+        ORDER BY degree DESC, id LIMIT ?`, namespace, name, limit)
+	if err != nil {
+		return nil, fmt.Errorf("find graph nodes by name: %w", err)
+	}
+	defer rows.Close()
+	return collectGraphNodes(rows)
+}
+
 // DeleteGraphNamespace removes all nodes, edges, and mirrored memory records
 // for a namespace.
 func (s *Store) DeleteGraphNamespace(ctx context.Context, namespace string) error {

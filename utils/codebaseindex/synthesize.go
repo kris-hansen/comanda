@@ -86,7 +86,8 @@ func (m *Manager) synthesizeSummary(scan *ScanResult) (string, error) {
 	capabilities := m.inferCapabilities(scan)
 	if len(capabilities) > 0 {
 		sb.WriteString("## Key Areas\n\n")
-		for dir, caps := range capabilities {
+		for _, dir := range sortedKeys(capabilities) {
+			caps := capabilities[dir]
 			sb.WriteString("- **")
 			sb.WriteString(dir)
 			sb.WriteString("/** — ")
@@ -334,8 +335,10 @@ func (m *Manager) categorizeFiles(scan *ScanResult) map[string][]string {
 	// Categorize each file
 	for _, f := range scan.Candidates {
 		categorized := false
-		for category, patterns := range categoryPatterns {
-			for _, pattern := range patterns {
+		// Visit categories in a fixed order: a file that matches several
+		// categories must land in the same one on every run.
+		for _, category := range sortedKeys(categoryPatterns) {
+			for _, pattern := range categoryPatterns[category] {
 				if strings.Contains(f.Path, pattern) {
 					categories[category] = append(categories[category], f.Path)
 					categorized = true
@@ -485,7 +488,8 @@ func (m *Manager) writeCapabilities(sb *strings.Builder, scan *ScanResult) {
 	}
 
 	sb.WriteString("## Primary Capabilities\n\n")
-	for dir, caps := range capabilities {
+	for _, dir := range sortedKeys(capabilities) {
+		caps := capabilities[dir]
 		sb.WriteString("- **")
 		sb.WriteString(dir)
 		sb.WriteString("**: ")
@@ -714,7 +718,8 @@ func (m *Manager) writeOperationalNotes(sb *strings.Builder, scan *ScanResult) {
 	}
 
 	sb.WriteString("## Operational Notes\n\n")
-	for category, files := range notes {
+	for _, category := range sortedKeys(notes) {
+		files := notes[category]
 		sb.WriteString("**")
 		sb.WriteString(category)
 		sb.WriteString(":** ")
@@ -766,7 +771,8 @@ func (m *Manager) writeRiskAreas(sb *strings.Builder, scan *ScanResult) {
 
 	sb.WriteString("## Risk / Caution Areas\n\n")
 	titleCaser := cases.Title(language.English)
-	for tag, files := range risks {
+	for _, tag := range sortedKeys(risks) {
+		files := risks[tag]
 		sb.WriteString("**")
 		sb.WriteString(titleCaser.String(tag))
 		sb.WriteString(":**\n")
@@ -964,4 +970,15 @@ func (m *Manager) writeFooter(sb *strings.Builder, scan *ScanResult) {
 	sb.WriteString("*Scan time: ")
 	sb.WriteString(scan.ProcessedTime.String())
 	sb.WriteString("*\n")
+}
+
+// sortedKeys returns a map's keys in sorted order so rendered sections do not
+// depend on Go's randomized map iteration.
+func sortedKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }

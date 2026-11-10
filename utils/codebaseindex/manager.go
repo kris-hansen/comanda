@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 )
@@ -220,6 +221,7 @@ func (m *Manager) detectAdapters() []Adapter {
 				seen[plugin.Name] = true
 			}
 		}
+		sort.Strings(names)
 		adapters := m.registry.GetByNames(names)
 		if len(adapters) > 0 {
 			return adapters
