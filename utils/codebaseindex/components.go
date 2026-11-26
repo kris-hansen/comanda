@@ -33,6 +33,7 @@ var backendFrameworks = map[string]bool{
 	"grpc": true, "graphql": true, "express": true, "fastify": true, "nestjs": true,
 	"flask": true, "django": true, "fastapi": true, "starlette": true, "spring": true,
 	"rails": true, "sinatra": true, "roda": true, "hanami": true,
+	"aspnetcore": true,
 }
 
 // analyzeComponents infers macro component boundaries after symbol extraction.
@@ -51,6 +52,12 @@ func (m *Manager) analyzeComponents(scan *ScanResult) {
 	for _, f := range allScanFiles(scan) {
 		base := filepath.Base(f.Path)
 		lang, ok := componentMarkers[base]
+		if !ok {
+			switch strings.ToLower(filepath.Ext(base)) {
+			case ".sln", ".slnx", ".csproj":
+				lang, ok = "csharp", true
+			}
+		}
 		if !ok {
 			continue
 		}

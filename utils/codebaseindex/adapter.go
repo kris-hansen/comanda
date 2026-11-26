@@ -70,6 +70,7 @@ func NewRegistry() *Registry {
 	r.Register(&GoAdapter{})
 	r.Register(&PythonAdapter{})
 	r.Register(&RubyAdapter{})
+	r.Register(&CSharpAdapter{})
 	r.Register(&TypeScriptAdapter{})
 	r.Register(&FlutterAdapter{})
 	r.Register(&JavaAdapter{})
@@ -126,7 +127,7 @@ func (r *Registry) Detect(repoPath string) []Adapter {
 func (r *Registry) detectAdapter(repoPath string, adapter Adapter) bool {
 	for _, detectionFile := range adapter.DetectionFiles() {
 		// Check root level first
-		if fileExists(filepath.Join(repoPath, detectionFile)) {
+		if detectionFileExists(repoPath, detectionFile) {
 			return true
 		}
 
@@ -135,7 +136,7 @@ func (r *Registry) detectAdapter(repoPath string, adapter Adapter) bool {
 		if err == nil {
 			for _, entry := range entries {
 				if entry.IsDir() && !strings.HasPrefix(entry.Name(), ".") {
-					if fileExists(filepath.Join(repoPath, entry.Name(), detectionFile)) {
+					if detectionFileExists(filepath.Join(repoPath, entry.Name()), detectionFile) {
 						return true
 					}
 				}
@@ -278,6 +279,25 @@ func CombinedExtensions(adapters []Adapter) []string {
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+func detectionFileExists(dir, pattern string) bool {
+	if !strings.ContainsAny(pattern, "*?[") {
+		return fileExists(filepath.Join(dir, pattern))
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		if matched, _ := filepath.Match(pattern, entry.Name()); matched {
+			return true
+		}
+	}
+	return false
 }
 
 // Placeholder adapters - will be implemented in adapters/ subdirectory

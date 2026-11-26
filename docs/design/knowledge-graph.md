@@ -251,8 +251,8 @@ recognize are conservatively skipped — they never fail extraction.
 
 ## Design notes and limits
 
-- Symbol extraction reuses the codebaseindex language adapters (regex-based,
-  Go/Python/Ruby/TypeScript/Flutter/Java) — no tree-sitter dependency. Edge
+- Symbol extraction reuses the built-in codebaseindex language adapters
+  (Go/Python/Ruby/C#/TypeScript/Flutter/Java) — no tree-sitter dependency. Edge
   precision is lower than AST-based tools; the `inferred` tag makes that
   explicit, and only type names defined exactly once in the scan participate
   in inferred `uses` resolution.
