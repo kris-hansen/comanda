@@ -116,6 +116,10 @@ Ruby and Rails projects are detected automatically. The built-in Ruby adapter
 extracts namespaces, classes, methods, constants, and dependencies for indexes
 and knowledge graphs without requiring Ruby. See [Ruby indexing](docs/ruby-indexing.md).
 
+C# and .NET projects are also detected automatically. The built-in C# adapter
+extracts namespaces, types, members, constants, and dependencies for indexes and
+knowledge graphs without requiring .NET. See [C# indexing](docs/csharp-indexing.md).
+
 ## Build a workflow once. Run it everywhere.
 
 Workflows are plain files. Review them in pull requests, run them from the terminal or CI, serve them over HTTP, or expose them to MCP clients.
